@@ -1,1 +1,1 @@
-# JTaal.github.io the combination of mathematics, biology and everything in between.
+# skytales is the application of mathematics in skydiving.
