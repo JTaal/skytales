@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clustering Algorithm Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+        }
+        #main-container {
+            position: absolute;
+            top: 65px; /* Height of header */
+            bottom: 110px; /* Height of controls panel */
+            width: 100%;
+            display: flex;
+        }
+        .render-view {
+            height: 100%;
+            position: relative;
+            outline: 1px solid #374151;
+            transition: width 0.4s ease-in-out;
+        }
+        #main-container.single-view #view-left { width: 100%; }
+        #main-container.single-view #view-right { width: 0%; display: none; }
+        #main-container.dual-view #view-left { width: 50%; }
+        #main-container.dual-view #view-right { width: 50%; display: block; }
+
+        .view-title {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 4px 12px;
+            background-color: rgba(17, 24, 39, 0.7);
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: #c7d2fe;
+            pointer-events: none;
+            z-index: 5;
+        }
+        canvas { display: block; }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px;
+        }
+        #info-panel.expanded {
+            max-height: calc(100vh - 200px); 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            min-height: 110px;
+            border-radius: 12px 12px 0 0;
+            padding: 0.5rem 1rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+        .control-section {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            padding: 0.75rem;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            background-color: rgba(31, 41, 55, 0.3);
+        }
+        .control-section-title {
+            font-weight: 600;
+            text-align: center;
+            margin-bottom: 0.5rem;
+            color: #9ca3af;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            height: 65px;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        .header-button, .control-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s, opacity 0.3s;
+            font-weight: 500;
+        }
+        .header-button:hover, .control-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .control-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            background-color: rgba(55, 65, 81, 0.8);
+        }
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #4b5563; border-radius: 2px; outline: none;
+            opacity: 0.7; transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; background: #818cf8;
+            cursor: pointer; border-radius: 50%;
+        }
+        select {
+             -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23a0aec0%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22/%3E%3C/svg%3E');
+            background-repeat: no-repeat;
+            background-position: right .7em top 50%;
+            background-size: .65em auto;
+            padding-right: 2.5rem;
+        }
+        .control-group {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%;
+            cursor: pointer; transition: all 0.3s; z-index: 11;
+            bottom: 130px; right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold">Clustering Algorithm Explorer</h1>
+        <div class="flex items-center gap-4">
+             <button id="view-toggle-btn" class="header-button">
+                 <svg id="single-view-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><rect width="18" height="12" x="3" y="6" rx="2"/><path d="M3 12h18"/></svg>
+                 <svg id="dual-view-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="6" rx="2"/><path d="M12 6v12"/></svg>
+                 <span id="view-toggle-text">Single View</span>
+             </button>
+        </div>
+    </header>
+
+    <div id="main-container" class="dual-view">
+        <div id="view-left" class="render-view">
+            <div class="view-title">K-Means</div>
+        </div>
+        <div id="view-right" class="render-view">
+            <div id="right-view-title" class="view-title">DBSCAN</div>
+        </div>
+    </div>
+    
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400">About Clustering</h2>
+            <div id="toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="info-content" class="pt-4 text-gray-300 space-y-2">
+            <p>This tool visualizes different clustering algorithms side-by-side on the same dataset.</p>
+            <p><strong class="text-indigo-400">K-Means:</strong> Partitions data into a user-defined number of spherical clusters (K). It's fast but struggles with complex shapes and noise.</p>
+            <p><strong class="text-indigo-400">DBSCAN:</strong> Groups points based on density. It excels at finding arbitrarily shaped clusters and identifying outliers as noise.</p>
+            <p><strong class="text-indigo-400">Agglomerative:</strong> A bottom-up hierarchical approach that merges the closest pair of clusters at each step until a target number of clusters is reached.</p>
+            <p><strong class="text-indigo-400">Gaussian Mixture (GMM):</strong> A probabilistic model assuming data is from several Gaussian distributions. It can identify elliptical clusters.</p>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel">
+        <!-- Populated by JS -->
+    </div>
+    
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // --- Data Generation ---
+    function randGauss(mean = 0, stdDev = 1) { let u = 0, v = 0; while (u === 0) u = Math.random(); while (v === 0) v = Math.random(); return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v) * stdDev + mean; }
+    function shuffle(array) { for (let i = array.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [array[i], array[j]] = [array[j], array[i]]; } }
+    const datasets = { blobs: { name: 'Blobs', generator: () => generateBlobData(1500, 3, 20, 5), is3D: false }, moons: { name: 'Moons', generator: () => generateMoonData(1000), is3D: false }, circles: { name: 'Circles', generator: () => generateCircleData(1000), is3D: false }, spiral: { name: 'Spiral', generator: () => generateSpiralData(1000, 2), is3D: false }, anisotropic: { name: 'Anisotropic', generator: () => generateAnisotropicData(1500), is3D: false }, varying_density: { name: 'Varying Density', generator: () => generateVaryingDensityData(), is3D: false }, overlapping: { name: 'Overlapping', generator: () => generateBlobData(1500, 3, 10, 8), is3D: false }, line: { name: 'Noisy Line', generator: () => generateLineData(1500), is3D: false }, cross: { name: 'Cross', generator: () => generateCrossData(1500), is3D: false }, random: { name: 'Random', generator: () => generateRandomData(1500, 50), is3D: false }, sphere: { name: '3D Sphere', generator: () => generate3DSphereData(1500, 25), is3D: true }, shells: { name: '3D Shells', generator: () => generate3DShellData(1500, [15, 25]), is3D: true }, torus: { name: '3D Torus', generator: () => generate3DTorusData(1500, 20, 8), is3D: true }, helix: { name: '3D Helix', generator: () => generate3DHelixData(1500), is3D: true }, linked_rings: { name: '3D Linked Rings', generator: () => generateLinkedRingsData(1500), is3D: true }, saturn: { name: '3D Saturn', generator: () => generateSaturnData(1500), is3D: true }, s_curve: { name: '3D S-Curve', generator: () => generate3DSCurveData(1500), is3D: true }, };
+    function generateBlobData(numPoints, blobCount, maxRadius, blobStdDev) { const data = []; const pointsPerBlob = Math.floor(numPoints / blobCount); for (let i = 0; i < blobCount; i++) { const angle = (i / blobCount) * Math.PI * 2; const centerX = Math.cos(angle) * maxRadius, centerY = Math.sin(angle) * maxRadius; for (let j = 0; j < pointsPerBlob; j++) data.push([ centerX + randGauss(0, blobStdDev), centerY + randGauss(0, blobStdDev), 0]); } return data; }
+    function generateMoonData(numPoints) { const data = []; const n = numPoints / 2, radius = 25; for (let i = 0; i < n; i++) { const angle = Math.random() * Math.PI, r = radius + randGauss(0, 2); data.push([ Math.cos(angle) * r, Math.sin(angle) * r, 0]); } for (let i = 0; i < n; i++) { const angle = Math.random() * Math.PI + Math.PI, r = radius + randGauss(0, 2); data.push([ Math.cos(angle) * r + radius, Math.sin(angle) * r - 8, 0]); } return data; }
+    function generateCircleData(numPoints) { const data = []; const n = numPoints / 2; for (let i = 0; i < n; i++) { const angle = Math.random() * Math.PI * 2, r = 15 + randGauss(0, 1); data.push([Math.cos(angle) * r, Math.sin(angle) * r, 0]); } for (let i = 0; i < n; i++) { const angle = Math.random() * Math.PI * 2, r = 35 + randGauss(0, 1); data.push([Math.cos(angle) * r, Math.sin(angle) * r, 0]); } return data; }
+    function generateSpiralData(numPoints, numArms) { const data = []; const armSeparation = 2 * Math.PI / numArms; for (let i = 0; i < numPoints; i++) { const angle = Math.random() * Math.PI * 4, radius = angle * 3, arm = Math.floor(Math.random() * numArms); const noise = randGauss(0, 1.5), finalAngle = angle + arm * armSeparation; data.push([ Math.cos(finalAngle) * (radius + noise), Math.sin(finalAngle) * (radius + noise), 0 ]); } return data; }
+    function generateAnisotropicData(numPoints) { const data = []; const n = Math.floor(numPoints / 3); const centers = [[-20, 20], [0, 0], [20, -20]], stretch = [[8, 1], [1, 8], [5, 5]]; for (let i=0; i < 3; i++) { for (let j=0; j < n; j++) data.push([ centers[i][0] + randGauss(0, stretch[i][0]), centers[i][1] + randGauss(0, stretch[i][1]), 0 ]); } return data; }
+    function generateVaryingDensityData() { const data = []; const centers = [[-25, 0], [0, 25], [25, 0]], stdDevs = [5, 5, 5], pointCounts = [500, 100, 500]; for (let i=0; i<3; i++) { for(let j=0; j<pointCounts[i]; j++) data.push([ centers[i][0] + randGauss(0, stdDevs[i]), centers[i][1] + randGauss(0, stdDevs[i]), 0 ]); } return data; }
+    function generateLineData(numPoints) { const data = []; for (let i=0; i < numPoints; i++) data.push([ (i / numPoints - 0.5) * 80, randGauss(0, 1.5), 0 ]); return data; }
+    function generateCrossData(numPoints) { const data = []; const n = numPoints / 2; for (let i=0; i < n; i++) data.push([ (i / n - 0.5) * 80, randGauss(0, 1.5), 0 ]); for (let i=0; i < n; i++) data.push([ randGauss(0, 1.5), (i / n - 0.5) * 80, 0 ]); return data; }
+    function generateRandomData(numPoints, range) { const data = []; for (let i = 0; i < numPoints; i++) data.push([ (Math.random() - 0.5) * range * 2, (Math.random() - 0.5) * range * 2, 0 ]); return data; }
+    function generate3DSphereData(numPoints, radius) { const data = []; for (let i = 0; i < numPoints; i++) { const u = Math.random(), v = Math.random(), theta = 2 * Math.PI * u, phi = Math.acos(2 * v - 1); const r = radius * Math.cbrt(Math.random()); data.push([ r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi) ]); } return data; }
+    function generate3DTorusData(numPoints, radius, tube) { const data = []; for (let i = 0; i < numPoints; i++) { const u = Math.random() * 2 * Math.PI, v = Math.random() * 2 * Math.PI, r = tube * Math.sqrt(Math.random()); data.push([ (radius + r * Math.cos(v)) * Math.cos(u), (radius + r * Math.cos(v)) * Math.sin(u), r * Math.sin(v) ]); } return data; }
+    function generate3DShellData(numPoints, radii) { const data = []; const pointsPerShell = Math.floor(numPoints / radii.length); for (const radius of radii) { for (let i = 0; i < pointsPerShell; i++) { const u = Math.random() * 2 * Math.PI, v = Math.acos(2 * Math.random() - 1); const noise = 1 + randGauss(0, 0.05), r = radius * noise; data.push([ r * Math.sin(v) * Math.cos(u), r * Math.sin(v) * Math.sin(u), r * Math.cos(v) ]); } } return data; }
+    function generate3DHelixData(numPoints) { const data = []; for (let i = 0; i < numPoints; i++) { const t = Math.random() * 12 * Math.PI, r = 15, noise = 2; data.push([ r * Math.cos(t) + randGauss(0, noise), r * Math.sin(t) + randGauss(0, noise), (t / Math.PI) * 2 - 12 + randGauss(0, noise) ]); } return data; }
+    function generateLinkedRingsData(numPoints) { const data = []; const n = numPoints / 2, radius = 15, tube = 4; for (let i = 0; i < n; i++) { const u = Math.random() * 2 * Math.PI, v = Math.random() * 2 * Math.PI, r = tube * Math.sqrt(Math.random()); data.push([ (radius + r * Math.cos(v)) * Math.cos(u), (radius + r * Math.cos(v)) * Math.sin(u), r * Math.sin(v) ]); } for (let i = 0; i < n; i++) { const u = Math.random() * 2 * Math.PI, v = Math.random() * 2 * Math.PI, r = tube * Math.sqrt(Math.random()); data.push([ (radius + r * Math.cos(v)) * Math.cos(u) + radius, r * Math.sin(v), (radius + r * Math.cos(v)) * Math.sin(u) ]); } return data; }
+    function generateSaturnData(numPoints) { const data = []; const planetPoints = Math.floor(numPoints * 0.4), ringPoints = numPoints - planetPoints, planetRadius = 10; for (let i = 0; i < planetPoints; i++) { const u = Math.random(), v = Math.random(), theta = 2 * Math.PI * u, phi = Math.acos(2 * v - 1), r = planetRadius * Math.cbrt(Math.random()); data.push([ r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi) ]); } for (let i = 0; i < ringPoints; i++) { const angle = Math.random() * 2 * Math.PI, r = planetRadius + 5 + Math.random() * 10; data.push([ r * Math.cos(angle), r * Math.sin(angle), randGauss(0, 0.5) ]); } return data; }
+    function generate3DSCurveData(numPoints) { const data = []; for (let i=0; i < numPoints; i++) { const t = Math.random() * 2 - 1; data.push([ 20 * t, 20 * Math.sin(t * Math.PI), 20 * Math.cos(t * Math.PI * 0.5) + randGauss(0, 2) ]); } return data; }
+
+    // --- App State & Config ---
+    let points = [], is3D = false, timeSinceStep = 0, isDualView = true;
+    let activeComparisonAlgoKey = 'dbscan';
+    const clusterColors = [ 0xef4444, 0x3b82f6, 0x22c55e, 0xeab308, 0xa855f7, 0xec4899, 0x14b8a6, 0xf97316 ].map(c => new THREE.Color(c));
+    const noiseColor = new THREE.Color(0x6b7280);
+
+    // --- Algorithm States & Implementations ---
+    let kmeansState = { k: 3, centroids: [], assignments: [], status: 'idle', iteration: 0, pointsMesh: null, centroidsMesh: null };
+    const comparisonAlgorithms = {
+        dbscan: { name: 'DBSCAN', state: { epsilon: 2.5, minPts: 5, assignments: [], status: 'idle', pointsMesh: null }, run: runDBSCAN, updateVisuals: updatePointColorVisuals, setupControls: setupDBSCANControls, },
+        agglomerative: { name: 'Agglomerative', state: { n_clusters: 3, assignments: [], status: 'idle', pointsMesh: null }, run: runAgglomerative, updateVisuals: updatePointColorVisuals, setupControls: setupAgglomerativeControls, },
+        gmm: { name: 'GMM', state: { n_components: 3, assignments: [], status: 'idle', pointsMesh: null }, run: runGMM, updateVisuals: updatePointColorVisuals, setupControls: setupGMMControls, }
+    };
+
+    // --- Three.js Components ---
+    let sceneLeft, cameraLeft, rendererLeft, controlsLeft;
+    let sceneRight, cameraRight, rendererRight, controlsRight;
+    let clock = new THREE.Clock();
+
+    function stepKMeans() { if (kmeansState.status === 'finished') return; kmeansState.iteration++; for (let i = 0; i < points.length; i++) { let minDistance = Infinity, bestCentroid = -1; for (let j = 0; j < kmeansState.k; j++) { const dist = Math.hypot(points[i][0] - kmeansState.centroids[j][0], points[i][1] - kmeansState.centroids[j][1], points[i][2] - kmeansState.centroids[j][2]); if (dist < minDistance) { minDistance = dist; bestCentroid = j; } } kmeansState.assignments[i] = bestCentroid; } const newCentroids = Array(kmeansState.k).fill(0).map(() => [0, 0, 0]); const counts = Array(kmeansState.k).fill(0); for (let i = 0; i < points.length; i++) { const cIndex = kmeansState.assignments[i]; newCentroids[cIndex][0] += points[i][0]; newCentroids[cIndex][1] += points[i][1]; newCentroids[cIndex][2] += points[i][2]; counts[cIndex]++; } let hasConverged = true; for (let i = 0; i < kmeansState.k; i++) { if (counts[i] > 0) { newCentroids[i][0] /= counts[i]; newCentroids[i][1] /= counts[i]; newCentroids[i][2] /= counts[i]; } if (Math.hypot(kmeansState.centroids[i][0] - newCentroids[i][0], kmeansState.centroids[i][1] - newCentroids[i][1], kmeansState.centroids[i][2] - newCentroids[i][2]) > 0.01) { hasConverged = false; } } kmeansState.centroids = newCentroids; if(hasConverged) kmeansState.status = 'finished'; else if (kmeansState.status === 'idle') kmeansState.status = 'paused'; }
+    function initializeCentroids(data, k) { const centroids = []; const usedIndices = new Set(); while (centroids.length < k) { const index = Math.floor(Math.random() * data.length); if (!usedIndices.has(index)) { centroids.push([...data[index]]); usedIndices.add(index); } } return centroids; }
+    function runDBSCAN() { const { epsilon, minPts } = comparisonAlgorithms.dbscan.state; const labels = new Array(points.length).fill(0); let clusterId = 0; const regionQuery = (index) => { const neighbors = []; for (let i = 0; i < points.length; i++) { if (Math.hypot(points[index][0] - points[i][0], points[index][1] - points[i][1], points[index][2] - points[i][2]) < epsilon) { neighbors.push(i); } } return neighbors; }; for (let i = 0; i < points.length; i++) { if (labels[i] !== 0) continue; const neighbors = regionQuery(i); if (neighbors.length < minPts) { labels[i] = -1; continue; } clusterId++; labels[i] = clusterId; const seedSet = [...neighbors]; for (let j = 0; j < seedSet.length; j++) { const currentPointIndex = seedSet[j]; if (labels[currentPointIndex] === -1) labels[currentPointIndex] = clusterId; if (labels[currentPointIndex] !== 0) continue; labels[currentPointIndex] = clusterId; const newNeighbors = regionQuery(currentPointIndex); if (newNeighbors.length >= minPts) { for (const neighborIndex of newNeighbors) { if (!seedSet.includes(neighborIndex)) seedSet.push(neighborIndex); } } } } comparisonAlgorithms.dbscan.state.assignments = labels.map(l => l - 1); comparisonAlgorithms.dbscan.state.status = 'finished'; }
+    function runAgglomerative() { const state = comparisonAlgorithms.agglomerative.state; let clusters = points.map((p, i) => ({ points: [p], indices: [i], center: p })); const dist = (c1, c2) => Math.hypot(c1.center[0] - c2.center[0], c1.center[1] - c2.center[1], c1.center[2] - c2.center[2]); while(clusters.length > state.n_clusters) { let min_dist = Infinity, merge_idx1 = -1, merge_idx2 = -1; for(let i=0; i < clusters.length; i++) { for(let j=i+1; j < clusters.length; j++) { const d = dist(clusters[i], clusters[j]); if(d < min_dist) { min_dist = d; merge_idx1 = i; merge_idx2 = j; } } } const c1 = clusters[merge_idx1], c2 = clusters[merge_idx2]; const new_points = c1.points.concat(c2.points); const new_center = new_points.reduce((acc, p) => [acc[0]+p[0], acc[1]+p[1], acc[2]+p[2]], [0,0,0]).map(v => v / new_points.length); clusters.splice(merge_idx2, 1); clusters.splice(merge_idx1, 1); clusters.push({ points: new_points, indices: c1.indices.concat(c2.indices), center: new_center }); } state.assignments = new Array(points.length); clusters.forEach((cluster, cluster_id) => { cluster.indices.forEach(point_idx => { state.assignments[point_idx] = cluster_id; }); }); state.status = 'finished'; }
+    function runGMM() {
+        const state = comparisonAlgorithms.gmm.state;
+        const numPoints = points.length;
+        const dim = is3D ? 3 : 2; 
+        const k = state.n_components;
+        let responsibilities = Array(numPoints).fill(0).map(() => new Array(k).fill(0));
+        let weights = new Array(k).fill(1 / k);
+        let means = [];
+        const shuffledIndices = Array.from({length: numPoints}, (_, i) => i);
+        shuffle(shuffledIndices);
+        for(let i=0; i<k; i++) { means.push([...points[shuffledIndices[i]]]); }
+        let covariances = Array(k).fill(0).map(() => { const mat = Array(dim).fill(0).map(() => new Array(dim).fill(0)); for(let i=0; i<dim; i++) mat[i][i] = 10; return mat; });
+        const determinant = (cov) => { let det = 1; for(let i=0; i<dim; i++) det *= cov[i][i]; return det; };
+        const inverse = (cov) => { const inv = Array(dim).fill(0).map(() => new Array(dim).fill(0)); for(let i=0; i<dim; i++) inv[i][i] = 1 / cov[i][i]; return inv; };
+        const multivariateNormalPDF = (x, mean, cov) => { const covDet = determinant(cov); if (covDet <= 1e-9) return 1e-9; const covInv = inverse(cov); let exponent = 0; const diff = Array(dim); for(let i=0; i<dim; i++) diff[i] = x[i] - mean[i]; let term = 0; for(let i=0; i<dim; i++) { for(let j=0; j<dim; j++) { term += diff[i] * covInv[i][j] * diff[j]; } } exponent = -0.5 * term; return (1 / Math.sqrt(Math.pow(2 * Math.PI, dim) * covDet)) * Math.exp(exponent); };
+        for (let iter = 0; iter < 100; iter++) {
+            for (let i = 0; i < numPoints; i++) {
+                let sumProb = 0; const point = points[i]; const pdfs = new Array(k);
+                for (let j = 0; j < k; j++) { pdfs[j] = multivariateNormalPDF(point, means[j], covariances[j]); sumProb += weights[j] * pdfs[j]; }
+                if (sumProb === 0) { for(let j=0; j<k; j++) responsibilities[i][j] = 1/k; } 
+                else { for (let j = 0; j < k; j++) { responsibilities[i][j] = (weights[j] * pdfs[j]) / sumProb; } }
+            }
+            const N_k = new Array(k).fill(0); for (let j = 0; j < k; j++) { for (let i = 0; i < numPoints; i++) { N_k[j] += responsibilities[i][j]; } }
+            for (let j = 0; j < k; j++) {
+                if (N_k[j] < 1e-6) continue; 
+                means[j] = new Array(dim).fill(0);
+                for (let i = 0; i < numPoints; i++) { for (let d = 0; d < dim; d++) { means[j][d] += responsibilities[i][j] * points[i][d]; } }
+                for (let d = 0; d < dim; d++) { means[j][d] /= N_k[j]; }
+                covariances[j] = Array(dim).fill(0).map(() => new Array(dim).fill(0));
+                for (let d = 0; d < dim; d++) {
+                    let variance = 0;
+                    for (let i = 0; i < numPoints; i++) { variance += responsibilities[i][j] * Math.pow(points[i][d] - means[j][d], 2); }
+                    covariances[j][d][d] = variance / N_k[j];
+                    if (covariances[j][d][d] < 1e-6) covariances[j][d][d] = 1e-6;
+                }
+                weights[j] = N_k[j] / numPoints;
+            }
+        }
+        state.assignments = new Array(numPoints);
+        for (let i = 0; i < numPoints; i++) { let maxResponsibility = -1, bestCluster = -1; for (let j = 0; j < k; j++) { if (responsibilities[i][j] > maxResponsibility) { maxResponsibility = responsibilities[i][j]; bestCluster = j; } } state.assignments[i] = bestCluster; }
+        state.status = 'finished';
+    }
+
+
+    // --- UI and App Logic ---
+    function setupUI() {
+        const controlsPanel = document.getElementById('controls-panel');
+        let datasetOptions = '<optgroup label="2D Datasets">';
+        Object.keys(datasets).filter(k => !datasets[k].is3D).forEach(key => { datasetOptions += `<option value="${key}">${datasets[key].name}</option>` });
+        datasetOptions += '</optgroup><optgroup label="3D Datasets">';
+        Object.keys(datasets).filter(k => datasets[k].is3D).forEach(key => { datasetOptions += `<option value="${key}">${datasets[key].name}</option>` });
+        datasetOptions += '</optgroup>';
+        let algoOptions = '';
+        Object.keys(comparisonAlgorithms).forEach(key => { algoOptions += `<option value="${key}">${comparisonAlgorithms[key].name}</option>`});
+
+        controlsPanel.innerHTML = `
+            <div class="control-section"> <div class="control-section-title">Global Controls</div> <select id="dataset-select" class="bg-gray-700 border border-gray-600 rounded-md p-2 text-white w-full">${datasetOptions}</select> <div class="flex items-center gap-2"> <button id="start-btn" class="control-button">Start</button> <button id="pause-btn" class="control-button hidden">Pause</button> <button id="reset-btn" class="control-button">Reset</button> </div> </div>
+            <div class="control-section"> <div class="control-section-title">K-Means</div> <div class="control-group"> <label class="text-sm font-medium">K: <span id="k-value">${kmeansState.k}</span></label> <input id="k-slider" type="range" min="2" max="8" step="1" value="${kmeansState.k}" class="w-32"> </div> <button id="step-btn" class="control-button text-sm py-1">Step K-Means</button> </div>
+            <div id="comparison-algo-section" class="control-section"> <select id="algo-select" class="bg-gray-700 border border-gray-600 rounded-md p-2 text-white mb-2 w-full">${algoOptions}</select> <div id="comparison-algo-controls"></div> </div>
+        `;
+
+        document.getElementById('dataset-select').addEventListener('change', reset);
+        document.getElementById('k-slider').addEventListener('input', e => { kmeansState.k = parseInt(e.target.value); document.getElementById('k-value').textContent = kmeansState.k; });
+        document.getElementById('k-slider').addEventListener('change', reset);
+        document.getElementById('start-btn').addEventListener('click', start);
+        document.getElementById('pause-btn').addEventListener('click', pause);
+        document.getElementById('step-btn').addEventListener('click', () => { if(kmeansState.status !== 'running') { stepKMeans(); updateKMeansVisuals(); updateUIState(); } });
+        document.getElementById('reset-btn').addEventListener('click', reset);
+        document.getElementById('info-panel').addEventListener('click', (e) => { if (!e.target.closest('button, a, input')) e.currentTarget.classList.toggle('expanded'); });
+        document.getElementById('view-toggle-btn').addEventListener('click', toggleView);
+        document.getElementById('algo-select').addEventListener('change', (e) => { activeComparisonAlgoKey = e.target.value; setupComparisonControls(); reset(); });
+        setupComparisonControls(); 
+        document.getElementById('algo-select').value = activeComparisonAlgoKey;
+    }
+    
+    function setupDBSCANControls() { const container = document.getElementById('comparison-algo-controls'), state = comparisonAlgorithms.dbscan.state; container.innerHTML = `<div class="control-group"><label class="text-sm font-medium">Epsilon: <span id="eps-value">${state.epsilon.toFixed(1)}</span></label><input id="eps-slider" type="range" min="0.5" max="10" step="0.1" value="${state.epsilon}" class="w-32"></div><div class="control-group"><label class="text-sm font-medium">MinPts: <span id="minpts-value">${state.minPts}</span></label><input id="minpts-slider" type="range" min="2" max="20" step="1" value="${state.minPts}" class="w-32"></div>`; document.getElementById('eps-slider').addEventListener('input', e => { state.epsilon = parseFloat(e.target.value); document.getElementById('eps-value').textContent = state.epsilon.toFixed(1); }); document.getElementById('eps-slider').addEventListener('change', reset); document.getElementById('minpts-slider').addEventListener('input', e => { state.minPts = parseInt(e.target.value); document.getElementById('minpts-value').textContent = state.minPts; }); document.getElementById('minpts-slider').addEventListener('change', reset); }
+    function setupAgglomerativeControls() { const container = document.getElementById('comparison-algo-controls'), state = comparisonAlgorithms.agglomerative.state; container.innerHTML = `<div class="control-group"><label class="text-sm font-medium">Clusters: <span id="n-clusters-value">${state.n_clusters}</span></label><input id="n-clusters-slider" type="range" min="2" max="8" step="1" value="${state.n_clusters}" class="w-32"></div>`; document.getElementById('n-clusters-slider').addEventListener('input', e => { state.n_clusters = parseInt(e.target.value); document.getElementById('n-clusters-value').textContent = state.n_clusters; }); document.getElementById('n-clusters-slider').addEventListener('change', reset); }
+    function setupGMMControls() { const container = document.getElementById('comparison-algo-controls'), state = comparisonAlgorithms.gmm.state; container.innerHTML = `<div class="control-group"><label class="text-sm font-medium">Components: <span id="n-components-value">${state.n_components}</span></label><input id="n-components-slider" type="range" min="2" max="8" step="1" value="${state.n_components}" class="w-32"></div>`; document.getElementById('n-components-slider').addEventListener('input', e => { state.n_components = parseInt(e.target.value); document.getElementById('n-components-value').textContent = state.n_components; }); document.getElementById('n-components-slider').addEventListener('change', reset); }
+
+    function setupComparisonControls() {
+        const algo = comparisonAlgorithms[activeComparisonAlgoKey];
+        if (algo && algo.setupControls) algo.setupControls(); else document.getElementById('comparison-algo-controls').innerHTML = '';
+        document.getElementById('right-view-title').textContent = algo.name;
+    }
+    function toggleView() {
+        isDualView = !isDualView;
+        const mainContainer = document.getElementById('main-container');
+        mainContainer.classList.toggle('dual-view', isDualView);
+        mainContainer.classList.toggle('single-view', !isDualView);
+        document.getElementById('dual-view-icon').classList.toggle('hidden', !isDualView);
+        document.getElementById('single-view-icon').classList.toggle('hidden', isDualView);
+        document.getElementById('view-toggle-text').textContent = isDualView ? 'Dual View' : 'Single View';
+        document.getElementById('comparison-algo-section').style.display = isDualView ? 'flex' : 'none';
+        mainContainer.addEventListener('transitionend', onWindowResize, { once: true });
+        onWindowResize(); // Trigger resize immediately
+    }
+    function updateUIState() { const startBtn = document.getElementById('start-btn'), pauseBtn = document.getElementById('pause-btn'); const stepBtn = document.getElementById('step-btn'), resetBtn = document.getElementById('reset-btn'); const datasetSelect = document.getElementById('dataset-select'), kSlider = document.getElementById('k-slider'); const isRunning = kmeansState.status === 'running'; startBtn.classList.toggle('hidden', isRunning); pauseBtn.classList.toggle('hidden', !isRunning); startBtn.disabled = kmeansState.status === 'finished' || isRunning; stepBtn.disabled = kmeansState.status === 'finished' || isRunning; resetBtn.disabled = isRunning; datasetSelect.disabled = isRunning; kSlider.disabled = isRunning; Object.values(comparisonAlgorithms).forEach(algo => { if(algo.setupControls) { const controls = document.getElementById('comparison-algo-controls'); if(controls) Array.from(controls.getElementsByTagName('input')).forEach(input => input.disabled = isRunning); }}); document.getElementById('algo-select').disabled = isRunning; }
+    function createOrUpdateMesh(scene, existingMesh, size, sizeAttenuation, isCentroid = false) { if (existingMesh) { scene.remove(existingMesh); existingMesh.geometry.dispose(); } const numEntities = isCentroid ? kmeansState.k : points.length; const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(numEntities * 3), 3)); geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(numEntities * 3), 3)); const mesh = new THREE.Points(geometry, new THREE.PointsMaterial({ size, vertexColors: true, sizeAttenuation })); scene.add(mesh); return mesh; }
+    
+    function reset() {
+        kmeansState.status = 'idle';
+        Object.values(comparisonAlgorithms).forEach(algo => algo.state.status = 'idle');
+        kmeansState.iteration = 0;
+        const datasetKey = document.getElementById('dataset-select').value;
+        const dataset = datasets[datasetKey];
+        is3D = dataset.is3D;
+        points = dataset.generator();
+        kmeansState.centroids = initializeCentroids(points, kmeansState.k);
+        kmeansState.assignments = Array(points.length).fill(-1);
+
+        const pointsVec3 = points.map(p => new THREE.Vector3(...p));
+        const boundingBox = new THREE.Box3().setFromPoints(pointsVec3);
+        const center = new THREE.Vector3();
+        const size = new THREE.Vector3();
+        boundingBox.getCenter(center);
+        boundingBox.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const fov = cameraLeft.fov * (Math.PI / 180);
+        const cameraDistance = maxDim / (2 * Math.tan(fov / 2));
+        const fitOffset = 1.5;
+
+        [controlsLeft, controlsRight].forEach(ctrl => {
+            ctrl.target.copy(center);
+            ctrl.object.position.set(center.x, center.y, center.z + cameraDistance * fitOffset);
+            ctrl.update();
+        });
+
+        kmeansState.pointsMesh = createOrUpdateMesh(sceneLeft, kmeansState.pointsMesh, is3D ? 0.75 : 1, true);
+        kmeansState.centroidsMesh = createOrUpdateMesh(sceneLeft, kmeansState.centroidsMesh, is3D ? 4 : 10, is3D, true);
+        
+        const activeAlgo = comparisonAlgorithms[activeComparisonAlgoKey];
+        activeAlgo.state.pointsMesh = createOrUpdateMesh(sceneRight, activeAlgo.state.pointsMesh, is3D ? 0.75 : 1, true);
+
+        const positions = new Float32Array(points.length * 3);
+        for (let i = 0; i < points.length; i++) positions.set(points[i], i * 3);
+        kmeansState.pointsMesh.geometry.attributes.position.copyArray(positions);
+        kmeansState.pointsMesh.geometry.attributes.position.needsUpdate = true;
+        if(activeAlgo.state.pointsMesh) {
+            activeAlgo.state.pointsMesh.geometry.attributes.position.copyArray(positions);
+            activeAlgo.state.pointsMesh.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        updateKMeansVisuals(true);
+        activeAlgo.updateVisuals(true);
+        updateUIState();
+    }
+    
+    function start() { const activeAlgo = comparisonAlgorithms[activeComparisonAlgoKey]; if (kmeansState.status === 'idle' || kmeansState.status === 'paused') { kmeansState.status = 'running'; if (activeAlgo.state.status === 'idle') { activeAlgo.run(); activeAlgo.updateVisuals(); } updateUIState(); } }
+    function pause() { if (kmeansState.status === 'running') { kmeansState.status = 'paused'; updateUIState(); } }
+    function updateKMeansVisuals(isReset = false) { const pColors = kmeansState.pointsMesh.geometry.attributes.color; for (let i = 0; i < points.length; i++) { const color = (isReset || kmeansState.assignments[i] === -1) ? noiseColor : clusterColors[kmeansState.assignments[i]]; pColors.setXYZ(i, color.r, color.g, color.b); } pColors.needsUpdate = true; const cPositions = kmeansState.centroidsMesh.geometry.attributes.position; const cColors = kmeansState.centroidsMesh.geometry.attributes.color; for (let i = 0; i < kmeansState.k; i++) { cPositions.setXYZ(i, kmeansState.centroids[i][0], kmeansState.centroids[i][1], kmeansState.centroids[i][2] + 0.1); cColors.setXYZ(i, clusterColors[i].r, clusterColors[i].g, clusterColors[i].b); } cPositions.needsUpdate = true; cColors.needsUpdate = true; }
+    function updatePointColorVisuals(isReset = false) { const state = this.state, pColors = state.pointsMesh.geometry.attributes.color; for (let i = 0; i < points.length; i++) { const assignment = state.assignments[i]; const color = (isReset || assignment < 0) ? noiseColor : clusterColors[assignment % clusterColors.length]; pColors.setXYZ(i, color.r, color.g, color.b); } pColors.needsUpdate = true; }
+
+    // --- Main Init and Loop ---
+    function init() {
+        const viewLeft = document.getElementById('view-left');
+        const viewRight = document.getElementById('view-right');
+        sceneLeft = new THREE.Scene(); sceneRight = new THREE.Scene();
+        sceneLeft.background = new THREE.Color(0x030712); sceneRight.background = new THREE.Color(0x030712);
+        cameraLeft = new THREE.PerspectiveCamera(75, viewLeft.clientWidth / viewLeft.clientHeight, 0.1, 1000);
+        cameraRight = new THREE.PerspectiveCamera(75, viewRight.clientWidth / viewRight.clientHeight, 0.1, 1000);
+        rendererLeft = new THREE.WebGLRenderer({ antialias: true }); rendererRight = new THREE.WebGLRenderer({ antialias: true });
+        rendererLeft.setPixelRatio(window.devicePixelRatio); rendererRight.setPixelRatio(window.devicePixelRatio);
+        viewLeft.appendChild(rendererLeft.domElement); viewRight.appendChild(rendererRight.domElement);
+        controlsLeft = new OrbitControls(cameraLeft, rendererLeft.domElement); controlsRight = new OrbitControls(cameraRight, rendererRight.domElement);
+        controlsLeft.enableDamping = true; controlsRight.enableDamping = true;
+        
+        setupUI();
+        toggleView();
+        reset();
+        
+        window.addEventListener('resize', onWindowResize);
+        controlsLeft.addEventListener('change', () => { if(isDualView) { cameraRight.position.copy(cameraLeft.position); controlsRight.target.copy(controlsLeft.target); }});
+        controlsRight.addEventListener('change', () => { if(isDualView) { cameraLeft.position.copy(cameraRight.position); controlsLeft.target.copy(controlsRight.target); }});
+        
+        animate();
+    }
+
+    function animate() { 
+        requestAnimationFrame(animate);
+        const delta = clock.getDelta();
+        if (kmeansState.status === 'running') {
+            timeSinceStep += delta;
+            if (timeSinceStep > 0.1) {
+                timeSinceStep = 0;
+                stepKMeans();
+                updateKMeansVisuals();
+                updateUIState();
+            }
+        }
+        controlsLeft.update();
+        rendererLeft.render(sceneLeft, cameraLeft); 
+        if (isDualView) {
+            controlsRight.update();
+            rendererRight.render(sceneRight, cameraRight);
+        }
+    }
+    
+    function onWindowResize() {
+        const viewLeft = document.getElementById('view-left');
+        if (viewLeft) { const w = viewLeft.clientWidth, h = viewLeft.clientHeight; if (w > 0 && h > 0) { cameraLeft.aspect = w / h; cameraLeft.updateProjectionMatrix(); rendererLeft.setSize(w, h); } }
+        const viewRight = document.getElementById('view-right');
+        if (isDualView && viewRight) { const w = viewRight.clientWidth, h = viewRight.clientHeight; if (w > 0 && h > 0) { cameraRight.aspect = w / h; cameraRight.updateProjectionMatrix(); rendererRight.setSize(w, h); } }
+    }
+    
+    init();
+</script>
+</body>
+</html>
+

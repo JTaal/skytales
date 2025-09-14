@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Regularisation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; background-color: #030712; }
+        .ui-panel { background-color: rgba(17, 24, 39, 0.8); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(55, 65, 81, 0.5); }
+        #loading-overlay { transition: opacity 0.3s ease; pointer-events: none; }
+        .loader { border: 4px solid #374151; border-top: 4px solid #8b5cf6; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .toggle-btn.active, .place-btn:active { background-color: #6d28d9; box-shadow: 0 0 12px rgba(109, 40, 217, 0.7); }
+        input[type=range] { -webkit-appearance: none; background: transparent; }
+        input[type=range]::-webkit-slider-runnable-track { height: 4px; background: #4b5563; border-radius: 2px; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; margin-top: -7px; width: 18px; height: 18px; background: #8b5cf6; border: 2px solid #111827; }
+        input[type=range]:hover::-webkit-slider-thumb { background-color: #a78bfa; }
+        .settings-panel, #info-panel { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        #info-panel.expanded { max-height: 90vh; }
+        #info-panel:not(.expanded) .metrics-container { display: none; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        .matrix-cell { background-color: rgba(3, 7, 18, 0.6); }
+        .btn { background-color: #312e81; border: 1px solid #4338ca; transition: all 0.2s ease-in-out; }
+        .btn:hover { background-color: #4338ca; transform: translateY(-1px); }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-200">
+
+    <div id="loading-overlay" class="fixed top-0 left-0 w-full h-full bg-gray-900 bg-opacity-70 flex justify-center items-center z-50 opacity-0 transition-opacity duration-300 pointer-events-none">
+        <div class="loader mr-4 rounded-full w-10 h-10 animate-spin"></div> <span class="text-xl font-medium">Updating Model...</span>
+    </div>
+
+    <div class="flex flex-col h-screen w-screen">
+        <!-- Top Header -->
+        <header class="w-full p-3 ui-panel z-10">
+            <div class="max-w-7xl mx-auto flex justify-center items-center px-4">
+                 <h1 class="text-2xl font-bold tracking-wider text-purple-300">Regularisation</h1>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 relative min-h-0">
+            <div id="container3d" class="absolute top-0 left-0 w-full h-full"></div>
+            
+            <div id="info-panel" class="ui-panel absolute top-4 left-4 w-full max-w-xs rounded-xl p-4 cursor-pointer sm:max-h-[60px] overflow-hidden">
+                <div id="info-header" class="flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-purple-300">Model Metrics</h2>
+                    <svg id="toggle-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-purple-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
+                </div>
+                <div class="metrics-container mt-4 space-y-3 text-sm">
+                    <p class="text-xs text-gray-400">Metrics for the combined dataset.</p>
+                    <div class="flex justify-between items-center bg-gray-900/50 p-2 rounded-lg"><span>Bias (Intercept)</span><span id="bias-value" class="font-mono font-bold text-purple-300">0.00</span></div>
+                    <div>
+                        <span class="font-semibold">Covariance Matrix</span>
+                        <div class="grid grid-cols-2 gap-1 mt-1 text-center font-mono font-bold text-xs p-1 bg-gray-900/50 rounded-lg">
+                            <div id="cov-00" class="matrix-cell p-1 rounded">0.00</div><div id="cov-01" class="matrix-cell p-1 rounded">0.00</div>
+                            <div id="cov-10" class="matrix-cell p-1 rounded">0.00</div><div id="cov-11" class="matrix-cell p-1 rounded">0.00</div>
+                        </div>
+                    </div>
+                     <div class="flex justify-between items-center bg-gray-900/50 p-2 rounded-lg"><span>Determinant</span><span id="determinant-value" class="font-mono font-bold text-purple-300">0.00</span></div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Menu: Model Controls -->
+        <footer class="w-full p-2 ui-panel z-10">
+            <div class="max-w-4xl mx-auto flex flex-wrap justify-center items-center gap-x-6 gap-y-3">
+                 <div class="flex items-center gap-3"><label for="degree" class="text-sm font-medium">Degree: <span id="degree-value" class="font-bold text-purple-300">3</span></label><input type="range" id="degree" min="1" max="5" step="1" value="3" class="w-24 cursor-pointer"></div>
+                <div class="flex bg-gray-900/50 rounded-lg p-1"><button data-reg="none" class="reg-btn flex-1 text-xs py-1 px-3 rounded-md">None</button><button data-reg="l1" class="reg-btn flex-1 text-xs py-1 px-3 rounded-md">Lasso</button><button data-reg="l2" class="reg-btn flex-1 text-xs py-1 px-3 rounded-md active">Ridge</button></div>
+                <div id="lambda-control" class="flex items-center gap-3"><label for="lambda" class="text-sm font-medium whitespace-nowrap">Strength (λ): <span id="lambda-value" class="font-bold text-purple-300">0.00e+0</span></label><input type="range" id="lambda" min="-5" max="0" step="0.01" value="1" class="w-24 cursor-pointer"></div>
+                 <button id="settings-btn" class="p-2 rounded-full hover:bg-purple-900/50 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg></button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="settings-panel fixed top-0 right-0 h-full w-full sm:w-80 md:w-96 p-6 space-y-4 overflow-y-auto transform translate-x-full z-40 ui-panel">
+        <div class="flex justify-between items-center"><h2 class="text-2xl font-bold text-purple-300">Settings</h2><button id="close-settings-btn" class="p-2 rounded-full hover:bg-purple-900/50 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
+        <div id="data-controls" class="space-y-4 p-4 bg-gray-900/50 rounded-lg">
+            <h3 class="font-semibold text-lg border-b border-gray-600 pb-2">Shape Distribution</h3>
+            <div><label for="meanX" class="block text-sm font-medium mb-1">Mean X (μx): <span id="meanX-value" class="font-bold text-purple-300">0.0</span></label><input type="range" id="meanX" min="-50" max="50" step="0.1" value="0.0" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+            <div><label for="meanY" class="block text-sm font-medium mb-1">Mean Y (μy): <span id="meanY-value" class="font-bold text-purple-300">0.0</span></label><input type="range" id="meanY" min="-50" max="50" step="0.1" value="0.0" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+            <div><label for="varianceX" class="block text-sm font-medium mb-1">Variance X (σ²x): <span id="varianceX-value" class="font-bold text-purple-300">1.0</span></label><input type="range" id="varianceX" min="0.01" max="50" step="0.1" value="1.0" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+            <div><label for="varianceY" class="block text-sm font-medium mb-1">Variance Y (σ²y): <span id="varianceY-value" class="font-bold text-purple-300">1.0</span></label><input type="range" id="varianceY" min="0.01" max="50" step="0.1" value="1.0" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+            <div><label for="correlation" class="block text-sm font-medium mb-1">Correlation (ρ): <span id="correlation-value" class="font-bold text-purple-300">0.0</span></label><input type="range" id="correlation" min="-0.99" max="0.99" step="0.05" value="0.0" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+            <button id="add-dist-btn" class="w-full text-sm py-2 px-2 mt-2 rounded-md btn">Add Distribution</button>
+            <button id="reset-btn" class="w-full text-sm py-2 px-2 mt-2 rounded-md bg-red-800 hover:bg-red-700 transition">Reset All</button>
+        </div>
+        <div class="space-y-4 p-4 bg-gray-900/50 rounded-lg">
+            <h3 class="font-semibold text-lg border-b border-gray-600 pb-2">Visibility & Scene</h3>
+            <div class="grid grid-cols-2 gap-2">
+                <button id="toggle-points" class="toggle-btn text-sm py-2 px-2 rounded-md bg-gray-600 active">Data Points</button>
+                <button id="toggle-surface" class="toggle-btn text-sm py-2 px-2 rounded-md bg-gray-600 active">Fit Surface</button>
+                <button id="toggle-penalty" class="toggle-btn col-span-2 text-sm py-2 px-2 rounded-md bg-gray-600 active">Penalty & Hit Point</button>
+                <button id="toggle-mesh-style" class="toggle-btn text-sm py-2 px-2 rounded-md bg-gray-600">Mesh: Solid</button>
+                <button id="toggle-2d-view" class="toggle-btn text-sm py-2 px-2 rounded-md bg-gray-600">2D View</button>
+            </div>
+             <div class="pt-2"><label for="grid-size" class="block text-sm font-medium mb-1">Grid Size: <span id="grid-size-value" class="font-bold text-purple-300">20</span></label><input type="range" id="grid-size" min="10" max="500" step="2" value="20" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+             <div class="pt-2"><label for="graphics-quality" class="block text-sm font-medium mb-1">Graphics Quality: <span id="graphics-quality-value" class="font-bold text-purple-300">High</span></label><input type="range" id="graphics-quality" min="0.5" max="2" step="0.1" value="1.5" class="w-full h-2 rounded-lg appearance-none cursor-pointer"></div>
+        </div>
+    </div>
+
+<script type="module">
+    // --- MATH HELPERS ---
+    function calculateCovariance(data){const n=data.length;if(n<2)return{matrix:[[0,0],[0,0]],determinant:0};const meanX=data.reduce((s,p)=>s+p.x,0)/n,meanY=data.reduce((s,p)=>s+p.y,0)/n;let varX=0,varY=0,covXY=0;for(const p of data){varX+=(p.x-meanX)**2;varY+=(p.y-meanY)**2;covXY+=(p.x-meanX)*(p.y-meanY)}varX/=(n-1);varY/=(n-1);covXY/=(n-1);return{matrix:[[varX,covXY],[covXY,varY]],determinant:varX*varY-covXY*covXY}}
+    function invert(A){const n=A.length,I=Array(n).fill(0).map(()=>Array(n).fill(0));for(let i=0;i<n;i++)I[i][i]=1;const C=A.map((r,i)=>[...r,...I[i]]);for(let i=0;i<n;i++){let m=i;for(let k=i+1;k<n;k++)if(Math.abs(C[k][i])>Math.abs(C[m][i]))m=k;[C[i],C[m]]=[C[m],C[i]];if(Math.abs(C[i][i])<1e-9)return null;for(let k=i+1;k<n;k++){const f=C[k][i]/C[i][i];for(let j=i;j<2*n;j++)C[k][j]-=f*C[i][j]}}for(let i=n-1;i>=0;i--){const d=C[i][i];for(let j=i;j<2*n;j++)C[i][j]/=d;for(let k=0;k<i;k++){const f=C[k][i];for(let j=i;j<2*n;j++)C[k][j]-=f*C[i][j]}}return C.map(r=>r.slice(n))}
+    function transpose(m){return m[0].map((_,c)=>m.map(r=>r[c]))}
+    function multiply(A,B){if(!A||!B||!A.length||!B.length)return null;const[Ar,Ac,Br,Bc]=[A.length,A[0].length,B.length,B[0]?.length??0];if(Ac!==Br)return null;const iV=!Array.isArray(B[0]);if(iV){const C=new Array(Ar).fill(0);for(let i=0;i<Ar;i++)for(let j=0;j<Ac;j++)C[i]+=A[i][j]*B[j];return C}const C=Array(Ar).fill(0).map(()=>Array(Bc).fill(0));for(let i=0;i<Ar;i++)for(let j=0;j<Bc;j++)for(let k=0;k<Ac;k++)C[i][j]+=A[i][k]*B[k][j];return C}
+
+    // --- 3D SCENE ---
+    let scene, camera, renderer, controls, activeMeshes = new THREE.Group(), clock;
+    function createLabeledAxes(size){const axes=new THREE.Object3D();const origin=new THREE.Vector3(0,0,0);const makeLabel=(text,color,pos)=>{const canvas=document.createElement('canvas');const ctx=canvas.getContext('2d');ctx.font='bold 60px Arial';ctx.fillStyle=color;ctx.fillText(text,0,60);const tex=new THREE.CanvasTexture(canvas);const spriteMat=new THREE.SpriteMaterial({map:tex});const sprite=new THREE.Sprite(spriteMat);sprite.scale.set(1.5,0.75,1);sprite.position.copy(pos);return sprite};const xAxisGeo=new THREE.BufferGeometry().setFromPoints([origin,new THREE.Vector3(size,0,0)]);const yAxisGeo=new THREE.BufferGeometry().setFromPoints([origin,new THREE.Vector3(0,size,0)]);const zAxisGeo=new THREE.BufferGeometry().setFromPoints([origin,new THREE.Vector3(0,0,-size)]);axes.add(new THREE.Line(xAxisGeo,new THREE.LineBasicMaterial({color:0xff0000})));axes.add(new THREE.Line(yAxisGeo,new THREE.LineBasicMaterial({color:0x00ff00})));axes.add(new THREE.Line(zAxisGeo,new THREE.LineBasicMaterial({color:0x8b5cf6})));axes.add(makeLabel('X','#ff0000',new THREE.Vector3(size+0.5,0,0)));axes.add(makeLabel('Probability / Z','#00ff00',new THREE.Vector3(0,size+0.5,0)));axes.add(makeLabel('Y','#8b5cf6',new THREE.Vector3(0,0,-size-0.5)));return axes}
+    function init3D(){clock=new THREE.Clock();const container=document.getElementById('container3d');scene=new THREE.Scene();scene.background=new THREE.Color(0x030712);camera=new THREE.PerspectiveCamera(75,container.clientWidth/container.clientHeight,0.1,2000);camera.position.set(8,8,12);renderer=new THREE.WebGLRenderer({antialias:true});renderer.setPixelRatio(window.devicePixelRatio*1.5);renderer.setSize(container.clientWidth,container.clientHeight);container.appendChild(renderer.domElement);controls=new THREE.OrbitControls(camera,renderer.domElement);controls.enableDamping=true;const aL=new THREE.AmbientLight(0xffffff,0.7),dL=new THREE.DirectionalLight(0xffffff,0.8);dL.position.set(5,10,7.5);const grid=new THREE.GridHelper(state.gridSize,state.gridSize,'#1f2937','#4b5563');grid.name='gridHelper';grid.position.y=-0.01;scene.add(aL,dL,createLabeledAxes(10),grid,activeMeshes);new ResizeObserver(()=>{camera.aspect=container.clientWidth/container.clientHeight;camera.updateProjectionMatrix();renderer.setSize(container.clientWidth,container.clientHeight)}).observe(container);const animate=()=>{requestAnimationFrame(animate);controls.update();renderer.render(scene,camera);const hitDot=scene.getObjectByName('hitDot');if(hitDot){const scale=1+Math.sin(clock.getElapsedTime()*5)*0.2;hitDot.scale.set(scale,scale,scale)}};animate()}
+
+    // --- CORE LOGIC ---
+    const ui={loadingOverlay:document.getElementById('loading-overlay'),meanXSlider:document.getElementById('meanX'),meanXValue:document.getElementById('meanX-value'),meanYSlider:document.getElementById('meanY'),meanYValue:document.getElementById('meanY-value'),varianceXSlider:document.getElementById('varianceX'),varianceXValue:document.getElementById('varianceX-value'),varianceYSlider:document.getElementById('varianceY'),varianceYValue:document.getElementById('varianceY-value'),correlationSlider:document.getElementById('correlation'),correlationValue:document.getElementById('correlation-value'),degreeSlider:document.getElementById('degree'),degreeValue:document.getElementById('degree-value'),regBtns:document.querySelectorAll('.reg-btn'),lambdaControl:document.getElementById('lambda-control'),lambdaSlider:document.getElementById('lambda'),lambdaValue:document.getElementById('lambda-value'),togglePointsBtn:document.getElementById('toggle-points'),toggleSurfaceBtn:document.getElementById('toggle-surface'),togglePenaltyBtn:document.getElementById('toggle-penalty'),toggleMeshStyleBtn:document.getElementById('toggle-mesh-style'),toggle2DViewBtn:document.getElementById('toggle-2d-view'),settingsBtn:document.getElementById('settings-btn'),closeSettingsBtn:document.getElementById('close-settings-btn'),settingsPanel:document.getElementById('settings-panel'),infoPanel:document.getElementById('info-panel'),infoPanelHeader:document.getElementById('info-header'),addDistBtn:document.getElementById('add-dist-btn'),resetBtn:document.getElementById('reset-btn'),biasValue:document.getElementById('bias-value'),cov00:document.getElementById('cov-00'),cov01:document.getElementById('cov-01'),cov10:document.getElementById('cov-10'),cov11:document.getElementById('cov-11'),determinantValue:document.getElementById('determinant-value'),gridSizeSlider:document.getElementById('grid-size'),gridSizeValue:document.getElementById('grid-size-value'),graphicsQualitySlider:document.getElementById('graphics-quality'),graphicsQualityValue:document.getElementById('graphics-quality-value'),};
+    const state={meanX:0.0,meanY:0.0,varianceX:1.0,varianceY:1.0,correlation:0.0,degree:3,regType:'l2',lambda:0,allData:[],distributions:[],isGridMode:false,gridSize:20,is2DMode:false,lastCameraPos:new THREE.Vector3(8,8,12)};
+    
+    function bivariateGaussianPDF(x,y,mux,muy,vx,vy,p){const peak=1/(2*Math.PI*Math.sqrt(vx)*Math.sqrt(vy)*Math.sqrt(1-p*p));const t2=-1/(2*(1-p*p));const x_=x-mux;const y_=y-muy;const t3=(x_*x_/vx)+(y_*y_/vy)-(2*p*x_*y_/(Math.sqrt(vx)*Math.sqrt(vy)));return{raw:peak*Math.exp(t2*t3),peak:peak}}
+    function generateGaussianData(n,mux,muy,vx,vy,p){const data=[];const sx=Math.sqrt(vx),sy=Math.sqrt(vy);for(let i=0;i<n;i++){const u1=Math.random(),u2=Math.random(),z1=Math.sqrt(-2*Math.log(u1))*Math.cos(2*Math.PI*u2),z2=Math.sqrt(-2*Math.log(u1))*Math.sin(2*Math.PI*u2),x=mux+sx*z1,y=muy+sy*(p*z1+Math.sqrt(1-p*p)*z2),z=bivariateGaussianPDF(x,y,mux,muy,vx,vy,p).raw;data.push({x,y,z,mux,muy,vx,vy,p})}return data}
+    function getPolynomialFeatures(x,y,d){const f=[1];for(let i=1;i<=d;i++)for(let j=0;j<=i;j++)f.push(Math.pow(x,i-j)*Math.pow(y,j));return f}
+    function trainModel(data,degree,regType,lambda){if(!data||data.length===0){const numFeatures=getPolynomialFeatures(0,0,degree).length;return{weights:new Array(numFeatures).fill(0)}};const X=data.map(p=>getPolynomialFeatures(p.x,p.y,degree)),y=data.map(p=>p.z),numFeatures=X[0].length;if(data.length<numFeatures)return{weights:new Array(numFeatures).fill(0)};if(regType==='l1'){let w=new Array(numFeatures).fill(0.1);for(let iter=0;iter<100;iter++){let max_change=0;for(let j=0;j<numFeatures;j++){const w_old=w[j];let rho_j=0;for(let i=0;i<data.length;i++)rho_j+=X[i][j]*(y[i]-(X[i].reduce((a,v,idx)=>a+v*w[idx],0)-w[j]*X[i][j]));if(j===0)w[j]=rho_j/data.length;else{const z_j=X.reduce((a,r)=>a+r[j]*r[j],0);if(rho_j<-lambda*data.length/2)w[j]=(rho_j+lambda*data.length/2)/z_j;else if(rho_j>lambda*data.length/2)w[j]=(rho_j-lambda*data.length/2)/z_j;else w[j]=0}max_change=Math.max(max_change,Math.abs(w[j]-w_old))}if(max_change<1e-4)break}return{weights:w}}else{const Xt=transpose(X),XtX=multiply(Xt,X);if(regType==='l2')for(let i=1;i<numFeatures;i++)XtX[i][i]+=lambda;const XtX_inv=invert(XtX);if(!XtX_inv)return{weights:new Array(numFeatures).fill(0)};const w=multiply(XtX_inv,multiply(Xt,y));return{weights:w}}}
+    function predict(x,y,model){if(!model?.weights)return 0;const features=getPolynomialFeatures(x,y,state.degree);return features.reduce((sum,feat,i)=>sum+feat*model.weights[i],0)}
+    
+    function updateVisualizations(){
+        while(activeMeshes.children.length > 0){const c=activeMeshes.children[0];activeMeshes.remove(c);if(c.geometry)c.geometry.dispose();if(c.material)c.material.dispose()}
+        
+        state.distributions.forEach(dist=>{const geom=new THREE.ParametricGeometry((u,v,t)=>{const x=(u-0.5)*8+dist.mux,y=(v-0.5)*8+dist.muy;const pdf=bivariateGaussianPDF(x,y,dist.mux,dist.muy,dist.vx,dist.vy,dist.p);const z=pdf.raw/pdf.peak*4;return t.set(x,z,-y)},40,40);const colors=new Float32Array(geom.attributes.position.count*3);const color=new THREE.Color();for(let i=0;i<geom.attributes.position.count;i++){const z=geom.attributes.position.getY(i);color.setHSL(0.6-z*0.1,0.8,0.5);colors[i*3]=color.r;colors[i*3+1]=color.g;colors[i*3+2]=color.b}geom.setAttribute('color',new THREE.BufferAttribute(colors,3));const mesh=new THREE.Mesh(geom,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,wireframe:state.isGridMode}));activeMeshes.add(mesh)});
+
+        const scaledZPoints = state.allData.map(p => { const pdf = bivariateGaussianPDF(p.x, p.y, p.mux, p.muy, p.vx, p.vy, p.p); return [p.x, pdf.raw / pdf.peak * 4 + 0.02, -p.y]; });
+        const points=new THREE.Points(new THREE.BufferGeometry().setAttribute('position',new THREE.BufferAttribute(new Float32Array(scaledZPoints.flat()),3)),new THREE.PointsMaterial({color:0x8b5cf6,size:0.15}));
+        points.visible=ui.togglePointsBtn.classList.contains('active');activeMeshes.add(points);
+
+        const model=trainModel(state.allData,state.degree,state.regType,state.lambda);
+        const OLS_model=trainModel(state.allData,state.degree,'none',0);
+
+        if(model.weights.length>0&&state.allData.length>0){
+            ui.biasValue.textContent=model.weights[0].toFixed(2);
+            let surfaceMaterial=state.lambda===0?new THREE.MeshBasicMaterial({color:0xaaaaaa,wireframe:true,transparent:true,opacity:0.3}):new THREE.MeshLambertMaterial({color:0xef4444,side:THREE.DoubleSide,transparent:true,opacity:0.8,wireframe:state.isGridMode});
+            const surfaceMesh=new THREE.Mesh(new THREE.ParametricGeometry((u,v,t)=>t.set(u*20-10,predict(u*20-10,v*20-10,model),-(v*20-10)),50,50),surfaceMaterial);
+            surfaceMesh.visible=ui.toggleSurfaceBtn.classList.contains('active');activeMeshes.add(surfaceMesh);
+
+            const isPenaltyVisible=ui.togglePenaltyBtn.classList.contains('active');
+            const w=OLS_model.weights.slice(1).map((w,i)=>({w:Math.abs(w),i:i+1}));w.sort((a,b)=>b.w-a.w);const top_indices=[w[0]?.i||1,w[1]?.i||2];
+            let solution_w1,solution_w2;
+            if(state.lambda>0){solution_w1=model.weights[top_indices[0]];solution_w2=model.weights[top_indices[1]]}else{solution_w1=OLS_model.weights[top_indices[0]];solution_w2=OLS_model.weights[top_indices[1]]}
+            
+            if(solution_w1!==undefined&&solution_w2!==undefined){
+                const hitHeight=state.distributions.reduce((acc,dist)=>{const pdf=bivariateGaussianPDF(solution_w1,-solution_w2,dist.mux,dist.muy,dist.vx,dist.vy,dist.p);return acc+pdf.raw/pdf.peak*4},0);
+                const hitDot=new THREE.Mesh(new THREE.SphereGeometry(0.2,16,16),new THREE.MeshBasicMaterial({color:0xff00ff}));hitDot.name="hitDot";hitDot.position.set(solution_w1,hitHeight,-solution_w2);hitDot.visible=isPenaltyVisible;activeMeshes.add(hitDot);
+            }
+        }
+
+        let penaltyGeom, penaltyMat;
+        if(state.lambda > 0) {
+            const penaltySize = 0.2 / state.lambda;
+            if(state.regType==='l1'){penaltyGeom=new THREE.OctahedronGeometry(penaltySize,0);penaltyMat=new THREE.MeshBasicMaterial({color:0xfbbf24,wireframe:true})}
+            else if(state.regType==='l2'){penaltyGeom=new THREE.SphereGeometry(penaltySize,16,16);penaltyMat=new THREE.MeshBasicMaterial({color:0x60a5fa,wireframe:true})}
+        } else {
+             const skyboxSize = 500;
+             if(state.regType==='l1'){penaltyGeom=new THREE.OctahedronGeometry(skyboxSize,1);penaltyMat=new THREE.MeshBasicMaterial({color:0xfbbf24,wireframe:true,side:THREE.BackSide,transparent:true,opacity:0.15})}
+             else if(state.regType==='l2'){penaltyGeom=new THREE.SphereGeometry(skyboxSize,32,32);penaltyMat=new THREE.MeshBasicMaterial({color:0x60a5fa,wireframe:true,side:THREE.BackSide,transparent:true,opacity:0.15})}
+        }
+        if(penaltyGeom){const penaltyMesh=new THREE.Mesh(penaltyGeom,penaltyMat);penaltyMesh.position.set(0,0,0);penaltyMesh.visible=ui.togglePenaltyBtn.classList.contains('active');activeMeshes.add(penaltyMesh)}
+    }
+
+    function updateMetrics(){const cov=calculateCovariance(state.allData);ui.cov00.textContent=cov.matrix[0][0].toFixed(2);ui.cov01.textContent=cov.matrix[0][1].toFixed(2);ui.cov10.textContent=cov.matrix[1][0].toFixed(2);ui.cov11.textContent=cov.matrix[1][1].toFixed(2);ui.determinantValue.textContent=cov.determinant.toFixed(2)}
+    function updateLambdaUI(logVal){if(logVal<=-15){state.lambda=0;ui.lambdaValue.textContent="0.00e+0"}else{state.lambda=Math.pow(10,logVal);ui.lambdaValue.textContent=state.lambda.toExponential(2)}}
+
+    let debounceTimeout;
+    function debouncedUpdate() {
+        clearTimeout(debounceTimeout);
+        ui.loadingOverlay.style.opacity = '1';
+        ui.loadingOverlay.style.pointerEvents = 'auto';
+        debounceTimeout = setTimeout(() => {
+            updateVisualizations();
+            ui.loadingOverlay.style.opacity = '0';
+            ui.loadingOverlay.style.pointerEvents = 'none';
+        }, 250);
+    }
+
+    // --- EVENT LISTENERS ---
+    ['meanXSlider','meanYSlider','varianceXSlider','varianceYSlider','correlationSlider'].forEach(id=>{const key=id.replace('Slider','');ui[id].addEventListener('input',e=>{state[key]=parseFloat(e.target.value);ui[key+'Value'].textContent=state[key].toFixed(1)})});
+    ui.degreeSlider.addEventListener('input',e=>{state.degree=parseInt(e.target.value,10);ui.degreeValue.textContent=state.degree;debouncedUpdate()});
+    ui.lambdaSlider.addEventListener('input',e=>{updateLambdaUI(parseFloat(e.target.value));debouncedUpdate()});
+    ui.regBtns.forEach(btn=>btn.addEventListener('click',()=>{ui.regBtns.forEach(b=>b.classList.remove('active'));btn.classList.add('active');state.regType=btn.dataset.reg;ui.lambdaControl.style.display=state.regType==='none'?'none':'block';debouncedUpdate()}));
+    ['togglePointsBtn','toggleSurfaceBtn','togglePenaltyBtn','toggleMeshStyleBtn'].forEach(id=>ui[id].addEventListener('click',e=>{e.currentTarget.classList.toggle('active');if(id==='toggleMeshStyleBtn'){state.isGridMode=!state.isGridMode;e.currentTarget.textContent=`Mesh Style: ${state.isGridMode?'Grid':'Solid'}`}debouncedUpdate()}));
+    ui.addDistBtn.addEventListener('click',()=>{const distParams={mux:state.meanX,muy:state.meanY,vx:state.varianceX,vy:state.varianceY,p:state.correlation};state.distributions.push(distParams);const newData=generateGaussianData(50,state.meanX,state.meanY,state.varianceX,state.varianceY,state.correlation);state.allData.push(...newData);updateVisualizations();updateMetrics()});
+    ui.resetBtn.addEventListener('click',()=>{state.allData=[];state.distributions=[];updateVisualizations();updateMetrics()});
+    ui.settingsBtn.addEventListener('click',()=>ui.settingsPanel.classList.remove('translate-x-full'));
+    ui.closeSettingsBtn.addEventListener('click',()=>ui.settingsPanel.classList.add('translate-x-full'));
+    ui.infoPanelHeader.addEventListener('click',e=>{if(e.target.closest('canvas'))return;ui.infoPanel.classList.toggle('expanded')});
+    ui.toggle2DViewBtn.addEventListener('click', e => {
+        state.is2DMode = !state.is2DMode;
+        e.currentTarget.classList.toggle('active', state.is2DMode);
+        controls.enableRotate = !state.is2DMode;
+        if(state.is2DMode) {
+            state.lastCameraPos.copy(camera.position);
+            camera.position.set(0, 20, 0);
+        } else {
+            camera.position.copy(state.lastCameraPos);
+        }
+        controls.target.set(0,0,0);
+    });
+    ui.gridSizeSlider.addEventListener('input', e => {
+        state.gridSize = parseInt(e.target.value, 10);
+        ui.gridSizeValue.textContent = state.gridSize;
+        const oldGrid = scene.getObjectByName('gridHelper');
+        if (oldGrid) scene.remove(oldGrid);
+        const newGrid = new THREE.GridHelper(state.gridSize, state.gridSize, '#1f2937', '#4b5563');
+        newGrid.name = 'gridHelper';
+        newGrid.position.y = -0.01;
+        scene.add(newGrid);
+    });
+     ui.graphicsQualitySlider.addEventListener('input', e => {
+        const quality = parseFloat(e.target.value);
+        renderer.setPixelRatio(window.devicePixelRatio * quality);
+        if (quality < 0.8) ui.graphicsQualityValue.textContent = "Low";
+        else if (quality < 1.5) ui.graphicsQualityValue.textContent = "Medium";
+        else ui.graphicsQualityValue.textContent = "High";
+    });
+
+    // --- INIT ---
+    document.addEventListener('DOMContentLoaded',()=>{init3D();updateLambdaUI(parseFloat(ui.lambdaSlider.value));updateVisualizations()});
+</script>
+</body>
+</html>
+

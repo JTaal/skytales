@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hydrogen Atom 3D Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712; /* bg-gray-950 */
+            color: #e5e7eb;
+        }
+        canvas {
+            display: block;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        .view-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+            margin: 0 5px;
+        }
+        .view-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .view-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            border-radius: 12px;
+            z-index: 10;
+        }
+        #controls-panel {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        label {
+            font-weight: 500;
+            font-size: 0.875rem;
+            color: #d1d5db;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 150px;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #818cf8;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .value-display {
+            background-color: #1f2937;
+            padding: 0.25rem 0.75rem;
+            border-radius: 6px;
+            font-weight: 500;
+            color: white;
+            min-width: 30px;
+            text-align: center;
+        }
+        
+        /* --- Info Panel Styles --- */
+        #title-panel {
+            position: absolute;
+            top: 80px;
+            left: 20px;
+            max-width: 350px;
+            transition: max-height 0.5s ease-in-out;
+            max-height: 70px; /* Collapsed height */
+            overflow: hidden;
+        }
+        #title-panel.expanded {
+            max-height: 500px; /* Expanded height */
+            overflow-y: auto;
+        }
+        #title-header {
+             cursor: pointer;
+        }
+        #title-panel.expanded #info-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        #title-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+        #title-panel::-webkit-scrollbar-track {
+            background: rgba(31, 41, 55, 0.5);
+            border-radius: 4px;
+        }
+        #title-panel::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 4px;
+        }
+        #title-panel::-webkit-scrollbar-thumb:hover {
+            background: #6b7280;
+        }
+
+        #state-display {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #c7d2fe;
+            text-shadow: 0 0 10px rgba(165, 180, 252, 0.5);
+        }
+
+        #settings-button {
+            position: relative; 
+            z-index: 21;
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+         #settings-button:hover {
+            background-color: #4338ca;
+            transform: rotate(45deg);
+        }
+        #settings-panel {
+            top: 80px;
+            right: 0;
+            width: 300px;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            z-index: 12;
+            padding-right: 2rem;
+        }
+        #settings-panel.open {
+            transform: translateX(-20px);
+        }
+        .toggle-switch, .toggle-button {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+        .toggle-button {
+            background-color: #374151;
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: white;
+            font-weight: 500;
+            transition: background-color 0.3s;
+        }
+        .toggle-button.active {
+             background-color: #4f46e5;
+        }
+
+        .toggle-switch input { display: none; }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #374151;
+            transition: .4s;
+            border-radius: 28px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px; width: 20px;
+            left: 4px; bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider { background-color: #4f46e5; }
+        input:checked + .slider:before { transform: translateX(22px); }
+        select {
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: white;
+            padding: 0.5rem;
+            width: 100%;
+        }
+        
+        #mesh-color-key, #particle-color-key {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+        }
+        .gradient-bar {
+            width: 150px;
+            height: 15px;
+            border-radius: 7.5px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: #9ca3af;
+            padding-top: 4px;
+        }
+        #mesh-color-key .gradient-bar {
+             background: linear-gradient(to right, hsl(240, 90%, 60%), hsl(0, 90%, 60%));
+        }
+        
+        #radius-chart-container {
+            margin-top: 1rem;
+            height: 200px;
+        }
+
+        .hidden { display: none; }
+
+        #views-menu-desktop { display: flex; }
+        #views-menu-mobile { display: none; }
+        .dropdown-item.active {
+            background-color: #4f46e5;
+        }
+        #views-dropdown-button.open svg {
+            transform: rotate(180deg);
+        }
+        #views-dropdown-button { margin: 0; }
+
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            header h1 { font-size: 1rem; }
+            
+            #views-menu-desktop { display: none; }
+            #views-menu-mobile { display: block; }
+            
+            #controls-panel {
+                flex-direction: column;
+                bottom: 10px;
+                width: 90%;
+                padding: 1rem;
+            }
+            #title-panel {
+                top: 70px;
+                left: 10px;
+                right: 10px;
+                max-width: none;
+                width: auto;
+            }
+            #settings-button { top: initial; right: initial; }
+            #settings-panel { top: 70px; width: 280px; }
+            #settings-panel.open { transform: translateX(-10px); }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider">Quantum Visualization</h1>
+        
+        <div class="flex items-center gap-2">
+            <div id="views-container">
+                <div id="views-menu-desktop">
+                    <button data-view="particles" class="view-button active">Particles</button>
+                    <button data-view="mesh" class="view-button">Orbital Mesh</button>
+                    <button data-view="wave" class="view-button">Energy Wave</button>
+                </div>
+                <div id="views-menu-mobile" class="relative">
+                    <button id="views-dropdown-button" class="view-button flex items-center">
+                        <span id="current-view-label">Particles</span>
+                        <svg class="ml-2 w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    </button>
+                    <div id="views-dropdown-menu" class="hidden absolute right-0 mt-2 w-48 bg-gray-900 rounded-md shadow-lg py-1 z-50 border border-gray-700">
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 active" data-view="particles">Particles</a>
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600" data-view="mesh">Orbital Mesh</a>
+                        <a href="#" class="dropdown-item block px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600" data-view="wave">Energy Wave</a>
+                    </div>
+                </div>
+            </div>
+
+            <button id="settings-button" title="Settings">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <div id="title-panel" class="ui-panel">
+        <div id="title-header" class="flex justify-between items-center">
+             <h1 id="view-title" class="text-xl font-bold text-gray-200 tracking-wider">Particle Cloud</h1>
+             <svg id="info-toggle-icon" class="w-6 h-6 text-gray-400 transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+        </div>
+        <p id="view-description" class="text-sm text-gray-400 mt-2">Each point represents a possible electron location, forming a probability cloud.</p>
+        <div id="state-display-container" class="mt-4">
+            <div id="state-display">n=1, l=0, m=0</div>
+        </div>
+        <div id="radius-chart-container">
+            <canvas id="radius-chart"></canvas>
+        </div>
+    </div>
+    
+    <div id="settings-panel" class="ui-panel">
+        <h2 class="text-lg font-bold mb-4">Display Settings</h2>
+        <div id="particle-settings" class="space-y-4">
+            <div class="control-group w-full items-start">
+                <label for="particle-count-slider" class="mb-2 w-full flex justify-between">
+                    <span>Particle Count</span><span id="particle-count-value">50k</span>
+                </label>
+                <input id="particle-count-slider" type="range" min="1000" max="200000" step="1000" value="50000" class="w-full">
+            </div>
+             <div class="flex justify-between items-center">
+                <label for="energy-toggle">Energy Field Colors</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="energy-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="control-group w-full items-start">
+                <label for="color-scheme-select" class="mb-2">Particle Color Scheme</label>
+                <select id="color-scheme-select">
+                    <option value="phase">Phase (Phi)</option>
+                    <option value="plasma">Plasma</option>
+                    <option value="monochrome">Monochrome</option>
+                </select>
+            </div>
+            <div class="control-group w-full items-start">
+                <label for="particle-size-slider" class="mb-2 w-full flex justify-between">
+                    <span>Particle Size</span><span id="particle-size-value">0.3</span>
+                </label>
+                <input id="particle-size-slider" type="range" min="0.1" max="2.0" step="0.05" value="0.3" class="w-full">
+            </div>
+             <div class="control-group w-full items-start">
+                <label for="particle-scale-slider" class="mb-2 w-full flex justify-between">
+                    <span>Cloud Scale</span><span id="particle-scale-value">1.0</span>
+                </label>
+                <input id="particle-scale-slider" type="range" min="0.1" max="3.0" step="0.1" value="1.0" class="w-full">
+            </div>
+        </div>
+         <div id="mesh-settings" class="hidden space-y-4">
+            <div class="control-group w-full items-start">
+                <label for="mesh-scale-slider" class="mb-2 w-full flex justify-between">
+                    <span>Shape Scale</span><span id="mesh-scale-value">30</span>
+                </label>
+                <input id="mesh-scale-slider" type="range" min="5" max="100" step="1" value="30" class="w-full">
+            </div>
+             <div class="control-group w-full items-start">
+                <label for="mesh-resolution-slider" class="mb-2 w-full flex justify-between">
+                    <span>Mesh Resolution</span><span id="mesh-resolution-value">64</span>
+                </label>
+                <input id="mesh-resolution-slider" type="range" min="16" max="256" step="4" value="64" class="w-full">
+            </div>
+        </div>
+        <div id="wave-settings" class="hidden space-y-4">
+            <div class="control-group w-full items-start">
+                <label for="wave-speed-slider" class="mb-2 w-full flex justify-between">
+                    <span>Wave Speed</span><span id="wave-speed-value">1.0</span>
+                </label>
+                <input id="wave-speed-slider" type="range" min="0.1" max="5" step="0.1" value="1" class="w-full">
+            </div>
+             <div class="control-group w-full items-start">
+                <label for="wave-intensity-slider" class="mb-2 w-full flex justify-between">
+                    <span>Wave Intensity</span><span id="wave-intensity-value">5</span>
+                </label>
+                <input id="wave-intensity-slider" type="range" min="1" max="25" step="1" value="5" class="w-full">
+            </div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+
+    <div id="mesh-color-key" class="hidden">
+        <div class="gradient-bar"></div>
+        <div class="labels">
+            <span>Low</span><span>High</span>
+        </div>
+        <div class="text-center text-xs text-gray-400 mt-1">Probability</div>
+    </div>
+
+    <div id="particle-color-key" class="hidden">
+        <div class="gradient-bar"></div>
+        <div class="labels">
+            <span class="label-start"></span><span class="label-end"></span>
+        </div>
+        <div class="text-center text-xs text-gray-400 mt-1 label-title"></div>
+    </div>
+
+
+<script>
+    // --- Core Three.js Components ---
+    let scene, camera, renderer, controls;
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {};
+    let currentCleanup = () => {};
+    let radiusChart;
+
+    // --- State ---
+    const quantumState = { n: 1, l: 0, m: 0 };
+    const displaySettings = { 
+        energyColors: false, 
+        colorScheme: 'phase',
+        particleCount: 50000,
+        particleSize: 0.3,
+        particleScale: 1.0,
+        meshShapeScale: 30,
+        meshResolution: 64,
+        waveCoherent: false,
+        waveSpeed: 1,
+        waveIntensity: 5
+    };
+    const VISUAL_SCALE = 20;
+
+    // --- UI Elements ---
+    const viewTitle = document.getElementById('view-title');
+    const viewDescription = document.getElementById('view-description');
+    const stateDisplayContainer = document.getElementById('state-display-container');
+    const stateDisplay = document.getElementById('state-display');
+    const controlsPanel = document.getElementById('controls-panel');
+    const settingsButton = document.getElementById('settings-button');
+    const settingsPanel = document.getElementById('settings-panel');
+    const particleSettings = document.getElementById('particle-settings');
+    const meshSettings = document.getElementById('mesh-settings');
+    const waveSettings = document.getElementById('wave-settings');
+    const meshColorKey = document.getElementById('mesh-color-key');
+    const particleColorKey = document.getElementById('particle-color-key');
+    const titlePanel = document.getElementById('title-panel');
+    const radiusChartContainer = document.getElementById('radius-chart-container');
+
+    // --- Math Functions (Factorial, Legendre, Spherical Harmonics, etc.) ---
+    function factorial(k) {
+        if (k < 0) return NaN;
+        if (k === 0) return 1;
+        let f = 1;
+        for (let i = 1; i <= k; i++) f *= i;
+        return f;
+    }
+    function associatedLegendre(ql, qm, x) {
+        qm = Math.abs(qm);
+        if (qm > ql) return 0;
+        let pmm = 1.0;
+        if (qm > 0) {
+            const one_minus_x2 = 1.0 - x * x;
+            if (one_minus_x2 < 0) return 0; // x must be in [-1, 1]
+            const sqrt_one_minus_x2 = Math.sqrt(one_minus_x2);
+            let fact = 1.0;
+            for (let i = 1; i <= qm; i++) {
+                pmm *= (-fact) * sqrt_one_minus_x2;
+                fact += 2.0;
+            }
+        }
+        if (ql === qm) return pmm;
+        let pm1m = x * (2.0 * qm + 1.0) * pmm;
+        if (ql === qm + 1) return pm1m;
+        let pll = 0;
+        for (let ll = qm + 2; ll <= ql; ll++) {
+            pll = ((2.0 * ll - 1.0) * x * pm1m - (ll + qm - 1.0) * pmm) / (ll - qm);
+            pmm = pm1m;
+            pm1m = pll;
+        }
+        return pll;
+    }
+    function sphericalHarmonicReal(ql, qm, theta, phi) {
+        if (ql < 0 || Math.abs(qm) > ql) return 0;
+        const prefactor = Math.sqrt(((2 * ql + 1) * factorial(ql - Math.abs(qm))) / (4 * Math.PI * factorial(ql + Math.abs(qm))));
+        const legendre = associatedLegendre(ql, qm, Math.cos(theta));
+        if (qm > 0) return Math.sqrt(2) * prefactor * Math.cos(qm * phi) * legendre;
+        if (qm < 0) return Math.sqrt(2) * prefactor * Math.sin(-qm * phi) * legendre;
+        return prefactor * legendre;
+    }
+    function associatedLaguerre(p, alpha, x) {
+        let result = 0;
+        for (let i = 0; i <= p; i++) {
+            result += Math.pow(-1, i) * factorial(p + alpha) / (factorial(p - i) * factorial(alpha + i) * factorial(i)) * Math.pow(x, i);
+        }
+        return result;
+    }
+    function radialWavefunction(qn, ql, r) {
+        const rho = (2.0 * r) / qn;
+        const norm = Math.sqrt(Math.pow(2.0 / qn, 3) * (factorial(qn - ql - 1) / (2.0 * qn * factorial(qn + ql))));
+        const laguerre = associatedLaguerre(qn - ql - 1, 2 * ql + 1, rho);
+        return norm * Math.exp(-rho / 2.0) * Math.pow(rho, ql) * laguerre;
+    }
+    function probabilityDensity(qn, ql, qm, r, theta, phi) {
+        const R = radialWavefunction(qn, ql, r);
+        const Y = sphericalHarmonicReal(ql, qm, theta, phi);
+        return R * R * Y * Y;
+    }
+
+    // --- Scene Definitions ---
+    const scenes = {
+        particles: {
+            title: 'Particle Cloud',
+            description: 'Each point represents a possible electron location, forming a probability cloud.',
+            init: initParticleScene,
+        },
+        mesh: {
+            title: 'Orbital Mesh',
+            description: 'A smooth mesh surface representing the shape of the electron orbital.',
+            init: initMeshScene,
+        },
+        wave: {
+            title: 'Energy Wave',
+            description: 'An abstract representation of the electron\'s energy field as a dynamic wave pattern.',
+            init: initWaveScene,
+        }
+    };
+    
+    // --- Scene Initializers ---
+    function initParticleScene() {
+        let particles;
+        function createElectronCloud() {
+            if (particles) {
+                activeSceneObjects.remove(particles);
+                particles.geometry.dispose();
+                particles.material.dispose();
+            }
+            const particleCount = displaySettings.particleCount;
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            const radii = new Float32Array(particleCount);
+            const color = new THREE.Color();
+            let maxProb = 0;
+            for(let r=0; r < quantumState.n * 10; r+=0.1) {
+                maxProb = Math.max(maxProb, probabilityDensity(quantumState.n, quantumState.l, quantumState.m, r, Math.PI / 2, 0));
+            }
+            if (maxProb === 0 || !isFinite(maxProb)) maxProb = 1e-5;
+            let i = 0;
+            const maxRadius = quantumState.n * quantumState.n * 2 + 15;
+            while (i < particleCount) {
+                const r = Math.random() * maxRadius;
+                const theta = Math.random() * Math.PI;
+                const phi = Math.random() * 2 * Math.PI;
+                const prob = probabilityDensity(quantumState.n, quantumState.l, quantumState.m, r, theta, phi);
+                if (Math.random() * maxProb < prob) {
+                    radii[i] = r;
+                    const x = r * Math.sin(theta) * Math.cos(phi);
+                    const y = r * Math.sin(theta) * Math.sin(phi);
+                    const z = r * Math.cos(theta);
+                    const scale = displaySettings.particleScale;
+                    positions[i * 3] = x * (VISUAL_SCALE / maxRadius) * scale;
+                    positions[i * 3 + 1] = y * (VISUAL_SCALE / maxRadius) * scale;
+                    positions[i * 3 + 2] = z * (VISUAL_SCALE / maxRadius) * scale;
+                    if(displaySettings.energyColors) {
+                        const energyHue = 0.66 - (r / maxRadius) * 0.66;
+                        color.setHSL(energyHue, 0.9, 0.6);
+                    } else {
+                        switch(displaySettings.colorScheme) {
+                            case 'phase': color.setHSL(phi / (2 * Math.PI), 0.7, 0.6); break;
+                            case 'plasma':
+                                const plasmaHue = 0.5 + (theta / Math.PI) * 0.5;
+                                const plasmaLightness = 0.5 + Math.sin(phi * 2) * 0.1;
+                                color.setHSL(plasmaHue, 0.8, plasmaLightness);
+                                break;
+                            case 'monochrome': color.setHSL(0, 0, 0.8); break;
+                        }
+                    }
+                    colors[i * 3] = color.r;
+                    colors[i * 3 + 1] = color.g;
+                    colors[i * 3 + 2] = color.b;
+                    i++;
+                }
+            }
+            updateRadiusChart(radii, maxRadius);
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            const material = new THREE.PointsMaterial({
+                size: displaySettings.particleSize, vertexColors: true, blending: THREE.AdditiveBlending,
+                transparent: true, opacity: 0.7, depthWrite: false,
+            });
+            particles = new THREE.Points(geometry, material);
+            activeSceneObjects.add(particles);
+        }
+        createElectronCloud();
+        setupQuantumControls(createElectronCloud);
+        const nucleusGeom = new THREE.SphereGeometry(0.5, 32, 32);
+        const nucleusMat = new THREE.MeshBasicMaterial({ color: 0xff4136 });
+        const nucleus = new THREE.Mesh(nucleusGeom, nucleusMat);
+        activeSceneObjects.add(nucleus);
+        function update(delta) { if(particles) particles.rotation.y += delta * 0.1; }
+        function cleanup() { }
+        return { update, cleanup };
+    }
+
+    function initMeshScene() {
+        let orbitalMesh, baseGeometry;
+        const material = new THREE.MeshStandardMaterial({
+            metalness: 0.2,
+            roughness: 0.5,
+            transparent: true,
+            opacity: 0.8,
+            side: THREE.DoubleSide,
+            vertexColors: true
+        });
+
+        function createOrbitalMesh() {
+            if (orbitalMesh) {
+                activeSceneObjects.remove(orbitalMesh);
+                orbitalMesh.geometry.dispose();
+            }
+            const resolution = displaySettings.meshResolution;
+            baseGeometry = new THREE.SphereGeometry(1, resolution, resolution);
+            const geometry = baseGeometry.clone();
+            geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+            orbitalMesh = new THREE.Mesh(geometry, material);
+            activeSceneObjects.add(orbitalMesh);
+            updateOrbitalMesh();
+        }
+        
+        function updateOrbitalMesh() {
+            if (!orbitalMesh) return;
+            const positions = orbitalMesh.geometry.attributes.position;
+            const colors = orbitalMesh.geometry.attributes.color;
+            const basePositions = baseGeometry.attributes.position;
+            const tempVec = new THREE.Vector3();
+            const color = new THREE.Color();
+            const scale = displaySettings.meshShapeScale;
+            const baseRadius = 15;
+
+            const displacements = new Float32Array(positions.count);
+            let maxDisplacement = 0;
+
+            for (let i = 0; i < positions.count; i++) {
+                tempVec.fromBufferAttribute(basePositions, i);
+                const r_norm = 1.0;
+                const theta = Math.acos(tempVec.y / r_norm);
+                const phi = Math.atan2(tempVec.z, tempVec.x);
+                
+                const d = Math.abs(sphericalHarmonicReal(quantumState.l, quantumState.m, theta, phi));
+                displacements[i] = isNaN(d) ? 0 : d;
+                if (displacements[i] > maxDisplacement) {
+                    maxDisplacement = displacements[i];
+                }
+            }
+
+            for (let i = 0; i < positions.count; i++) {
+                const displacement = displacements[i];
+                const newRadius = baseRadius + scale * displacement;
+                tempVec.fromBufferAttribute(basePositions, i).setLength(newRadius);
+                positions.setXYZ(i, tempVec.x, tempVec.y, tempVec.z);
+                
+                const normalizedValue = (maxDisplacement > 0.0001) ? displacement / maxDisplacement : 0;
+                color.setHSL(0.66 - normalizedValue * 0.66, 0.9, 0.6); // Blue to Red
+                colors.setXYZ(i, color.r, color.g, color.b);
+            }
+            
+            positions.needsUpdate = true;
+            colors.needsUpdate = true;
+            orbitalMesh.geometry.computeVertexNormals();
+        }
+
+        createOrbitalMesh();
+        setupQuantumControls(updateOrbitalMesh);
+        const nucleusGeom = new THREE.SphereGeometry(0.5, 32, 32);
+        const nucleusMat = new THREE.MeshBasicMaterial({ color: 0xff4136 });
+        const nucleus = new THREE.Mesh(nucleusGeom, nucleusMat);
+        activeSceneObjects.add(nucleus);
+
+        function update(delta) { if (orbitalMesh) orbitalMesh.rotation.y += delta * 0.1; }
+        function cleanup() { material.dispose(); if (baseGeometry) baseGeometry.dispose(); }
+        
+        window.updateOrbitalMesh = updateOrbitalMesh;
+        window.recreateMesh = createOrbitalMesh;
+
+        return { update, cleanup };
+    }
+
+    function initWaveScene() {
+        const WAVE_COUNT = 3000;
+        const waves = new THREE.Group();
+        const material = new THREE.LineBasicMaterial({
+            vertexColors: true, blending: THREE.AdditiveBlending,
+            transparent: true, opacity: 0.5
+        });
+        for (let i = 0; i < WAVE_COUNT; i++) {
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2 * 3), 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(2 * 3), 3));
+            const line = new THREE.Line(geometry, material);
+            line.userData.phi = Math.random() * Math.PI * 2;
+            line.userData.theta = Math.random() * Math.PI * 2;
+            line.userData.baseSpeed = 0.5 + Math.random() * 0.5;
+            line.userData.radialOffset = Math.random() * Math.PI * 2;
+            waves.add(line);
+        }
+        activeSceneObjects.add(waves);
+        setupWaveControls();
+        
+        function update(delta) {
+            waves.rotation.y += delta * 0.1 * displaySettings.waveSpeed;
+            const currentTime = performance.now() * 0.001;
+            waves.children.forEach(line => {
+                const speed = displaySettings.waveCoherent ? 1.0 : line.userData.baseSpeed;
+                line.userData.phi += delta * speed * displaySettings.waveSpeed;
+                
+                const r = 20 + Math.sin(line.userData.theta * 4 + currentTime * speed) * displaySettings.waveIntensity;
+                const color = new THREE.Color();
+                color.setHSL(currentTime * 0.1 + line.userData.theta / Math.PI, 0.8, 0.6);
+                const x1 = r * Math.sin(line.userData.theta) * Math.cos(line.userData.phi);
+                const y1 = r * Math.cos(line.userData.theta);
+                const z1 = r * Math.sin(line.userData.theta) * Math.sin(line.userData.phi);
+                line.geometry.attributes.position.setXYZ(0, x1, y1, z1);
+                line.geometry.attributes.position.setXYZ(1, 0,0,0);
+                line.geometry.attributes.color.setXYZ(0, color.r, color.g, color.b);
+                line.geometry.attributes.color.setXYZ(1, 1,1,1);
+                line.geometry.attributes.position.needsUpdate = true;
+                line.geometry.attributes.color.needsUpdate = true;
+            });
+        }
+        function cleanup() { material.dispose(); }
+        return { update, cleanup };
+    }
+
+    // --- Main Logic ---
+    function switchScene(key) {
+        if (currentCleanup) currentCleanup();
+        while(activeSceneObjects.children.length > 0) {
+            const obj = activeSceneObjects.children[0];
+            if(obj.geometry) obj.geometry.dispose();
+            if(obj.material) obj.material.dispose();
+            activeSceneObjects.remove(obj);
+        }
+        controlsPanel.innerHTML = '';
+
+        const sceneData = scenes[key];
+        viewTitle.textContent = sceneData.title;
+        viewDescription.textContent = sceneData.description;
+        const result = sceneData.init();
+        currentUpdate = result.update;
+        currentCleanup = result.cleanup;
+        
+        stateDisplayContainer.style.display = (key === 'particles' || key === 'mesh') ? 'block' : 'none';
+        particleSettings.style.display = key === 'particles' ? 'block' : 'none';
+        meshSettings.style.display = key === 'mesh' ? 'block' : 'none';
+        waveSettings.style.display = key === 'wave' ? 'block' : 'none';
+        meshColorKey.style.display = key === 'mesh' ? 'block' : 'none';
+        radiusChartContainer.style.display = key === 'particles' ? 'block' : 'none';
+        titlePanel.classList.remove('expanded');
+        
+        if (key === 'particles') {
+            updateParticleColorKey();
+            particleColorKey.style.display = 'block';
+        } else {
+            particleColorKey.style.display = 'none';
+        }
+
+        document.querySelectorAll('[data-view]').forEach(el => {
+            el.classList.toggle('active', el.dataset.view === key);
+        });
+        const currentViewLabel = document.getElementById('current-view-label');
+        const activeItem = document.querySelector(`.dropdown-item[data-view="${key}"]`);
+        if (activeItem) {
+            currentViewLabel.textContent = activeItem.textContent;
+        }
+        
+        updateColorKeyPositions();
+    }
+
+    function init() {
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 60;
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7.5);
+        scene.add(dirLight);
+        scene.add(activeSceneObjects);
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        setupRadiusChart();
+        setupGlobalUI();
+        switchScene('particles');
+        updateColorKeyPositions();
+        window.addEventListener('resize', onWindowResize, false);
+        animate();
+    }
+    
+    function setupGlobalUI() {
+        const viewsDropdownButton = document.getElementById('views-dropdown-button');
+        const viewsDropdownMenu = document.getElementById('views-dropdown-menu');
+        const viewsContainer = document.getElementById('views-container');
+        const titleHeader = document.getElementById('title-header');
+
+        titleHeader.addEventListener('click', () => {
+            titlePanel.classList.toggle('expanded');
+        });
+
+        viewsContainer.addEventListener('click', (e) => {
+            const target = e.target.closest('[data-view]');
+            if (!target) return;
+
+            e.preventDefault();
+            const viewKey = target.dataset.view;
+            switchScene(viewKey);
+
+            if (viewsDropdownButton.classList.contains('open')) {
+                 viewsDropdownMenu.classList.add('hidden');
+                 viewsDropdownButton.classList.remove('open');
+            }
+        });
+
+        viewsDropdownButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = !viewsDropdownMenu.classList.contains('hidden');
+            viewsDropdownMenu.classList.toggle('hidden');
+            viewsDropdownButton.classList.toggle('open', !isOpen);
+        });
+        
+        settingsButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsPanel.classList.toggle('open');
+        });
+
+        // Particle Settings
+        const energyToggle = document.getElementById('energy-toggle');
+        const colorSchemeSelect = document.getElementById('color-scheme-select');
+        const particleSizeSlider = document.getElementById('particle-size-slider');
+        const particleSizeValue = document.getElementById('particle-size-value');
+        const particleCountSlider = document.getElementById('particle-count-slider');
+        const particleCountValue = document.getElementById('particle-count-value');
+        const particleScaleSlider = document.getElementById('particle-scale-slider');
+        const particleScaleValue = document.getElementById('particle-scale-value');
+
+        energyToggle.addEventListener('change', (e) => {
+            displaySettings.energyColors = e.target.checked;
+            colorSchemeSelect.disabled = e.target.checked;
+            updateParticleColorKey();
+            switchScene('particles');
+        });
+        colorSchemeSelect.addEventListener('change', (e) => { 
+            displaySettings.colorScheme = e.target.value; 
+            updateParticleColorKey();
+            switchScene('particles'); 
+        });
+        particleSizeSlider.addEventListener('input', (e) => {
+            displaySettings.particleSize = parseFloat(e.target.value);
+            particleSizeValue.textContent = displaySettings.particleSize.toFixed(2);
+        });
+        particleSizeSlider.addEventListener('change', () => switchScene('particles'));
+        particleCountSlider.addEventListener('input', (e) => {
+            displaySettings.particleCount = parseInt(e.target.value);
+            particleCountValue.textContent = `${displaySettings.particleCount / 1000}k`;
+        });
+        particleCountSlider.addEventListener('change', () => switchScene('particles'));
+        particleScaleSlider.addEventListener('input', (e) => {
+            displaySettings.particleScale = parseFloat(e.target.value);
+            particleScaleValue.textContent = displaySettings.particleScale.toFixed(1);
+        });
+        particleScaleSlider.addEventListener('change', () => switchScene('particles'));
+
+        // Mesh Settings
+        const meshScaleSlider = document.getElementById('mesh-scale-slider');
+        const meshScaleValue = document.getElementById('mesh-scale-value');
+        const meshResolutionSlider = document.getElementById('mesh-resolution-slider');
+        const meshResolutionValue = document.getElementById('mesh-resolution-value');
+        meshScaleSlider.addEventListener('input', (e) => {
+            displaySettings.meshShapeScale = parseFloat(e.target.value);
+            meshScaleValue.textContent = displaySettings.meshShapeScale.toFixed(0);
+            if(window.updateOrbitalMesh) window.updateOrbitalMesh();
+        });
+        meshResolutionSlider.addEventListener('input', (e) => {
+            displaySettings.meshResolution = parseInt(e.target.value);
+            meshResolutionValue.textContent = displaySettings.meshResolution;
+        });
+        meshResolutionSlider.addEventListener('change', () => {
+            if (window.recreateMesh) window.recreateMesh();
+        });
+
+        // Wave Settings
+        const waveSpeedSlider = document.getElementById('wave-speed-slider');
+        const waveSpeedValue = document.getElementById('wave-speed-value');
+        const waveIntensitySlider = document.getElementById('wave-intensity-slider');
+        const waveIntensityValue = document.getElementById('wave-intensity-value');
+        waveSpeedSlider.addEventListener('input', (e) => {
+            displaySettings.waveSpeed = parseFloat(e.target.value);
+            waveSpeedValue.textContent = displaySettings.waveSpeed.toFixed(1);
+        });
+        waveIntensitySlider.addEventListener('input', (e) => {
+            displaySettings.waveIntensity = parseFloat(e.target.value);
+            waveIntensityValue.textContent = displaySettings.waveIntensity.toFixed(0);
+        });
+
+        document.body.addEventListener('click', (e) => {
+             if (settingsPanel.classList.contains('open') && !settingsPanel.contains(e.target) && e.target !== settingsButton) {
+                 settingsPanel.classList.remove('open');
+            }
+             if (viewsDropdownButton.classList.contains('open') && !viewsDropdownButton.contains(e.target)) {
+                 viewsDropdownMenu.classList.add('hidden');
+                 viewsDropdownButton.classList.remove('open');
+             }
+        });
+    }
+
+    function updateParticleColorKey() {
+        const gradientBar = particleColorKey.querySelector('.gradient-bar');
+        const labelStart = particleColorKey.querySelector('.label-start');
+        const labelEnd = particleColorKey.querySelector('.label-end');
+        const labelTitle = particleColorKey.querySelector('.label-title');
+
+        if (displaySettings.energyColors) {
+            gradientBar.style.background = 'linear-gradient(to right, hsl(240, 90%, 60%), hsl(0, 90%, 60%))';
+            labelStart.textContent = 'Inner';
+            labelEnd.textContent = 'Outer';
+            labelTitle.textContent = 'Energy (Distance)';
+            particleColorKey.style.display = 'block';
+        } else {
+            switch(displaySettings.colorScheme) {
+                case 'phase':
+                    gradientBar.style.background = 'linear-gradient(to right, hsl(0, 70%, 60%), hsl(60, 70%, 60%), hsl(120, 70%, 60%), hsl(180, 70%, 60%), hsl(240, 70%, 60%), hsl(300, 70%, 60%), hsl(360, 70%, 60%))';
+                    labelStart.textContent = '0';
+                    labelEnd.textContent = '2π';
+                    labelTitle.textContent = 'Phase (φ)';
+                    particleColorKey.style.display = 'block';
+                    break;
+                case 'plasma':
+                     gradientBar.style.background = 'linear-gradient(to right, hsl(270, 80%, 60%), hsl(330, 80%, 60%), hsl(30, 80%, 60%))';
+                     labelStart.textContent = 'Pole';
+                     labelEnd.textContent = 'Equator';
+                     labelTitle.textContent = 'Angle (θ)';
+                     particleColorKey.style.display = 'block';
+                    break;
+                case 'monochrome':
+                    particleColorKey.style.display = 'none';
+                    break;
+            }
+        }
+    }
+    
+    function setupRadiusChart() {
+        const ctx = document.getElementById('radius-chart').getContext('2d');
+        radiusChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Particle Count',
+                    data: [],
+                    backgroundColor: 'rgba(129, 140, 248, 0.5)',
+                    borderColor: 'rgba(129, 140, 248, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    title: { display: true, text: 'Radial Distribution', color: '#9ca3af' }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: { color: '#9ca3af' },
+                        grid: { color: 'rgba(107, 114, 128, 0.3)'}
+                    },
+                    x: {
+                        ticks: { color: '#9ca3af', maxRotation: 0, minRotation: 0, autoSkip: true, maxTicksLimit: 5 },
+                        grid: { color: 'rgba(107, 114, 128, 0.1)'}
+                    }
+                }
+            }
+        });
+    }
+
+    function updateRadiusChart(radii, maxRadius) {
+        if (!radiusChart) return;
+        const bins = 20;
+        const counts = new Array(bins).fill(0);
+        
+        for(let i=0; i < radii.length; i++) {
+            const r = radii[i];
+            const binIndex = Math.min(bins - 1, Math.max(0, Math.floor((r / maxRadius) * bins)));
+            counts[binIndex]++;
+        }
+        
+        const labels = Array.from({length: bins}, (_, i) => ((i / bins) * maxRadius).toFixed(1));
+        
+        radiusChart.data.labels = labels;
+        radiusChart.data.datasets[0].data = counts;
+        radiusChart.update();
+    }
+
+    function setupWaveControls() {
+        controlsPanel.innerHTML = `<button id="coherent-toggle" class="toggle-button">Coherent Flow</button>`;
+        const coherentToggle = document.getElementById('coherent-toggle');
+        coherentToggle.classList.toggle('active', displaySettings.waveCoherent);
+        coherentToggle.addEventListener('click', () => {
+            displaySettings.waveCoherent = !displaySettings.waveCoherent;
+            coherentToggle.classList.toggle('active', displaySettings.waveCoherent);
+        });
+    }
+
+    function setupQuantumControls(onStateChange) {
+        controlsPanel.innerHTML = `
+            <div class="control-group"><label for="n-slider">Principal (n)</label><div class="flex items-center gap-3"><span class="value-display" id="n-value">1</span><input id="n-slider" type="range" min="1" max="10" step="1" value="1"></div></div>
+            <div class="control-group"><label for="l-slider">Azimuthal (l)</label><div class="flex items-center gap-3"><span class="value-display" id="l-value">0</span><input id="l-slider" type="range" min="0" max="0" step="1" value="0"></div></div>
+            <div class="control-group"><label for="m-slider">Magnetic (m)</label><div class="flex items-center gap-3"><span class="value-display" id="m-value">0</span><input id="m-slider" type="range" min="0" max="0" step="1" value="0"></div></div>
+        `;
+        const nSlider = document.getElementById('n-slider');
+        const lSlider = document.getElementById('l-slider');
+        const mSlider = document.getElementById('m-slider');
+        const nValue = document.getElementById('n-value');
+        const lValue = document.getElementById('l-value');
+        const mValue = document.getElementById('m-value');
+        nValue.textContent = quantumState.n; nSlider.value = quantumState.n;
+        lValue.textContent = quantumState.l; lSlider.value = quantumState.l;
+        mValue.textContent = quantumState.m; mSlider.value = quantumState.m;
+        function updateSliders() {
+            lSlider.max = quantumState.n - 1;
+            if (quantumState.l >= quantumState.n) quantumState.l = quantumState.n - 1;
+            lSlider.value = quantumState.l; lValue.textContent = quantumState.l;
+            mSlider.min = -quantumState.l; mSlider.max = quantumState.l;
+            if (Math.abs(quantumState.m) > quantumState.l) quantumState.m = 0;
+            mSlider.value = quantumState.m; mValue.textContent = quantumState.m;
+            stateDisplay.textContent = `n=${quantumState.n}, l=${quantumState.l}, m=${quantumState.m}`;
+        }
+        nSlider.addEventListener('input', (e) => { quantumState.n = parseInt(e.target.value); nValue.textContent = quantumState.n; updateSliders(); });
+        lSlider.addEventListener('input', (e) => { quantumState.l = parseInt(e.target.value); lValue.textContent = quantumState.l; updateSliders(); });
+        mSlider.addEventListener('input', (e) => { quantumState.m = parseInt(e.target.value); mValue.textContent = quantumState.m; });
+        
+        nSlider.addEventListener('change', onStateChange);
+        lSlider.addEventListener('change', onStateChange);
+        mSlider.addEventListener('change', onStateChange);
+
+        updateSliders();
+    }
+    
+    function updateColorKeyPositions() {
+        setTimeout(() => {
+            const controlsPanel = document.getElementById('controls-panel');
+            if (!controlsPanel) return;
+
+            const controlsHeight = controlsPanel.offsetHeight;
+            const isMobile = window.innerWidth <= 768;
+            const bottomMargin = isMobile ? 10 : 20;
+            const gap = 10;
+            const newBottom = bottomMargin + controlsHeight + gap;
+
+            const meshKey = document.getElementById('mesh-color-key');
+            const particleKey = document.getElementById('particle-color-key');
+            if (meshKey) meshKey.style.bottom = `${newBottom}px`;
+            if (particleKey) particleKey.style.bottom = `${newBottom}px`;
+        }, 0);
+    }
+
+
+    const clock = new THREE.Clock();
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        updateColorKeyPositions();
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const delta = clock.getDelta();
+        controls.update();
+        if (currentUpdate) currentUpdate(delta);
+        renderer.render(scene, camera);
+    }
+
+    init();
+</script>
+</body>
+</html>
+

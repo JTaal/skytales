@@ -1,0 +1,810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Pareto Front Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel, #moda-panel, #analysis-panel {
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+        }
+        #info-panel { top: 80px; max-height: 58px; z-index: 14; }
+        #moda-panel { top: 150px; max-height: 48px; z-index: 13; }
+        #analysis-panel { top: 210px; max-height: 48px; z-index: 12; }
+
+        #info-panel.expanded { max-height: 50vh; cursor: default; overflow-y: auto; z-index: 11;}
+        #moda-panel.expanded, #analysis-panel.expanded { max-height: 50vh; cursor: default; overflow-y: auto; }
+        
+        .panel-header { display: flex; justify-content: space-between; align-items: center; }
+        .toggle-icon { transition: transform 0.3s ease-in-out; }
+        .ui-panel.expanded .toggle-icon { transform: rotate(180deg); }
+        
+        #controls-panel {
+            bottom: 0; left: 0; right: 0; width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1.5rem;
+        }
+        header {
+            position: absolute; top: 0; left: 0; right: 0; z-index: 20;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu { display: flex; gap: 10px; align-items: center; }
+        .menu-button, .toggle-button, .action-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 8px 16px; border-radius: 8px;
+            cursor: pointer; transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        .menu-button:hover, .toggle-button:hover, .action-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #4b5563; border-radius: 2px; outline: none;
+            opacity: 0.7; transition: opacity .2s;
+        }
+        input[type="range"]:disabled { opacity: 0.3; }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; background: #818cf8;
+            cursor: pointer; border-radius: 50%;
+        }
+        input[type="range"]:disabled::-webkit-slider-thumb {
+            background: #6b7280; cursor: not-allowed;
+        }
+        .control-group {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+        #settings-button, #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%;
+            cursor: pointer; transition: all 0.3s;
+        }
+        #settings-button { top: 80px; right: 20px; z-index: 11; }
+        #fullscreen-button { bottom: 120px; right: 20px; z-index: 11; }
+        #settings-button:hover { background-color: #4338ca; transform: translateY(-2px) rotate(45deg); }
+        #fullscreen-button:hover { background-color: #4338ca; transform: translateY(-2px) scale(1.1); }
+        #settings-panel {
+            top: 80px; right: 0; width: 300px;
+            max-width: 90vw; border-radius: 12px 0 0 12px;
+            transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            max-height: calc(100vh - 100px); overflow-y: auto; z-index: 12;
+        }
+        #settings-panel.open { transform: translateX(0); }
+        #close-settings { font-size: 2.5rem; line-height: 1; background: none; border: none; cursor: pointer; }
+        
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            #menu { display: none !important; }
+            #info-panel, #moda-panel, #analysis-panel { top: 70px; left: 10px; right: 10px; max-width: none; }
+            #moda-panel { top: 140px; }
+            #analysis-panel { top: 210px; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #controls-panel { flex-direction: column; gap: 1rem; padding: 1rem; }
+            .control-group { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold">Interactive Data Explorer</h1>
+        <div id="menu"></div>
+    </header>
+    <div id="info-panel" class="ui-panel">
+        <div class="panel-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400"></h2>
+            <div class="toggle-icon text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="info-content" class="pt-4"><p id="info-description"></p></div>
+    </div>
+    <div id="moda-panel" class="ui-panel">
+        <div class="panel-header">
+            <h2 class="text-lg font-bold text-teal-400">MODA Metrics</h2>
+            <div class="toggle-icon text-teal-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="moda-content" class="pt-4 text-sm space-y-2"></div>
+    </div>
+    <div id="analysis-panel" class="ui-panel">
+        <div class="panel-header">
+            <h2 class="text-lg font-bold text-amber-400">Data & Analysis</h2>
+             <div class="toggle-icon text-amber-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="analysis-content" class="pt-4 text-sm space-y-4">
+            <!-- Data Source Section -->
+            <div>
+                <h3 class="font-semibold mb-2">Data Source</h3>
+                <div class="flex gap-2">
+                    <label for="csv-upload" class="action-button flex-1 text-center cursor-pointer">Load CSV File</label>
+                    <input type="file" id="csv-upload" class="hidden" accept=".csv">
+                    <button id="regenerate-button" class="action-button flex-1">Generate Random</button>
+                </div>
+            </div>
+             <!-- Filtering Section -->
+            <div>
+                 <h3 class="font-semibold mb-2">Filter Solutions</h3>
+                 <div class="space-y-2">
+                     <div class="control-group text-left w-full"><label class="w-full">Max Cost: <span id="filter-cost-value" class="float-right">10.0</span></label><input id="filter-cost" type="range" min="0" max="10" step="0.1" value="10"></div>
+                     <div class="control-group text-left w-full"><label class="w-full">Max Time: <span id="filter-time-value" class="float-right">10.0</span></label><input id="filter-time" type="range" min="0" max="10" step="0.1" value="10"></div>
+                     <div class="control-group text-left w-full"><label class="w-full">Max 1/Quality: <span id="filter-quality-value" class="float-right">10.0</span></label><input id="filter-quality" type="range" min="0" max="10" step="0.1" value="10"></div>
+                 </div>
+            </div>
+            <!-- Clustering Section -->
+            <div>
+                 <h3 class="font-semibold mb-2">Clustering</h3>
+                 <div class="flex items-center gap-2">
+                     <label for="k-value">Clusters (K):</label>
+                     <input type="number" id="k-value" value="3" min="2" max="10" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 w-16">
+                     <button id="run-cluster-button" class="action-button flex-1">Run K-Means</button>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-4">
+             <div class="control-group text-left w-full">
+                <label id="hypervolume-label" class="text-sm font-medium">Show Hypervolume</label>
+                <button id="hypervolume-toggle" class="toggle-button">Off</button>
+            </div>
+             <hr class="border-gray-600 my-2">
+             <div class="control-group text-left w-full">
+                <label id="autorotate-label" class="text-sm font-medium">Auto-Rotate</label>
+                <button id="autorotate-toggle" class="toggle-button active">On</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Follow Target</label>
+                <button id="follow-toggle" class="toggle-button">Off</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Animation Speed: <span id="speed-value">1.0x</span></label>
+                <input id="speed-slider" type="range" min="0" max="5" step="0.1" value="1" class="w-full">
+            </div>
+             <hr class="border-gray-600 my-2">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Graphics Quality: <span id="graphics-quality-value">High</span></label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { Line2 } from 'three/addons/lines/Line2.js';
+    import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+    import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+    import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+
+
+    // =================================================================================================
+    // ||                                     SCENE DEFINITIONS                                     ||
+    // =================================================================================================
+    const scenes = {
+        pareto_front: {
+            title: 'Pareto Front Explorer',
+            description: 'This visualization shows a Pareto front for a multi-objective optimization problem. Each point represents a non-dominated solution. Use the sliders to assign weights to each objective and find the optimal solution for your preferences.',
+            init: initParetoFront,
+        },
+    };
+
+    /**
+     * Scene: An interactive 3D Pareto Front chart.
+     */
+    function initParetoFront() {
+        // --- 1. STATE MANAGEMENT ---
+        let masterData = [], visibleData = [];
+        let currentViewMode = '3D', autorotate = true;
+        let points3D, points2D, hypervolumeMesh;
+        let optimalHighlight, selectionHighlight;
+        let scene2D, camera2D, static3DObjects, static2DObjects;
+        let raycaster, pointer;
+        
+        const PLOT_SCALE = 10;
+        const FONT_SIZE = 0.5;
+        const CLUSTER_COLORS = [0x1f77b4, 0xff7f0e, 0x2ca02c, 0xd62728, 0x9467bd, 0x8c564b, 0xe377c2, 0x7f7f7f, 0xbcbd22, 0x17becf];
+
+        // --- 2. INITIALIZATION ---
+        function initialize() {
+            scene2D = new THREE.Scene();
+            scene2D.background = new THREE.Color(0x030712);
+            camera2D = new THREE.OrthographicCamera(); // Will be configured in onWindowResize
+            camera2D.position.set(PLOT_SCALE/2, PLOT_SCALE/2, 10);
+
+            static3DObjects = new THREE.Group();
+            static2DObjects = new THREE.Group();
+            scene.add(static3DObjects);
+            scene2D.add(static2DObjects);
+            
+            createUI();
+            setupInteractivity();
+            createStaticObjects();
+            setData(generateRandomData());
+
+            camera.position.set(PLOT_SCALE, PLOT_SCALE, PLOT_SCALE * 1.5);
+            controls.target.set(PLOT_SCALE/2, PLOT_SCALE/2, PLOT_SCALE/2);
+        }
+
+        // --- 2.5 HELPER FUNCTIONS (for rendering text and lines) ---
+        function createTextSprite(message) {
+            const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+            ctx.font = `Bold 24px Inter`;
+            canvas.width = ctx.measureText(message).width;
+            canvas.height = 34;
+            ctx.font = `Bold 24px Inter`;
+            ctx.fillStyle = `rgba(255, 255, 255, 1.0)`;
+            ctx.fillText(message, 0, 24);
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture }));
+            sprite.scale.set(canvas.width/canvas.height * FONT_SIZE, FONT_SIZE, 1.0);
+            return sprite;
+        }
+    
+        function createAxisLine(dir, color, dashed = true) {
+            const mat = new LineMaterial({ color, linewidth: 2, dashed, dashSize: 0.2, gapSize: 0.1 });
+            mat.resolution.set(window.innerWidth, window.innerHeight);
+            const geo = new LineGeometry().setPositions([0, 0, 0, ...dir]);
+            return new Line2(geo, mat);
+        }
+        
+        // --- 3. DATA HANDLING ---
+        function setData(data) {
+            masterData = data;
+            // Reset filters and clusters
+            masterData.forEach(p => delete p.cluster);
+            ['cost', 'time', 'quality'].forEach(key => {
+                const slider = document.getElementById(`filter-${key}`);
+                const valueEl = document.getElementById(`filter-${key}-value`);
+                const max = Math.ceil(Math.max(...masterData.map(p => p.objectives[key])));
+                slider.max = max;
+                slider.value = max;
+                valueEl.textContent = max.toFixed(1);
+            });
+            applyFiltersAndRedraw();
+        }
+
+        function generateRandomData(count = 250) {
+            const data = [];
+            let minQuality = Infinity, maxQuality = -Infinity;
+            for (let i = 0; i < count; i++) {
+                let u = Math.random() * Math.PI / 2, v = Math.random() * Math.PI / 2;
+                let cost = Math.cos(u) * Math.sin(v) * (1 + Math.random() * 0.1) * PLOT_SCALE;
+                let time = Math.sin(u) * Math.sin(v) * (1 + Math.random() * 0.1) * PLOT_SCALE;
+                let quality = Math.cos(v) * (1 + Math.random() * 0.1) * PLOT_SCALE;
+                minQuality = Math.min(minQuality, quality);
+                maxQuality = Math.max(maxQuality, quality);
+                data.push({
+                    id: i, objectives: { cost, time, quality },
+                    params: { sustainability: `${(cost / PLOT_SCALE * 90 + 5).toFixed(1)}%`, risk: (time / PLOT_SCALE * 5 + 1).toFixed(2), satisfaction: (100 - quality * 8).toFixed(1) }
+                });
+            }
+            data.forEach(p => p.normalizedQuality = (p.objectives.quality - minQuality) / (maxQuality - minQuality));
+            return data;
+        }
+
+        function parseCSV(text) {
+            const lines = text.replace(/\r/g, '').split('\n');
+            const header = lines[0].split(',').map(h => h.trim());
+            const required = ['cost', 'time', 'quality'];
+            if (!required.every(h => header.includes(h))) {
+                alert(`CSV must include header with columns: ${required.join(', ')}`);
+                return null;
+            }
+            const data = [];
+             let minQuality = Infinity, maxQuality = -Infinity;
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i]) continue;
+                const values = lines[i].split(',');
+                const point = { id: i - 1, objectives: {}, params: {} };
+                header.forEach((h, j) => {
+                    const val = parseFloat(values[j]);
+                    if (required.includes(h)) point.objectives[h] = val;
+                    else point.params[h] = values[j];
+                });
+                minQuality = Math.min(minQuality, point.objectives.quality);
+                maxQuality = Math.max(maxQuality, point.objectives.quality);
+                data.push(point);
+            }
+            data.forEach(p => p.normalizedQuality = (p.objectives.quality - minQuality) / (maxQuality - minQuality));
+            return data;
+        }
+        
+        function applyFiltersAndRedraw() {
+            const maxCost = parseFloat(document.getElementById('filter-cost').value);
+            const maxTime = parseFloat(document.getElementById('filter-time').value);
+            const maxQuality = parseFloat(document.getElementById('filter-quality').value);
+
+            visibleData = masterData.filter(p => 
+                p.objectives.cost <= maxCost &&
+                p.objectives.time <= maxTime &&
+                p.objectives.quality <= maxQuality
+            );
+            
+            createDynamicObjects();
+            calculateAndDisplayModaMetrics();
+            onSliderChange();
+        }
+
+        // --- 4. VISUAL OBJECT CREATION ---
+        function createDynamicObjects() {
+            // Clear previous
+            if (points3D) { activeSceneObjects.remove(points3D); points3D.geometry.dispose(); }
+            if (points2D) { scene2D.remove(points2D); points2D.geometry.dispose(); }
+            if (hypervolumeMesh) { activeSceneObjects.remove(hypervolumeMesh); hypervolumeMesh.geometry.dispose(); }
+
+            if (visibleData.length === 0) return;
+
+            const pointVectors3D = [], vertices2D = [], colors3D = [], colors2D = [];
+            visibleData.forEach(p => {
+                const { cost, time, quality } = p.objectives;
+                pointVectors3D.push(new THREE.Vector3(cost, time, quality));
+                vertices2D.push(cost, time, 0);
+                
+                let color;
+                if (p.cluster !== undefined) {
+                    color = new THREE.Color(CLUSTER_COLORS[p.cluster % CLUSTER_COLORS.length]);
+                } else {
+                    color = new THREE.Color(0xffffff).lerp(new THREE.Color(0x4f46e5), 1 - p.normalizedQuality);
+                }
+                color.toArray(colors3D, colors3D.length);
+                color.toArray(colors2D, colors2D.length);
+            });
+            
+            // 3D Points
+            const geom3D = new THREE.BufferGeometry().setFromPoints(pointVectors3D);
+            geom3D.setAttribute('color', new THREE.Float32BufferAttribute(colors3D, 3));
+            points3D = new THREE.Points(geom3D, new THREE.PointsMaterial({ size: 0.15, vertexColors: true }));
+            activeSceneObjects.add(points3D);
+            
+            // 2D Points
+            const geom2D = new THREE.BufferGeometry();
+            geom2D.setAttribute('position', new THREE.Float32BufferAttribute(vertices2D, 3));
+            geom2D.setAttribute('color', new THREE.Float32BufferAttribute(colors2D, 3));
+            points2D = new THREE.Points(geom2D, new THREE.PointsMaterial({ size: 0.2, vertexColors: true }));
+            scene2D.add(points2D);
+
+            // Hypervolume
+            const convexGeom = new ConvexGeometry(pointVectors3D);
+            hypervolumeMesh = new THREE.Mesh(convexGeom, new THREE.MeshStandardMaterial({
+                color: 0x4f46e5, opacity: 0.25, transparent: true, side: THREE.DoubleSide
+            }));
+            const hyperToggle = document.getElementById('hypervolume-toggle');
+            hypervolumeMesh.visible = hyperToggle ? hyperToggle.classList.contains('active') : false;
+            activeSceneObjects.add(hypervolumeMesh);
+        }
+
+        function createStaticObjects() {
+            const grid3D = new THREE.GridHelper(PLOT_SCALE * 2.5, 25, 0x444444, 0x444444);
+            grid3D.position.y = -0.01;
+            const axes3D = [{ dir: [PLOT_SCALE, 0, 0], l: 'Cost' }, { dir: [0, PLOT_SCALE, 0], l: 'Time' }, { dir: [0, 0, PLOT_SCALE], l: '1/Qual' }];
+            axes3D.forEach(ax => {
+                static3DObjects.add(createAxisLine(ax.dir, 0x888888));
+                static3DObjects.add(createTextSprite(ax.l).translateOnAxis(new THREE.Vector3(...ax.dir).normalize(), PLOT_SCALE * 1.1));
+            });
+            static3DObjects.add(grid3D);
+
+            const grid2D = new THREE.GridHelper(PLOT_SCALE * 2.5, 25, 0x444444, 0x444444);
+            grid2D.rotation.x = Math.PI / 2;
+            const axes2D = [{ dir: [PLOT_SCALE, 0, 0], l: 'Cost' }, { dir: [0, PLOT_SCALE, 0], l: 'Time' }];
+             axes2D.forEach(ax => {
+                static2DObjects.add(createAxisLine(ax.dir, 0x888888, false));
+                static2DObjects.add(createTextSprite(ax.l).translateOnAxis(new THREE.Vector3(...ax.dir).normalize(), PLOT_SCALE * 1.1));
+            });
+            static2DObjects.add(grid2D);
+
+            const highlightGeo = new THREE.SphereGeometry(0.2, 16, 16);
+            optimalHighlight = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.8 }));
+            selectionHighlight = new THREE.Mesh(highlightGeo, new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+            optimalHighlight.visible = false; selectionHighlight.visible = false;
+            activeSceneObjects.add(optimalHighlight);
+            scene2D.add(selectionHighlight);
+        }
+
+        // --- 5. UI & INTERACTIVITY ---
+        function createUI() {
+            document.getElementById('menu').innerHTML = `<button id="view-toggle-button" class="menu-button">2D View</button>`;
+            document.getElementById('controls-panel').innerHTML = `
+                <div class="control-group w-full md:w-1/4"><label for="weight-cost" class="text-sm font-medium w-full text-left">Weight Cost: <span id="weight-cost-value">0.5</span></label><input id="weight-cost" type="range" min="0" max="1" step="0.01" value="0.5" class="w-full"></div>
+                <div class="control-group w-full md:w-1/4"><label for="weight-time" class="text-sm font-medium w-full text-left">Weight Time: <span id="weight-time-value">0.5</span></label><input id="weight-time" type="range" min="0" max="1" step="0.01" value="0.5" class="w-full"></div>
+                <div class="control-group w-full md:w-1/4"><label id="weight-quality-label" for="weight-quality" class="text-sm font-medium w-full text-left">Weight Quality: <span id="weight-quality-value">0.5</span></label><input id="weight-quality" type="range" min="0" max="1" step="0.01" value="0.5" class="w-full"></div>
+                <div id="point-details" class="w-full md:w-auto text-left md:text-center text-sm bg-gray-900 p-3 rounded-lg border border-gray-700">Click a point to see details.</div>`;
+        }
+        
+        function setupInteractivity() {
+            raycaster = new THREE.Raycaster();
+            pointer = new THREE.Vector2();
+            raycaster.params.Points.threshold = 0.2;
+
+            document.getElementById('view-toggle-button').addEventListener('click', switchViewMode);
+            renderer.domElement.addEventListener('click', onCanvasClick);
+            
+            ['cost', 'time', 'quality'].forEach(key => {
+                document.getElementById(`weight-${key}`).addEventListener('input', onSliderChange);
+                const filterSlider = document.getElementById(`filter-${key}`);
+                const filterValue = document.getElementById(`filter-${key}-value`);
+                filterSlider.addEventListener('input', () => filterValue.textContent = parseFloat(filterSlider.value).toFixed(1));
+                filterSlider.addEventListener('change', applyFiltersAndRedraw); // Use 'change' for performance
+            });
+            
+            document.getElementById('autorotate-toggle').addEventListener('click', e => {
+                if(currentViewMode !== '3D') return;
+                autorotate = !autorotate;
+                e.target.classList.toggle('active', autorotate);
+            });
+
+             document.getElementById('hypervolume-toggle').addEventListener('click', e => {
+                if(currentViewMode !== '3D' || !hypervolumeMesh) return;
+                hypervolumeMesh.visible = !hypervolumeMesh.visible;
+                e.target.classList.toggle('active', hypervolumeMesh.visible);
+            });
+            
+            document.getElementById('regenerate-button').addEventListener('click', () => setData(generateRandomData()));
+            document.getElementById('csv-upload').addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const data = parseCSV(event.target.result);
+                    if (data) setData(data);
+                };
+                reader.readAsText(file);
+            });
+
+            document.getElementById('run-cluster-button').addEventListener('click', runKMeans);
+        }
+
+        function switchViewMode() {
+            currentViewMode = currentViewMode === '3D' ? '2D' : '3D';
+            const is3D = currentViewMode === '3D';
+            document.getElementById('view-toggle-button').textContent = is3D ? '2D View' : '3D View';
+            const qualitySlider = document.getElementById('weight-quality'), qualityLabel = document.getElementById('weight-quality-label');
+            const hyperToggle = document.getElementById('hypervolume-toggle'), hyperLabel = document.getElementById('hypervolume-label');
+            const rotateToggle = document.getElementById('autorotate-toggle'), rotateLabel = document.getElementById('autorotate-label');
+            [qualitySlider, hyperToggle, rotateToggle].forEach(el => el.disabled = !is3D);
+            [qualityLabel, hyperLabel, rotateLabel].forEach(el => el.classList.toggle('text-gray-500', !is3D));
+            if(!is3D) {
+              rotateToggle.classList.remove('active');
+              hyperToggle.classList.remove('active');
+            } else {
+              if (autorotate) rotateToggle.classList.add('active');
+              if (hypervolumeMesh && hypervolumeMesh.visible) hyperToggle.classList.add('active');
+            }
+            onSliderChange();
+        }
+
+        // --- 6. ANALYSIS & CALCULATIONS ---
+        function runKMeans() {
+            const k = parseInt(document.getElementById('k-value').value);
+            if (isNaN(k) || k < 2 || visibleData.length < k) {
+                alert("Invalid K or not enough data points for clustering.");
+                return;
+            }
+            const points = visibleData.map(p => p.objectives);
+            let centroids = points.slice(0, k).map(p => ({...p})); // Initial centroids
+            let assignments = [];
+            for (let iter = 0; iter < 20; iter++) { // Max 20 iterations
+                // Assignment step
+                assignments = points.map(point => {
+                    let minDist = Infinity, bestCentroid = 0;
+                    centroids.forEach((centroid, i) => {
+                        const dist = Math.hypot(point.cost - centroid.cost, point.time - centroid.time, point.quality - centroid.quality);
+                        if (dist < minDist) { minDist = dist; bestCentroid = i; }
+                    });
+                    return bestCentroid;
+                });
+                // Update step
+                const newCentroids = [];
+                for (let i = 0; i < k; i++) {
+                    const clusterPoints = points.filter((_, j) => assignments[j] === i);
+                    if (clusterPoints.length > 0) {
+                        newCentroids[i] = {
+                            cost: clusterPoints.reduce((s, p) => s + p.cost, 0) / clusterPoints.length,
+                            time: clusterPoints.reduce((s, p) => s + p.time, 0) / clusterPoints.length,
+                            quality: clusterPoints.reduce((s, p) => s + p.quality, 0) / clusterPoints.length,
+                        };
+                    } else { newCentroids[i] = centroids[i]; } // Keep old if empty
+                }
+                centroids = newCentroids;
+            }
+            visibleData.forEach((p, i) => p.cluster = assignments[i]);
+            createDynamicObjects();
+        }
+
+        function calculateAndDisplayModaMetrics() {
+            if (!visibleData || visibleData.length === 0) {
+                document.getElementById('moda-content').innerHTML = `<div>No visible data points.</div>`;
+                return;
+             }
+            const pointsVec3 = visibleData.map(p => new THREE.Vector3(p.objectives.cost, p.objectives.time, p.objectives.quality));
+            const referencePoint = new THREE.Vector3(PLOT_SCALE, PLOT_SCALE, PLOT_SCALE);
+            const totalVolume = referencePoint.x * referencePoint.y * referencePoint.z;
+            
+            // Hypervolume (Approximation via Convex Hull)
+            const convexGeom = new ConvexGeometry(pointsVec3);
+            const boundingBox = new THREE.Box3().setFromObject(new THREE.Mesh(convexGeom));
+            const hypervolume = (boundingBox.max.x * boundingBox.max.y * boundingBox.max.z); // Simple approximation
+            const hypervolumePercent = (hypervolume / totalVolume) * 100;
+            
+            // Spacing
+            let spacing = 0;
+            if (pointsVec3.length > 1) {
+                let minDists = pointsVec3.map((p1, i) => {
+                    let min = Infinity;
+                    pointsVec3.forEach((p2, j) => { if (i !== j) min = Math.min(min, p1.distanceTo(p2)); });
+                    return min;
+                });
+                const avgDist = minDists.reduce((a, b) => a + b, 0) / minDists.length;
+                spacing = Math.sqrt(minDists.reduce((s, d) => s + Math.pow(d - avgDist, 2), 0) / (minDists.length - 1));
+            }
+
+            // Spread
+            const minVals = new THREE.Vector3(Infinity, Infinity, Infinity);
+            const maxVals = new THREE.Vector3(-Infinity, -Infinity, -Infinity);
+            pointsVec3.forEach(p => { minVals.min(p); maxVals.max(p); });
+            const spread = maxVals.distanceTo(minVals);
+
+            document.getElementById('moda-content').innerHTML = `
+                <div><strong># Solutions:</strong> <span class="text-white float-right">${visibleData.length}</span></div>
+                <div><strong>Hypervolume:</strong> <span class="text-white float-right">${hypervolumePercent.toFixed(2)}%</span></div>
+                <div><strong>Spacing:</strong> <span class="text-white float-right">${spacing.toFixed(3)}</span></div>
+                <div><strong>Spread:</strong> <span class="text-white float-right">${spread.toFixed(2)}</span></div>
+            `;
+        }
+        
+        // --- 7. EVENT HANDLERS & UPDATERS ---
+        function onCanvasClick(event) {
+            pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
+            pointer.y = - (event.clientY / window.innerHeight) * 2 + 1;
+            const is3D = currentViewMode === '3D';
+            const cam = is3D ? camera : camera2D;
+            const pointsObj = is3D ? points3D : points2D;
+            if (!pointsObj) return;
+            raycaster.setFromCamera(pointer, cam);
+            const intersects = raycaster.intersectObject(pointsObj);
+            if (intersects.length > 0) {
+                const pointData = visibleData[intersects[0].index];
+                updateSelection(pointData);
+            }
+        }
+        
+        function onSliderChange() {
+             if (visibleData.length === 0) {
+                optimalHighlight.visible = false;
+                return;
+            }
+            const wCost = parseFloat(document.getElementById('weight-cost').value);
+            const wTime = parseFloat(document.getElementById('weight-time').value);
+            const wQuality = parseFloat(document.getElementById('weight-quality').value);
+            document.getElementById('weight-cost-value').textContent = wCost.toFixed(2);
+            document.getElementById('weight-time-value').textContent = wTime.toFixed(2);
+            document.getElementById('weight-quality-value').textContent = wQuality.toFixed(2);
+            const is3D = currentViewMode === '3D';
+            const totalWeight = is3D ? wCost + wTime + wQuality : wCost + wTime;
+            if (totalWeight === 0) { optimalHighlight.visible = false; return; }
+            let bestPoint = null, minScore = Infinity;
+            visibleData.forEach(p => {
+                let score = p.objectives.cost * (wCost / totalWeight) + p.objectives.time * (wTime / totalWeight);
+                if (is3D) score += p.objectives.quality * (wQuality / totalWeight);
+                if (score < minScore) { minScore = score; bestPoint = p; }
+            });
+            if (bestPoint) updateOptimal(bestPoint);
+        }
+        
+         function updateSelection(pointData) {
+            const { cost, time, quality } = pointData.objectives;
+            selectionHighlight.position.set(cost, time, currentViewMode === '3D' ? quality : 0);
+            selectionHighlight.visible = true;
+            let detailsHTML = `<strong class="text-yellow-400">Selected Point #${pointData.id}</strong><br>Cost: ${cost.toFixed(2)}, Time: ${time.toFixed(2)}, 1/Qual: ${quality.toFixed(2)}`;
+            const params = Object.keys(pointData.params).map(k => `${k}: ${pointData.params[k]}`).join(', ');
+            if (params) detailsHTML += `<br><span class="text-gray-400">${params}</span>`;
+            document.getElementById('point-details').innerHTML = detailsHTML;
+        }
+
+        function updateOptimal(pointData) {
+            const { cost, time, quality } = pointData.objectives;
+            optimalHighlight.position.set(cost, time, currentViewMode === '3D' ? quality : 0);
+            optimalHighlight.visible = true;
+        }
+
+        // --- 8. RENDER LOOP & CLEANUP ---
+        function update(delta) {
+            if (currentViewMode === '3D' && autorotate) {
+                activeSceneObjects.rotation.y += delta * 0.1 * animationSpeed;
+            }
+        }
+        
+        initialize();
+        
+        return { 
+            update, cleanup: () => {},
+            render: (renderer) => {
+                if (currentViewMode === '3D') {
+                    activeSceneObjects.add(selectionHighlight);
+                    renderer.render(scene, camera);
+                } else {
+                    scene2D.add(optimalHighlight);
+                    renderer.render(scene2D, camera2D);
+                }
+            },
+            onResize: (width, height) => {
+                const aspect = width / height;
+                camera2D.left = -PLOT_SCALE * 1.3 * aspect / 2;
+                camera2D.right = PLOT_SCALE * 1.3 * aspect / 2;
+                camera2D.top = PLOT_SCALE * 1.3 / 2;
+                camera2D.bottom = -PLOT_SCALE * 1.3 / 2;
+                camera2D.updateProjectionMatrix();
+            }
+        };
+    }
+
+
+    // =================================================================================================
+    // ||                                      TEMPLATE ENGINE                                      ||
+    // =================================================================================================
+    let scene, camera, renderer, controls, clock;
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {}, currentRender = () => {}, currentOnResize = () => {};
+    let animationSpeed = 1.0, followMode = false, followObject = null;
+    
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x030712);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 8);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(5, 10, 7.5);
+        scene.add(dirLight);
+        scene.add(activeSceneObjects);
+        setupGlobalUI();
+        switchScene(Object.keys(scenes)[0]);
+        window.addEventListener('resize', onWindowResize);
+        onWindowResize(); // Initial call
+        renderer.setAnimationLoop(animate);
+    }
+
+    function switchScene(key) {
+        // This template is now single-scene, but this structure remains for future extension.
+        const sceneData = scenes[key];
+        document.getElementById('info-title').textContent = sceneData.title;
+        document.getElementById('info-description').textContent = sceneData.description;
+        const result = sceneData.init();
+        currentUpdate = result.update;
+        currentRender = result.render;
+        currentOnResize = result.onResize;
+        followObject = result.followTarget;
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        controls.update();
+        currentUpdate(delta);
+        updateCameraFollow();
+        currentRender(renderer);
+    }
+    
+    function setupGlobalUI() {
+        ['info-panel', 'moda-panel', 'analysis-panel'].forEach(id => {
+            document.getElementById(id).addEventListener('click', (e) => {
+                if (!e.target.closest('button, a, input, label')) e.currentTarget.classList.toggle('expanded');
+            });
+        });
+
+        // ... rest of global UI setup (settings, fullscreen, etc.)
+        const settingsPanel = document.getElementById('settings-panel');
+        document.getElementById('settings-button').addEventListener('click', () => {
+            settingsPanel.classList.remove('hidden');
+            requestAnimationFrame(() => settingsPanel.classList.add('open'));
+        });
+        document.getElementById('close-settings').addEventListener('click', () => settingsPanel.classList.remove('open'));
+        settingsPanel.addEventListener('transitionend', () => {
+            if (!settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+        document.getElementById('follow-toggle').addEventListener('click', (e) => {
+            followMode = !followMode;
+            e.target.classList.toggle('active', followMode);
+            if (!followMode) { controls.target.lerp(new THREE.Vector3(), 0.2); }
+        });
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value);
+            document.getElementById('speed-value').textContent = `${animationSpeed.toFixed(1)}x`;
+        });
+        document.getElementById('graphics-slider').addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value);
+            renderer.setPixelRatio(window.devicePixelRatio * quality);
+        });
+        const fsButton = document.getElementById('fullscreen-button');
+        if (!document.fullscreenEnabled) fsButton.style.display = 'none';
+        fsButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+    }
+
+    function onWindowResize() { 
+        const w = window.innerWidth, h = window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        if (currentOnResize) currentOnResize(w, h);
+    }
+    
+     function updateCameraFollow() {
+        if (followMode && followObject && followObject.visible) {
+            const targetPosition = new THREE.Vector3();
+            followObject.getWorldPosition(targetPosition);
+            controls.target.lerp(targetPosition, 0.1);
+        }
+    }
+    
+    init();
+
+</script>
+</body>
+</html>
+

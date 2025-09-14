@@ -1,0 +1,6 @@
+- title: 4D Complex Chirp 
+  author: Jasper Taal 
+  thumbnail: /assets/images/complex-chirp.png 
+  post_url: /2025/08/27/complex-chirp-explained.html 
+  visualization_url: /visualizations/complex-chirp.html # <-- CHECK THIS LINE 
+  description: An interactive visualization that represents a four-dimensional concept in a 3D space.

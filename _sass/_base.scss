@@ -1,0 +1,39 @@
+/* Basic styling: fonts, colors, etc. */
+body {
+    background-color: #111827;
+    color: #e5e7eb;
+    font-family: 'Inter', sans-serif;
+    margin: 0;
+    line-height: 1.6;
+    font-size: 14px; /* <--- Add this line */
+}
+
+
+a {
+    color: #3b82f6;
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+}
+
+h1, h2, h3 { 
+    font-weight: 600; 
+    margin-top: 1.5em; 
+    color: #f9fafb;
+}
+
+p {
+    color: #d1d5db;
+}
+
+code, pre {
+    background-color: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 4px;
+    padding: 0.1em 0.3em;
+    font-family: monospace;
+}
+
+pre {
+    padding: 1em;
+    overflow-x: auto;
+}

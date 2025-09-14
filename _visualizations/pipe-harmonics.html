@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Pipe Harmonics Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrollbars from appearing */
+        }
+        #plot-container svg, #waveform-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        /* Style for disabled controls */
+        .controls-disabled input[type="range"],
+        .controls-disabled .disable-on-play {
+            opacity: 0.5;
+            pointer-events: none;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+
+    <div id="app" class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="text-center p-3 bg-gray-800 border-b border-gray-700 shadow-lg">
+            <h1 class="text-xl md:text-2xl font-bold text-cyan-400">3D Visualization of Pipe Harmonics</h1>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-grow flex flex-col md:flex-row overflow-hidden">
+            
+            <!-- 3D Visualization Canvas -->
+            <div id="canvas-container" class="flex-grow w-full md:w-2/3 h-1/2 md:h-full relative">
+                 <div id="loader" class="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-80">
+                    <div class="text-center">
+                        <div class="w-16 h-16 border-4 border-dashed rounded-full animate-spin border-cyan-400 mx-auto"></div>
+                        <p class="mt-4 text-lg">Loading 3D Scene...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Controls and Fourier Plot -->
+            <div id="controls-container" class="w-full md:w-1/3 h-1/2 md:h-full bg-gray-800 p-4 overflow-y-auto flex flex-col space-y-4">
+                
+                <!-- Controls Section -->
+                <div class="bg-gray-700 p-4 rounded-lg shadow-inner">
+                    <div class="flex justify-between items-center border-b border-gray-600 pb-2 mb-3">
+                        <h2 class="text-lg font-bold text-cyan-400">Controls</h2>
+                         <button id="mute-btn" class="p-2 rounded-full bg-gray-600 hover:bg-cyan-600 transition-colors focus:outline-none" title="Mute/Unmute Sound"></button>
+                    </div>
+                    
+                    <div class="flex flex-col items-center mb-4">
+                         <label class="block font-medium mb-1 text-sm text-gray-300 w-full">Live Audio Waveform</label>
+                         <div class="w-full h-16 bg-gray-800 rounded-md p-1 mb-2">
+                            <canvas id="waveform-canvas"></canvas>
+                         </div>
+                         <label class="block font-medium mb-1 text-sm text-gray-300 w-full">Current Frequency</label>
+                         <div id="frequency-display" class="w-full h-16 bg-gray-800 rounded-md p-1 flex items-center justify-center text-2xl font-mono text-cyan-400">0.00 Hz</div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4 disable-on-play">
+                        <div>
+                            <span class="font-medium">Pipe Type:</span>
+                            <div class="flex items-center bg-gray-800 rounded-full p-1 mt-1">
+                                <button id="btn-open-open" class="px-3 py-1 text-sm rounded-full w-full bg-cyan-500 text-white">Open</button>
+                                <button id="btn-open-closed" class="px-3 py-1 text-sm rounded-full w-full text-gray-300">Closed</button>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="font-medium">Display Mode:</span>
+                            <div class="flex items-center bg-gray-800 rounded-full p-1 mt-1">
+                                <button id="btn-mode-wave" class="px-3 py-1 text-sm rounded-full w-full bg-cyan-500 text-white">Wave</button>
+                                <button id="btn-mode-particles" class="px-3 py-1 text-sm rounded-full w-full text-gray-300">Particles</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-4 disable-on-play">
+                        <label for="harmonic-slider" class="block font-medium mb-2">Harmonic (<span id="harmonic-label">n=1</span>)</label>
+                        <div class="flex items-center space-x-3">
+                            <button id="btn-decrement" class="px-3 py-1 bg-gray-600 hover:bg-cyan-600 rounded-md transition-colors">-</button>
+                            <input id="harmonic-slider" type="range" min="1" max="88" value="1" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                            <button id="btn-increment" class="px-3 py-1 bg-gray-600 hover:bg-cyan-600 rounded-md transition-colors">+</button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4 disable-on-play">
+                        <label for="length-slider" class="block font-medium mb-2">Pipe Length (<span id="length-label">L=10 m</span>)</label>
+                        <input id="length-slider" type="range" min="0.01" max="50" value="10" step="0.01" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                    
+                     <div class="disable-on-play">
+                        <label for="frequency-slider" class="block font-medium mb-2">Fundamental Frequency (<span id="frequency-slider-label">17.15 Hz</span>)</label>
+                        <input id="frequency-slider" type="range" min="1" max="1000" value="17.15" step="1" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                    </div>
+                </div>
+
+                 <!-- Song Player Section -->
+                <div class="bg-gray-700 p-4 rounded-lg shadow-inner">
+                     <h2 class="text-lg font-bold mb-3 text-cyan-400 border-b border-gray-600 pb-2">Sequencer</h2>
+                     <button id="play-song-btn" class="w-full bg-cyan-600 hover:bg-cyan-700 p-3 rounded-md transition-colors text-lg font-semibold">Play 'Flight of the Bumblebee'</button>
+                </div>
+
+
+                <!-- Analysis Section -->
+                <div class="bg-gray-700 p-4 rounded-lg shadow-inner flex-grow flex flex-col">
+                    <h2 class="text-lg font-bold mb-2 text-cyan-400 border-b border-gray-600 pb-2">Analysis</h2>
+                    <p id="info-text" class="text-sm text-gray-300 mb-4 flex-grow"></p>
+                    <h3 class="font-semibold mb-2">Frequency Spectrum</h3>
+                    <div id="plot-container" class="w-full h-32 bg-gray-800 rounded-md p-2"></div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Global State ---
+        let scene, camera, renderer, controls, clock;
+        let pipeGroup, wave, originalWavePositions;
+        let particleSystem, originalParticlePositions;
+        let currentHarmonic = 1;
+        let pipeType = 'open-open';
+        let pipeLength = 10;
+        let visualizationMode = 'wave';
+        const SPEED_OF_SOUND = 343; // m/s
+        
+        // --- Audio State ---
+        let isMuted = true;
+        let audioInitialized = false;
+        let isSongPlaying = false;
+        let oscillator, waveform, synth, songPart;
+
+        // --- UI Elements ---
+        const controlsContainer = document.getElementById('controls-container');
+        const canvasContainer = document.getElementById('canvas-container');
+        const muteBtn = document.getElementById('mute-btn');
+        const waveformCanvas = document.getElementById('waveform-canvas');
+        const waveformCtx = waveformCanvas.getContext('2d');
+        const frequencyDisplay = document.getElementById('frequency-display');
+        const btnOpenOpen = document.getElementById('btn-open-open');
+        const btnOpenClosed = document.getElementById('btn-open-closed');
+        const btnModeWave = document.getElementById('btn-mode-wave');
+        const btnModeParticles = document.getElementById('btn-mode-particles');
+        const harmonicSlider = document.getElementById('harmonic-slider');
+        const harmonicLabel = document.getElementById('harmonic-label');
+        const lengthSlider = document.getElementById('length-slider');
+        const lengthLabel = document.getElementById('length-label');
+        const frequencySlider = document.getElementById('frequency-slider');
+        const frequencySliderLabel = document.getElementById('frequency-slider-label');
+        const playSongBtn = document.getElementById('play-song-btn');
+        const infoText = document.getElementById('info-text');
+        const plotContainer = document.getElementById('plot-container');
+        
+        const speakerOnIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>`;
+        const speakerOffIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>`;
+
+        // --- Song Data ---
+        const flightOfTheBumblebee = {
+            data: [
+                {"time": "0:0:0", "note": "E5", "duration": "16n"}, {"time": "0:0:1", "note": "D#5", "duration": "16n"},
+                {"time": "0:0:2", "note": "E5", "duration": "16n"}, {"time": "0:0:3", "note": "D#5", "duration": "16n"},
+                {"time": "0:1:0", "note": "E5", "duration": "16n"}, {"time": "0:1:1", "note": "B4", "duration": "16n"},
+                {"time": "0:1:2", "note": "C5", "duration": "16n"}, {"time": "0:1:3", "note": "D5", "duration": "16n"},
+                {"time": "0:2:0", "note": "C5", "duration": "16n"}, {"time": "0:2:1", "note": "B4", "duration": "16n"},
+                {"time": "0:2:2", "note": "A4", "duration": "16n"}, {"time": "0:2:3", "note": "G#4", "duration": "16n"},
+                {"time": "0:3:0", "note": "A4", "duration": "16n"}, {"time": "0:3:1", "note": "B4", "duration": "16n"},
+                {"time": "0:3:2", "note": "C5", "duration": "16n"}, {"time": "0:3:3", "note": "D#5", "duration": "16n"},
+                {"time": "1:0:0", "note": "E5", "duration": "16n"}, {"time": "1:0:1", "note": "D#5", "duration": "16n"},
+                {"time": "1:0:2", "note": "E5", "duration": "16n"}, {"time": "1:0:3", "note": "D#5", "duration": "16n"},
+                {"time": "1:1:0", "note": "E5", "duration": "16n"}, {"time": "1:1:1", "note": "B4", "duration": "16n"},
+                {"time": "1:1:2", "note": "C5", "duration": "16n"}, {"time": "1:1:3", "note": "D5", "duration": "16n"},
+                {"time": "1:2:0", "note": "C5", "duration": "16n"}, {"time": "1:2:1", "note": "B4", "duration": "16n"},
+                {"time": "1:2:2", "note": "A4", "duration": "16n"}, {"time": "1:2:3", "note": "G#4", "duration": "16n"},
+                {"time": "1:3:0", "note": "A4", "duration": "16n"}, {"time": "1:3:1", "note": "G#4", "duration": "16n"},
+                {"time": "1:3:2", "note": "A4", "duration": "16n"}, {"time": "1:3:3", "note": "G#4", "duration": "16n"},
+                {"time": "2:0:0", "note": "A4", "duration": "16n"}, {"time": "2:0:1", "note": "F#4", "duration": "16n"},
+                {"time": "2:0:2", "note": "G#4", "duration": "16n"}, {"time": "2:0:3", "note": "A4", "duration": "16n"},
+                {"time": "2:1:0", "note": "G#4", "duration": "16n"}, {"time": "2:1:1", "note": "F#4", "duration": "16n"},
+                {"time": "2:1:2", "note": "E4", "duration": "16n"}, {"time": "2:1:3", "note": "D#4", "duration": "16n"},
+                {"time": "2:2:0", "note": "E4", "duration": "16n"}, {"time": "2:2:1", "note": "F#4", "duration": "16n"},
+                {"time": "2:2:2", "note": "G#4", "duration": "16n"}, {"time": "2:2:3", "note": "B4", "duration": "16n"},
+                {"time": "2:3:0", "note": "C5", "duration": "8n"}
+            ],
+            endTime: '3:0'
+        };
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            scene.fog = new THREE.Fog(0x111827, 20, 150);
+            clock = new THREE.Clock();
+            camera = new THREE.PerspectiveCamera(75, canvasContainer.clientWidth / canvasContainer.clientHeight, 0.1, 1000);
+            camera.position.set(0, 4, 12);
+            camera.lookAt(0, 0, 0);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            canvasContainer.appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            const ambientLight = new THREE.AmbientLight(0x404040, 2);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            createGrid();
+            rebuildSceneObjects();
+            updateUI();
+            window.addEventListener('resize', onWindowResize);
+            setupEventListeners();
+            document.getElementById('loader').style.display = 'none';
+            animate();
+        }
+        
+        function rebuildSceneObjects() {
+            createPipe();
+            createAndUpdateWave();
+            createParticles();
+        }
+
+        function createGrid() {
+            const gridHelper = new THREE.GridHelper(200, 50, 0x444444, 0x222222);
+            gridHelper.position.y = -0.5 * 1.5;
+            scene.add(gridHelper);
+        }
+
+        function createPipe() {
+            if (pipeGroup) scene.remove(pipeGroup);
+            pipeGroup = new THREE.Group();
+            const geometry = new THREE.CylinderGeometry(0.5, 0.5, pipeLength, 64, 1, true);
+            geometry.rotateZ(Math.PI / 2);
+            const material = new THREE.MeshPhongMaterial({ color: 0x0891b2, transparent: true, opacity: 0.25, side: THREE.DoubleSide });
+            pipeGroup.add(new THREE.Mesh(geometry, material));
+            scene.add(pipeGroup);
+        }
+
+        function createAndUpdateWave() {
+            if (wave) scene.remove(wave);
+            const points = [];
+            for (let i = 0; i <= 250; i++) points.push(new THREE.Vector3((i / 250) * pipeLength - pipeLength / 2, 0, 0));
+            const curve = new THREE.CatmullRomCurve3(points);
+            const geometry = new THREE.TubeGeometry(curve, 250, 0.05, 12, false);
+            const material = new THREE.MeshStandardMaterial({ color: 0xe0f2fe, emissive: 0x67e8f9, emissiveIntensity: 0.8 });
+            wave = new THREE.Mesh(geometry, material);
+            originalWavePositions = new Float32Array(wave.geometry.attributes.position.array);
+            scene.add(wave);
+        }
+        
+        function createParticles() {
+            if (particleSystem) scene.remove(particleSystem);
+            const positions = new Float32Array(20000 * 3);
+            for (let i = 0; i < 20000; i++) {
+                const x = Math.random() * pipeLength - pipeLength / 2;
+                const r = Math.random() * 0.5 * 0.95;
+                const theta = Math.random() * 2 * Math.PI;
+                positions[i * 3] = x;
+                positions[i * 3 + 1] = r * Math.cos(theta);
+                positions[i * 3 + 2] = r * Math.sin(theta);
+            }
+            originalParticlePositions = new Float32Array(positions);
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.02, transparent: true, opacity: 0.6 });
+            particleSystem = new THREE.Points(geometry, material);
+            scene.add(particleSystem);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = clock.getElapsedTime();
+            if (visualizationMode === 'wave') updateWave(time);
+            else updateParticles(time);
+            drawWaveform();
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function updateWave(time) {
+            if (!wave) return;
+            const positions = wave.geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i += 3) {
+                const ox = originalWavePositions[i], oy = originalWavePositions[i + 1], oz = originalWavePositions[i + 2];
+                let displacement = 0;
+                if (pipeType === 'open-open') displacement = 0.4 * Math.sin(currentHarmonic * Math.PI / pipeLength * (ox + pipeLength / 2));
+                else displacement = 0.4 * Math.sin(currentHarmonic * Math.PI / (2 * pipeLength) * (ox + pipeLength / 2));
+                const oscillation = Math.cos(time * getCurrentFrequency() * 2 * Math.PI);
+                const final_displacement = displacement * oscillation;
+                const angle = Math.atan2(oz, oy) || 0;
+                positions[i+1] = oy + Math.sin(angle) * final_displacement;
+                positions[i+2] = oz + Math.cos(angle) * final_displacement;
+            }
+            wave.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function updateParticles(time) {
+            if (!particleSystem) return;
+            const positions = particleSystem.geometry.attributes.position.array;
+            for (let i = 0; i < positions.length; i += 3) {
+                const ox = originalParticlePositions[i], oy = originalParticlePositions[i+1], oz = originalParticlePositions[i+2];
+                let displacement = 0;
+                if (pipeType === 'open-open') displacement = 0.3 * Math.cos(currentHarmonic * Math.PI / pipeLength * (ox + pipeLength / 2));
+                else displacement = 0.3 * Math.cos(currentHarmonic * Math.PI / (2 * pipeLength) * (ox + pipeLength / 2));
+                const oscillation = Math.cos(time * getCurrentFrequency() * 2 * Math.PI);
+                positions[i] = ox + displacement * oscillation;
+                positions[i+1] = oy;
+                positions[i+2] = oz;
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+        }
+
+        function onWindowResize() {
+            camera.aspect = canvasContainer.clientWidth / canvasContainer.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(canvasContainer.clientWidth, canvasContainer.clientHeight);
+        }
+        
+        function initAudio() {
+            if (audioInitialized) return;
+            waveform = new Tone.Waveform();
+            oscillator = new Tone.Oscillator().connect(waveform).toDestination();
+            synth = new Tone.Synth({ oscillator: { type: 'sine' }, envelope: { attack: 0.005, decay: 0.1, sustain: 0.3, release: 0.1 } }).connect(waveform).toDestination();
+            oscillator.volume.value = -Infinity;
+            oscillator.start();
+            
+            Tone.Transport.on('stop', () => {
+                isSongPlaying = false;
+                updateUI();
+                updateSound(); // Restore oscillator sound
+            });
+
+            audioInitialized = true;
+        }
+
+        function updateSound() {
+            if (!audioInitialized || isSongPlaying) return;
+            const frequency = getCurrentFrequency();
+            oscillator.frequency.rampTo(frequency, 0.05);
+            oscillator.volume.rampTo(isMuted ? -Infinity : -12, 0.02);
+        }
+        
+        async function toggleMute() {
+            if (!audioInitialized) {
+                await Tone.start();
+                initAudio();
+            }
+            isMuted = !isMuted;
+            Tone.Master.mute = isMuted;
+            updateUI();
+            updateSound();
+        }
+        
+        function drawWaveform() {
+            if (!audioInitialized || isMuted) {
+                waveformCtx.clearRect(0, 0, waveformCanvas.width, waveformCanvas.height);
+                return;
+            };
+            const w = waveformCanvas.width, h = waveformCanvas.height;
+            const values = waveform.getValue();
+            waveformCtx.clearRect(0, 0, w, h);
+            waveformCtx.beginPath();
+            waveformCtx.strokeStyle = '#67e8f9';
+            waveformCtx.lineWidth = 2;
+            for (let i = 0; i < values.length; i++) {
+                const x = (i / values.length) * w, y = (values[i] / 2 + 0.5) * h;
+                if (i === 0) waveformCtx.moveTo(x, y);
+                else waveformCtx.lineTo(x, y);
+            }
+            waveformCtx.stroke();
+        }
+
+        const minLog = Math.log(20), maxLog = Math.log(20000);
+        const scale = (maxLog - minLog) / 999;
+        function logToLinear(value) { return (Math.log(value) - minLog) / scale + 1; }
+        function linearToLog(value) { return Math.exp(minLog + scale * (value - 1)); }
+
+        function setupEventListeners() {
+            muteBtn.addEventListener('click', toggleMute);
+            btnOpenOpen.addEventListener('click', () => setPipeType('open-open'));
+            btnOpenClosed.addEventListener('click', () => setPipeType('open-closed'));
+            btnModeWave.addEventListener('click', () => setVisualizationMode('wave'));
+            btnModeParticles.addEventListener('click', () => setVisualizationMode('particles'));
+            harmonicSlider.addEventListener('input', (e) => setHarmonic(parseInt(e.target.value)));
+            document.getElementById('btn-decrement').addEventListener('click', () => setHarmonic(currentHarmonic - 1));
+            document.getElementById('btn-increment').addEventListener('click', () => setHarmonic(currentHarmonic + 1));
+            lengthSlider.addEventListener('input', (e) => setPipeLength(parseFloat(e.target.value)));
+            frequencySlider.addEventListener('input', (e) => tuneToFrequency(linearToLog(parseFloat(e.target.value))));
+            playSongBtn.addEventListener('click', toggleSong);
+        }
+        
+        async function toggleSong() {
+            if (!audioInitialized) {
+                await Tone.start();
+                initAudio();
+            }
+            
+            isSongPlaying = !isSongPlaying;
+            
+            if (isSongPlaying) {
+                if (songPart) songPart.dispose();
+                songPart = new Tone.Part((time, value) => {
+                    const freq = Tone.Frequency(value.note).toFrequency();
+                    synth.triggerAttackRelease(value.note, value.duration, time);
+                    Tone.Draw.schedule(() => tuneToFrequency(freq), time);
+                }, flightOfTheBumblebee.data).start(0);
+                
+                Tone.Transport.bpm.value = 180; // Speed up the tempo
+
+                Tone.Transport.scheduleOnce(() => {
+                    if (isSongPlaying) {
+                        stopSong();
+                    }
+                }, flightOfTheBumblebee.endTime);
+
+                Tone.Transport.start();
+                oscillator.volume.rampTo(-Infinity, 0.05);
+            } else {
+                stopSong();
+            }
+            updateUI();
+        }
+
+        function stopSong() {
+            isSongPlaying = false;
+            Tone.Transport.stop();
+            if(synth) synth.releaseAll();
+            updateUI();
+        }
+
+        function setPipeType(type) {
+            pipeType = type;
+            if (pipeType === 'open-closed' && currentHarmonic % 2 === 0) setHarmonic(currentHarmonic - 1);
+            else { updateUI(); updateSound(); }
+        }
+
+        function setVisualizationMode(mode) {
+            visualizationMode = mode;
+            updateUI();
+        }
+
+        function setHarmonic(n) {
+            let newN = Math.max(1, Math.min(88, n));
+            if (pipeType === 'open-closed') {
+                if (newN % 2 === 0) newN = (newN > currentHarmonic && newN < 88) ? newN + 1 : newN - 1;
+                newN = Math.max(1, Math.min(88, newN));
+            }
+            currentHarmonic = newN;
+            updateUI();
+            updateSound();
+        }
+        
+        function setPipeLength(newLength) {
+            pipeLength = newLength;
+            rebuildSceneObjects();
+            updateUI();
+            updateSound();
+        }
+
+        function tuneToFrequency(targetFreq) {
+            setHarmonic(1);
+            let newLength;
+            if (pipeType === 'open-open') newLength = SPEED_OF_SOUND / (2 * targetFreq);
+            else newLength = SPEED_OF_SOUND / (4 * targetFreq);
+            setPipeLength(newLength);
+        }
+
+        function getCurrentFrequency() {
+             if (pipeType === 'open-open') return currentHarmonic * SPEED_OF_SOUND / (2 * pipeLength);
+             else return currentHarmonic * SPEED_OF_SOUND / (4 * pipeLength);
+        }
+        
+        function getFundamentalFrequency() {
+             if (pipeType === 'open-open') return SPEED_OF_SOUND / (2 * pipeLength);
+             else return SPEED_OF_SOUND / (4 * pipeLength);
+        }
+
+        function updateUI() {
+            controlsContainer.classList.toggle('controls-disabled', isSongPlaying);
+            playSongBtn.textContent = isSongPlaying ? "Stop" : "Play 'Flight of the Bumblebee'";
+            playSongBtn.classList.toggle('bg-red-600', isSongPlaying);
+            playSongBtn.classList.toggle('hover:bg-red-700', isSongPlaying);
+            playSongBtn.classList.toggle('bg-cyan-600', !isSongPlaying);
+            playSongBtn.classList.toggle('hover:bg-cyan-700', !isSongPlaying);
+
+            muteBtn.innerHTML = isMuted ? speakerOffIcon : speakerOnIcon;
+            
+            btnOpenOpen.classList.toggle('bg-cyan-500', pipeType === 'open-open');
+            btnOpenClosed.classList.toggle('bg-cyan-500', pipeType === 'open-closed');
+            
+            btnModeWave.classList.toggle('bg-cyan-500', visualizationMode === 'wave');
+            btnModeParticles.classList.toggle('bg-cyan-500', visualizationMode === 'particles');
+
+            if(wave) wave.visible = visualizationMode === 'wave';
+            if(particleSystem) particleSystem.visible = visualizationMode === 'particles';
+            if(pipeGroup) pipeGroup.visible = visualizationMode === 'wave';
+
+            harmonicSlider.value = currentHarmonic;
+            harmonicLabel.textContent = `n=${currentHarmonic}`;
+            
+            lengthSlider.value = pipeLength;
+            const fundamentalFreq = getFundamentalFrequency();
+            frequencySlider.value = logToLinear(fundamentalFreq);
+
+            lengthLabel.textContent = `L=${pipeLength.toFixed(2)} m`;
+            frequencySliderLabel.textContent = `${fundamentalFreq.toFixed(2)} Hz`;
+            
+            const currentFreq = getCurrentFrequency();
+            frequencyDisplay.textContent = `${currentFreq.toFixed(2)} Hz`;
+
+            let fundamental = 'f₀';
+            if(pipeType === 'open-open') infoText.textContent = `Mode: ${getModeName(currentHarmonic, pipeType)}. λ = 2L/${currentHarmonic}. f = ${currentHarmonic}${fundamental}.`;
+            else infoText.textContent = `Mode: ${getModeName(currentHarmonic, pipeType)}. λ = 4L/${currentHarmonic}. f = ${currentHarmonic}${fundamental}.`;
+            
+            drawFourierPlot();
+        }
+
+        function getModeName(n, type) {
+            if (n === 1) return 'Fundamental';
+            let overtoneNum;
+            if (type === 'open-open') overtoneNum = n - 2;
+            else overtoneNum = (n - 3) / 2;
+            const j = (overtoneNum + 1) % 10, k = (overtoneNum + 1) % 100;
+            let suffix = "th";
+            if (j == 1 && k != 11) suffix = "st";
+            else if (j == 2 && k != 12) suffix = "nd";
+            else if (j == 3 && k != 13) suffix = "rd";
+            return `${overtoneNum + 1}${suffix} Overtone (${n}th Harmonic)`;
+        }
+        
+        function drawFourierPlot() {
+            plotContainer.innerHTML = ''; 
+            const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            svg.setAttribute('viewBox', `0 0 90 25`);
+            svg.setAttribute('preserveAspectRatio', 'none');
+            for(let n = 1; n <= 88; n++) {
+                if(pipeType !== 'open-open' && n % 2 === 0) continue;
+                const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                rect.setAttribute('x', n);
+                rect.setAttribute('y', '5%');
+                rect.setAttribute('width', '0.8');
+                rect.setAttribute('height', '90%');
+                rect.setAttribute('rx', '0.2');
+                rect.setAttribute('fill', n === currentHarmonic ? '#22d3ee' : '#374151');
+                svg.appendChild(rect);
+                if (n === 1 || n % 10 === 0) {
+                    const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute('x', n + 0.4);
+                    text.setAttribute('y', '95%');
+                    text.setAttribute('font-size', '4');
+                    text.setAttribute('fill', '#9ca3af');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.textContent = n;
+                    svg.appendChild(text);
+                }
+            }
+            plotContainer.appendChild(svg);
+        }
+
+        init();
+
+    </script>
+</body>
+</html>
+

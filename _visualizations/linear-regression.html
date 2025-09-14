@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beautiful 3D Regression Analysis</title>
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU0KOVEMcAgsccwsiBQZ0N75w9HhdYIeAWLIcBIadNOFW9CvxHNaD6es" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmNOspLegM" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" xintegrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --panel-bg: rgba(10, 12, 20, 0.75);
+            --border-color: rgba(128, 128, 255, 0.25);
+            --primary-text: #E0E6F1;
+            --secondary-text: #8A94A6;
+            --accent-color: #7A9DFF;
+            --font-family: 'Inter', sans-serif;
+        }
+
+        body { margin: 0; overflow: hidden; background-color: #05060A; font-family: var(--font-family); color: var(--primary-text); }
+        #container { width: 100vw; height: 100vh; cursor: grab; }
+        
+        .panel {
+            position: absolute;
+            background-color: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+
+        #title {
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 28px;
+            font-size: 1.2em;
+            font-weight: 500;
+            color: #D0E1FF;
+            pointer-events: none;
+        }
+
+        #ui-panel {
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            align-items: stretch;
+            padding: 12px 20px;
+            overflow-x: auto;
+            max-width: 90vw;
+            white-space: nowrap;
+        }
+        
+        #annotation {
+            padding: 12px 18px;
+            transform: translate(-50%, -140%);
+            pointer-events: none;
+            opacity: 0;
+            white-space: nowrap;
+        }
+        
+        .control-group { 
+            display: inline-flex;
+            flex-direction: column;
+            justify-content: center;
+            vertical-align: top;
+        } 
+        
+        .sliders-group {
+             min-width: 160px;
+        }
+
+        .stats-group {
+             border-left: 1px solid var(--border-color);
+             padding-left: 20px;
+             min-width: 180px;
+        }
+        
+        .metric { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 0.9em; }
+        .metric-label { color: var(--secondary-text); }
+        .metric-value { color: var(--primary-text); font-weight: 500;}
+        label { display: block; margin-bottom: 8px; font-size: 0.85em; color: var(--secondary-text); }
+        input[type="range"] { width: 100%; cursor: pointer; margin: 0; }
+        #view-controls { display: flex; justify-content: space-around; border-left: 1px solid var(--border-color); padding-left: 20px; gap: 15px; align-items: center;}
+        #view-controls label { font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="title" class="panel">Linear Regression</div>
+    
+    <div id="annotation" class="panel">
+        <span id="annotation-text">`y = mx + c`</span>
+    </div>
+
+    <div id="ui-panel" class="panel">
+        <div class="control-group sliders-group">
+            <div>
+                <label>$$\text{Data Points:}$$ <span id="pointsValue">2000</span></label>
+                <input type="range" id="pointsSlider" min="100" max="10000" value="2000" step="100">
+            </div>
+            <div style="margin-top: 10px;">
+                <label>$$\text{Noise } (\epsilon):$$ <span id="noiseValue">8.0</span></label>
+                <input type="range" id="noiseSlider" min="0" max="25" value="8.0" step="0.01">
+            </div>
+        </div>
+        <div class="control-group stats-group">
+             <div class="metric">
+                <span class="metric-label">$$\text{Std Error } (\sigma):$$</span>
+                <span class="metric-value" id="model-error">0.000</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">$$\text{R-squared } (R^2):$$</span>
+                <span class="metric-value" id="model-r2">0.000</span>
+            </div>
+        </div>
+        <div id="view-controls">
+            <label><input type="checkbox" id="togglePoints" checked> Points</label>
+            <label><input type="checkbox" id="toggleLines" checked> Lines</label>
+            <label><input type="checkbox" id="toggleSurface" checked> Surface</label>
+        </div>
+    </div>
+
+    <script type="importmap">
+        { "imports": { 
+            "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js", 
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/" 
+        } }
+    </script>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ParametricGeometry } from 'three/addons/geometries/ParametricGeometry.js';
+        import { Line2 } from 'three/addons/lines/Line2.js';
+        import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+        import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        let scene, camera, renderer, controls, composer;
+        const Z_SCALE = 50; 
+        let sceneObjects = {};
+        let annotationAnchorPoint = new THREE.Vector3();
+        let annotationElement;
+        
+        let raycaster, mouse;
+
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => { clearTimeout(timeout); func(...args); };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x05060A);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(0, 30, 85);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.getElementById('container').appendChild(renderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            const hemisphereLight = new THREE.HemisphereLight(0x8899FF, 0x223366, 1.5);
+            scene.add(hemisphereLight);
+            
+            // Post-processing for bloom effect
+            const renderScene = new RenderPass(scene, camera);
+            const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.0, 0.4, 0.85);
+            composer = new EffectComposer(renderer);
+            composer.addPass(renderScene);
+            composer.addPass(bloomPass);
+
+            createAxes();
+            
+            annotationElement = document.getElementById('annotation');
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            const pointsSlider = document.getElementById('pointsSlider');
+            const noiseSlider = document.getElementById('noiseSlider');
+            const pointsValue = document.getElementById('pointsValue');
+            const noiseValue = document.getElementById('noiseValue');
+
+            const debouncedRegenerate = debounce(() => {
+                regenerateScene(parseInt(pointsSlider.value), parseFloat(noiseSlider.value));
+            }, 250);
+
+            [pointsSlider, noiseSlider].forEach(slider => {
+                slider.addEventListener('input', () => {
+                    pointsValue.textContent = pointsSlider.value;
+                    noiseValue.textContent = parseFloat(noiseSlider.value).toFixed(2);
+                    debouncedRegenerate();
+                });
+            });
+            
+            ['togglePoints', 'toggleLines', 'toggleSurface'].forEach(id => {
+                document.getElementById(id).addEventListener('change', (e) => {
+                    const key = id.replace('toggle', '').toLowerCase();
+                    if(sceneObjects[key]) sceneObjects[key].visible = e.target.checked;
+                });
+            });
+            
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+            
+            regenerateScene(parseInt(pointsSlider.value), parseFloat(noiseSlider.value));
+            animate();
+        }
+
+        function clearSceneObjects() {
+            Object.values(sceneObjects).forEach(obj => {
+                scene.remove(obj);
+                if(obj.geometry) obj.geometry.dispose();
+                if(obj.material) obj.material.dispose();
+            });
+            sceneObjects = {};
+        }
+
+        function regenerateScene(totalPoints, noiseFactor) {
+            clearSceneObjects();
+            const dataPoints = generateRandomData(totalPoints, noiseFactor);
+            const stats = calculateLinearRegression(dataPoints);
+            
+            document.getElementById('annotation-text').textContent = `y = ${stats.slope.toFixed(3)}x + ${stats.intercept.toFixed(3)}`;
+            document.getElementById('model-error').textContent = stats.stdError.toFixed(3);
+            document.getElementById('model-r2').textContent = stats.rSquared.toFixed(3);
+            
+            if (window.renderMathInElement) {
+                renderMathInElement(document.body);
+            }
+
+            const xValues = dataPoints.map(p => p.x);
+            const minX = Math.min(...xValues);
+            const maxX = Math.max(...xValues);
+            
+            visualizeDataPoints(dataPoints);
+            visualizeRegressionLine(stats.slope, stats.intercept, minX, maxX);
+            visualizeProbabilityLines(dataPoints, stats);
+            visualizeNormalDistributionSurface(stats, minX, maxX);
+            
+            controls.target.set(0, stats.intercept, 0);
+        }
+        
+        function generateRandomData(totalPoints, noiseFactor) {
+            const data = [];
+            const trueSlope = 0.8, trueIntercept = 2, xRange = 50;
+            const xValues = Array.from({length: 50}, (_, i) => -xRange/2 + i * (xRange/49));
+            for (let i = 0; i < totalPoints; i++) {
+                const x = xValues[i % xValues.length];
+                const y = (trueSlope * x + trueIntercept) + (Math.random() - 0.5) * 2 * noiseFactor;
+                data.push({ x, y });
+            }
+            return data;
+        }
+
+        function calculateLinearRegression(points) {
+            let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, n = points.length;
+            if (n < 3) return { slope: 0, intercept: 0, stdError: 0, rSquared: 0 };
+            points.forEach(p => { sumX += p.x; sumY += p.y; sumXY += p.x * p.y; sumX2 += p.x * p.x; });
+            const slope = (n * sumX2 - sumX * sumX) !== 0 ? (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX) : 0;
+            const intercept = (sumY - slope * sumX) / n;
+            let sse = 0, sst = 0, meanY = sumY / n;
+            points.forEach(p => {
+                sse += Math.pow(p.y - (slope * p.x + intercept), 2);
+                sst += Math.pow(p.y - meanY, 2);
+            });
+            const stdError = (n > 2) ? Math.sqrt(sse / (n - 2)) : 0;
+            const rSquared = (sst > 1e-9) ? 1 - (sse / sst) : 1;
+            return { slope, intercept, stdError, rSquared };
+        }
+
+        function pdf(x, mu, sigma) {
+             if (sigma < 1e-9) return (Math.abs(x-mu) < 1e-9) ? 1e9 : 0;
+             return (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mu) / sigma, 2));
+        }
+        
+        function createAxes() {
+            const axisLength = 40;
+            const createLine = (points, color) => {
+                const geom = new THREE.BufferGeometry().setFromPoints(points);
+                const mat = new THREE.LineBasicMaterial({ color });
+                scene.add(new THREE.Line(geom, mat));
+            };
+            createLine([new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)], 0x555555); // X-axis
+            createLine([new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)], 0x555555); // Y-axis
+
+            createAxisLabel('x', new THREE.Vector3(axisLength + 3, 0, 0));
+            createAxisLabel('y', new THREE.Vector3(0, axisLength + 3, 0));
+        }
+
+        function createAxisLabel(text, position) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            const size = 128;
+            canvas.width = size; canvas.height = size;
+            context.font = `bold ${size/2}px Inter, sans-serif`;
+            context.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            context.textAlign = 'center'; context.textBaseline = 'middle';
+            context.fillText(text, size / 2, size / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.position.copy(position);
+            sprite.scale.set(10, 10, 1);
+            scene.add(sprite);
+        }
+        
+        function visualizeDataPoints(points) {
+            const positions = new Float32Array(points.length * 3);
+            points.forEach((p, i) => { positions[i * 3] = p.x; positions[i * 3 + 1] = p.y; });
+            const geom = new THREE.BufferGeometry();
+            geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const mat = new THREE.PointsMaterial({ color: 0x00FFFF, size: 0.2, sizeAttenuation: true });
+            sceneObjects.points = new THREE.Points(geom, mat);
+            scene.add(sceneObjects.points);
+        }
+
+        function visualizeRegressionLine(slope, intercept, minX, maxX) {
+            annotationAnchorPoint.set(0, intercept, 0);
+            const points = [minX, slope * minX + intercept, 0, maxX, slope * maxX + intercept, 0];
+            const geom = new LineGeometry();
+            geom.setPositions(points);
+            const mat = new LineMaterial({ color: 0xFFFF00, linewidth: 5, dashed: false });
+            mat.resolution.set(window.innerWidth, window.innerHeight);
+            sceneObjects.line = new Line2(geom, mat);
+            scene.add(sceneObjects.line);
+        }
+
+        function visualizeProbabilityLines(dataPoints, { slope, intercept, stdError }) {
+             const positions = [];
+             dataPoints.forEach(p => {
+                 const error = p.y - (slope * p.x + intercept);
+                 const lineHeight = pdf(error, 0, stdError) * Z_SCALE;
+                 if (isFinite(lineHeight) && lineHeight > 0.01) { positions.push(p.x, p.y, 0, p.x, p.y, lineHeight); }
+             });
+             const geom = new THREE.BufferGeometry();
+             geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+             const mat = new THREE.LineBasicMaterial({ color: 0xFF77FF, transparent: true, opacity: 0.5 });
+             sceneObjects.lines = new THREE.LineSegments(geom, mat);
+             scene.add(sceneObjects.lines);
+        }
+
+        function visualizeNormalDistributionSurface({ slope, intercept, stdError }, minX, maxX) {
+            const surfaceFunc = (u, v, target) => {
+                const x = minX + u * (maxX - minX);
+                const y_dev = (v - 0.5) * 8 * stdError; 
+                target.set(x, (slope * x + intercept) + y_dev, pdf(y_dev, 0, stdError) * Z_SCALE);
+            };
+            const geom = new ParametricGeometry(surfaceFunc, 100, 100);
+            const mat = new THREE.ShaderMaterial({
+                uniforms: { maxHeight: { value: (pdf(0, 0, stdError) * Z_SCALE) + 1e-9 } },
+                vertexShader: `varying float vZ; void main() { vZ = position.z; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                fragmentShader: `uniform float maxHeight; varying float vZ; void main() { float i = pow(vZ / maxHeight, 0.5); vec3 c = mix(vec3(0.2, 0.1, 0.8), vec3(1.0, 0.4, 1.0), i); gl_FragColor = vec4(c, 0.6); }`,
+                transparent: true, side: THREE.DoubleSide, depthWrite: false
+            });
+            sceneObjects.surface = new THREE.Mesh(geom, mat);
+            scene.add(sceneObjects.surface);
+        }
+        
+        function onMouseMove(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function updateAnnotation() {
+            if (!sceneObjects.line) return;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(sceneObjects.line, true);
+            
+            if (intersects.length > 0) {
+                const screenPosition = annotationAnchorPoint.clone().project(camera);
+                const x = (screenPosition.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-screenPosition.y * 0.5 + 0.5) * window.innerHeight;
+                
+                annotationElement.style.left = `${x}px`;
+                annotationElement.style.top = `${y}px`;
+                annotationElement.style.opacity = '1';
+            } else {
+                annotationElement.style.opacity = '0';
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            updateAnnotation();
+            composer.render();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+            if(sceneObjects.line) sceneObjects.line.material.resolution.set(window.innerWidth, window.innerHeight);
+        }
+
+        init();
+    </script>
+</body>
+</html>
+

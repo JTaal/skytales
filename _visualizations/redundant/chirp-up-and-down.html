@@ -1,0 +1,184 @@
+---
+date: 2025-08-27
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chirps and the Sinc Function</title>
+    <style>
+        body { margin: 0; background-color: #000000; color: #e5e7eb; font-family: 'Inter', sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        #title-container {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #title-container h1 { margin: 0; font-size: 1.75rem; font-weight: 600; }
+        #title-container p { margin: 0.25rem; color: #9ca3af; }
+        #controls-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(17, 24, 39, 0.8);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 101;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(5px);
+        }
+        #controls-container label { font-weight: 600; white-space: nowrap; color: #9ca3af; }
+        #controls-container input[type="range"] { width: 100%; cursor: pointer; }
+        #controls-container .value-display { font-weight: bold; min-width: 70px; text-align: center; background-color: #111827; padding: 0.25rem 0.5rem; border-radius: 6px; color: #e5e7eb; }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="title-container">
+        <h1>Chirp Signals and the Sinc Function</h1>
+        <p>A visualization of chirp components and the resulting sinc function.</p>
+    </div>
+    <div id="controls-container">
+        <label for="bandwidth-slider">Bandwidth:</label>
+        <input type="range" id="bandwidth-slider" min="1" max="20" value="8" step="0.5">
+        <span id="bandwidth-value" class="value-display">8.0</span>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // === Scene Setup ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 4, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        // === Lighting ===
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // === UI Elements ===
+        const slider = document.getElementById('bandwidth-slider');
+        const bandwidthValueSpan = document.getElementById('bandwidth-value');
+        
+        let chirpUpWave, chirpDownWave, sincWave;
+
+        // === Curve Definitions ===
+        // Chirp Up: Frequency increases with t
+        class ChirpUpCurve extends THREE.Curve {
+            constructor(bandwidth) { super(); this.bandwidth = bandwidth; }
+            getPoint(t) {
+                const x = t * 10 - 5; // Range from -5 to 5
+                const angle = Math.PI * this.bandwidth * t * t;
+                const y = Math.cos(angle);
+                return new THREE.Vector3(x, y, -2);
+            }
+        }
+
+        // Chirp Down: Frequency decreases with t
+        class ChirpDownCurve extends THREE.Curve {
+            constructor(bandwidth) { super(); this.bandwidth = bandwidth; }
+            getPoint(t) {
+                const x = t * 10 - 5;
+                const angle = Math.PI * this.bandwidth * (1 - t) * (1 - t);
+                const y = Math.cos(angle);
+                return new THREE.Vector3(x, y, 2);
+            }
+        }
+
+        // Sinc Function: sin(x)/x
+        class SincCurve extends THREE.Curve {
+            constructor(bandwidth) { super(); this.bandwidth = bandwidth; }
+            getPoint(t) {
+                const x = t * 10 - 5;
+                let y = 1; // Handle the case where x is 0
+                if (x !== 0) {
+                    const scaledX = x * this.bandwidth / 5;
+                    y = Math.sin(scaledX) / scaledX;
+                }
+                return new THREE.Vector3(x, y, 0);
+            }
+        }
+
+        // === Functions ===
+        function regenerateWaves() {
+            const bandwidth = parseFloat(slider.value);
+
+            [chirpUpWave, chirpDownWave, sincWave].forEach(wave => {
+                if (wave) {
+                    scene.remove(wave);
+                    wave.geometry.dispose();
+                    wave.material.dispose();
+                }
+            });
+
+            const createTube = (curveClass, color) => {
+                const path = new curveClass(bandwidth);
+                const geometry = new THREE.TubeGeometry(path, 256, 0.05, 8, false);
+                const material = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.4 });
+                return new THREE.Mesh(geometry, material);
+            };
+
+            chirpUpWave = createTube(ChirpUpCurve, 0x3b82f6); // Blue
+            chirpDownWave = createTube(ChirpDownCurve, 0xef4444); // Red
+            sincWave = createTube(SincCurve, 0x22c55e); // Green
+            
+            scene.add(chirpUpWave, chirpDownWave, sincWave);
+            bandwidthValueSpan.textContent = bandwidth.toFixed(1);
+        }
+
+        // === Event Listeners ===
+        slider.addEventListener('input', regenerateWaves);
+
+        // === Animation Loop ===
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // === Initial State & Resize Handler ===
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        regenerateWaves();
+        animate();
+    </script>
+</body>
+</html>

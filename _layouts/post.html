@@ -1,0 +1,123 @@
+---
+layout: default
+---
+<style>
+  /* Styles for the citation copy button */
+  .cite-container {
+    position: relative;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background-color: #555;
+    color: white;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease-in-out;
+  }
+  .copy-btn:hover {
+    background-color: #777;
+  }
+  .copy-btn.copied {
+    background-color: #28a745; /* Green color for success */
+  }
+  .copy-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+  }
+</style>
+
+<div class="container my-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <article class="post">
+        <header class="mb-4">
+          <h1 class="fw-bolder mb-1">{{ page.title }}</h1>
+          <div class="text-muted fst-italic mb-2">Posted on {{ page.date | date: "%B %d, %Y" }}</div>
+        </header>
+        
+        <section class="post-content mb-5">
+          {{ content }}
+        </section>
+      </article>
+
+      <!-- Check for a visualization link in the post's front matter -->
+      {% if page.visualization_url %}
+      <hr class="my-5">
+      <div class="text-center">
+        <h2 class="fw-bolder">Interactive Visualization</h2>
+        <p class="text-muted">Interact with the visualization below or open it in a new full-screen tab.</p>
+        
+        <!-- Embedded Visualization using an iframe -->
+        <div class="ratio ratio-16x9 border rounded-3 shadow-sm my-4">
+          <iframe 
+            src="{{ page.visualization_url | relative_url }}" 
+            title="{{ page.title }} Visualization" 
+            allowfullscreen>
+          </iframe>
+        </div>
+        
+        <!-- Link to open the visualization in a new tab -->
+        <a href="{{ page.visualization_url | relative_url }}" class="btn btn-primary btn-lg" target="_blank" rel="noopener noreferrer">
+          Open Fullscreen
+        </a>
+      </div>
+      {% endif %}
+
+      <!-- Automatic BibTeX Citation Section with Copy Button -->
+      <hr class="my-5">
+      <div class="citation-section">
+        <h3 class="fw-bolder">How to Cite This Post</h3>
+        <p class="text-muted">Use the following BibTeX entry to cite this post in your research.</p>
+        
+        <div class="cite-container">
+          <button class="copy-btn" onclick="copyToClipboard('bibtex-code', this)" aria-label="Copy to clipboard">
+            <!-- Initial Copy Icon -->
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+          <pre id="bibtex-code" class="bg-dark text-white p-3 rounded-3"><code>@misc{Taal{{ page.date | date: "%Y" }}{{ page.title | slugify }},
+  author  = {Taal, Jasper},
+  title   = { {{ page.title }} },
+  year    = { {{ page.date | date: "%Y" }} },
+  month   = { {{ page.date | date: "%b" }} },
+  url     = { {{ page.url | absolute_url }} }
+}</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// Reusable script for the copy-to-clipboard functionality
+const copyIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+function copyToClipboard(elementId, button) {
+  const text = document.getElementById(elementId).innerText;
+  
+  navigator.clipboard.writeText(text).then(function() {
+    // On success, change the icon and class
+    button.innerHTML = checkIcon;
+    button.classList.add('copied');
+    
+    // After 2 seconds, revert the icon and class
+    setTimeout(() => {
+      button.innerHTML = copyIcon;
+      button.classList.remove('copied');
+    }, 2000);
+
+  }, function(err) {
+    // Log error if copying fails
+    console.error('Could not copy text: ', err);
+  });
+}
+</script>

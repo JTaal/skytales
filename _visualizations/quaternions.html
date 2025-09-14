@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Quaternions</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <!-- Jekyll-style front matter -->
+    <script type="text/front-matter">
+    ---
+    layout: post
+    title: "Quaternions"
+    date: 2025-08-31 12:32:00 +0200
+    categories: 3d webapp threejs quaternions 6dof
+    ---
+    </script>
+    
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            background-color: #000000;
+            color: #ffffff;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrollbars from appearing */
+        }
+        #container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 95%;
+            max-width: 600px;
+            text-align: center;
+            z-index: 100;
+            display: block;
+            background-color: rgba(0,0,0,0.5);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        #ui-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            display: flex;
+            flex-direction: column; /* Changed for horizontal divider */
+            align-items: center;
+            gap: 0.5rem;
+            background-color: rgba(26, 26, 26, 0.8);
+            padding: 0.75rem;
+            border-radius: 12px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .button-group-wrapper {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .control-group {
+            position: relative; /* For slider positioning */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 0.25rem;
+        }
+        .control-group button {
+            font-weight: bold;
+            font-size: 1.1rem; /* Slightly smaller font */
+            border: 2px solid;
+            border-radius: 50%;
+            width: 44px; /* Slightly smaller button */
+            height: 44px;
+            transition: all 0.2s ease-in-out;
+        }
+        .control-group button:hover {
+            transform: scale(1.1);
+        }
+        /* Rotation */
+        #i-btn { border-color: #581c87; color: #581c87; }
+        #i-btn.active, #i-btn:hover { background-color: #581c87; color: white; }
+        #j-btn { border-color: #8b5cf6; color: #8b5cf6; }
+        #j-btn.active, #j-btn:hover { background-color: #8b5cf6; color: white; }
+        #k-btn { border-color: #22d3ee; color: #22d3ee; }
+        #k-btn.active, #k-btn:hover { background-color: #22d3ee; color: white; }
+        /* Position */
+        #x-btn { border-color: #581c87; color: #581c87; }
+        #x-btn.active, #x-btn:hover { background-color: #581c87; color: white; }
+        #y-btn { border-color: #8b5cf6; color: #8b5cf6; }
+        #y-btn.active, #y-btn:hover { background-color: #8b5cf6; color: white; }
+        #z-btn { border-color: #22d3ee; color: #22d3ee; }
+        #z-btn.active, #z-btn:hover { background-color: #22d3ee; color: white; }
+        
+        .slider-container {
+            display: none; /* Hidden by default */
+            position: absolute;
+            bottom: 120%; /* Position above the button */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(40, 40, 40, 0.9);
+            padding: 1rem;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            width: 200px;
+        }
+        .slider-container.active {
+            display: block;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -6px;
+        }
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #555;
+            border-radius: 2px;
+        }
+        .divider {
+            width: 90%;
+            height: 1px;
+            background-color: rgba(255, 255, 255, 0.2);
+            margin: 0.5rem 0;
+        }
+        .action-btn {
+             position: absolute;
+            bottom: 20px;
+            z-index: 101;
+            padding: 0.5rem 1rem;
+            background-color: rgba(40, 40, 40, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .action-btn:hover {
+            background-color: rgba(60, 60, 60, 0.9);
+        }
+        #reset-btn {
+            right: 20px;
+        }
+        #dof-toggle-container {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            z-index: 101;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            background-color: rgba(40, 40, 40, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        .switch input { 
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider-viz {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #8b5cf6; /* 3DoF color */
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider-viz:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider-viz {
+            background-color: #581c87; /* 6DoF color */
+        }
+        input:checked + .slider-viz:before {
+            -webkit-transform: translateX(20px);
+            -ms-transform: translateX(20px);
+            transform: translateX(20px);
+        }
+        .hidden {
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h1 class="text-xl md:text-2xl font-bold">Quaternions</h1>
+    </div>
+
+    <div id="container"></div>
+
+    <div id="ui-controls">
+        <div class="button-group-wrapper" id="rotation-controls">
+            <!-- Rotation Controls -->
+            <div class="control-group">
+                <button id="i-btn">i</button>
+                <div id="i-slider-container" class="slider-container"><label for="i-slider">i: <span id="i-value">0.00</span></label><input id="i-slider" type="range" min="-1" max="1" value="0" step="0.01"></div>
+            </div>
+            <div class="control-group">
+                <button id="j-btn">j</button>
+                <div id="j-slider-container" class="slider-container"><label for="j-slider">j: <span id="j-value">0.00</span></label><input id="j-slider" type="range" min="-1" max="1" value="0" step="0.01"></div>
+            </div>
+            <div class="control-group">
+                <button id="k-btn">k</button>
+                <div id="k-slider-container" class="slider-container"><label for="k-slider">k: <span id="k-value">0.00</span></label><input id="k-slider" type="range" min="-1" max="1" value="0" step="0.01"></div>
+            </div>
+        </div>
+        
+        <div class="divider"></div>
+
+        <div class="button-group-wrapper" id="position-controls">
+            <!-- Position Controls -->
+            <div class="control-group">
+                <button id="x-btn">x</button>
+                <div id="x-slider-container" class="slider-container"><label for="x-slider">x: <span id="x-value">0.00</span></label><input id="x-slider" type="range" min="-5" max="5" value="0" step="0.1"></div>
+            </div>
+            <div class="control-group">
+                <button id="y-btn">y</button>
+                <div id="y-slider-container" class="slider-container"><label for="y-slider">y: <span id="y-value">0.00</span></label><input id="y-slider" type="range" min="-5" max="5" value="0" step="0.1"></div>
+            </div>
+            <div class="control-group">
+                <button id="z-btn">z</button>
+                <div id="z-slider-container" class="slider-container"><label for="z-slider">z: <span id="z-value">0.00</span></label><input id="z-slider" type="range" min="-5" max="5" value="0" step="0.1"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="dof-toggle-container">
+        <span>3DoF</span>
+        <label class="switch">
+            <input type="checkbox" id="dof-toggle-checkbox" checked>
+            <span class="slider-viz"></span>
+        </label>
+        <span>6DoF</span>
+    </div>
+    <button id="reset-btn" class="action-btn">Reset</button>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { DragControls } from 'three/addons/controls/DragControls.js';
+
+        let camera, scene, renderer;
+        let sphere, controls, rotationAxisHelper;
+        let quaternion = new THREE.Quaternion();
+        let is6DoF = true; // State to track mode
+
+        let formulaMesh, formulaCanvas, formulaContext, formulaTexture;
+        let resizeHandle, raycaster, mouse;
+        let isResizing = false;
+        let initialScale = new THREE.Vector3();
+        let initialMouseNDC = new THREE.Vector2();
+        let dragControls;
+
+
+        // Sliders
+        const sliders = {
+            i: document.getElementById('i-slider'),
+            j: document.getElementById('j-slider'),
+            k: document.getElementById('k-slider'),
+            x: document.getElementById('x-slider'),
+            y: document.getElementById('y-slider'),
+            z: document.getElementById('z-slider'),
+        };
+
+        // Value Spans
+        const valueSpans = {
+            i: document.getElementById('i-value'),
+            j: document.getElementById('j-value'),
+            k: document.getElementById('k-value'),
+            x: document.getElementById('x-value'),
+            y: document.getElementById('y-value'),
+            z: document.getElementById('z-value'),
+        };
+        
+        // UI Elements
+        const sliderContainers = {
+            i: document.getElementById('i-slider-container'), j: document.getElementById('j-slider-container'), k: document.getElementById('k-slider-container'),
+            x: document.getElementById('x-slider-container'), y: document.getElementById('y-slider-container'), z: document.getElementById('z-slider-container'),
+        };
+        const buttons = {
+            i: document.getElementById('i-btn'), j: document.getElementById('j-btn'), k: document.getElementById('k-btn'),
+            x: document.getElementById('x-btn'), y: document.getElementById('y-btn'), z: document.getElementById('z-btn'),
+        };
+        
+        const iColor = 0x581c87, jColor = 0x8b5cf6, kColor = 0x22d3ee;
+        
+        // Wait until the HTML is fully loaded to run the script
+        window.addEventListener('DOMContentLoaded', () => {
+            init();
+            animate();
+        });
+
+
+        function init() {
+            const dofToggleCheckbox = document.getElementById('dof-toggle-checkbox');
+            const positionControls = document.getElementById('position-controls');
+            const divider = document.querySelector('.divider');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+
+            const container = document.getElementById('container');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            container.appendChild(renderer.domElement);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(10, 10, 10); // Zoomed out camera
+            camera.lookAt(scene.position);
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.0);
+            scene.add(ambientLight);
+
+            const gridHelper = new THREE.GridHelper(12, 12, 0x444444, 0x222222);
+            scene.add(gridHelper);
+
+            const axisLength = 4;
+            
+            scene.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), axisLength, iColor));
+            scene.add(new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0), axisLength, jColor));
+            scene.add(new THREE.ArrowHelper(new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, 0), axisLength, kColor));
+
+            rotationAxisHelper = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0), axisLength * 1.2, 0xffffff, 0.4, 0.2);
+            rotationAxisHelper.visible = false;
+            scene.add(rotationAxisHelper);
+            
+            const iLabel = createTextSprite('i', { color: `#${iColor.toString(16)}` });
+            iLabel.position.set(axisLength + 0.5, 0, 0); scene.add(iLabel);
+            const jLabel = createTextSprite('j', { color: `#${jColor.toString(16)}` });
+            jLabel.position.set(0, axisLength + 0.5, 0); scene.add(jLabel);
+            const kLabel = createTextSprite('k', { color: `#${kColor.toString(16)}` });
+            kLabel.position.set(0, 0, axisLength + 0.5); scene.add(kLabel);
+            
+            const sphereGeometry = new THREE.SphereGeometry(2, 32, 16);
+            const northPole = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 8), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
+            northPole.position.y = 2;
+            const southPole = new THREE.Mesh(new THREE.SphereGeometry(0.1, 16, 8), new THREE.MeshBasicMaterial({ color: 0x0000ff }));
+            southPole.position.y = -2;
+            const wireframeSphere = new THREE.Mesh(sphereGeometry, new THREE.MeshBasicMaterial({ color: 0xffd700, wireframe: true }));
+            
+            sphere = new THREE.Group();
+            sphere.add(wireframeSphere);
+            sphere.add(northPole);
+            sphere.add(southPole);
+            sphere.scale.set(0.40, 0.40, 0.40);
+            scene.add(sphere);
+
+            // --- 3D Formula Setup ---
+            formulaCanvas = document.createElement('canvas');
+            formulaCanvas.width = 2048;
+            formulaCanvas.height = 256;
+            formulaContext = formulaCanvas.getContext('2d');
+            formulaTexture = new THREE.CanvasTexture(formulaCanvas);
+            
+            const formulaMaterial = new THREE.MeshBasicMaterial({ map: formulaTexture, transparent: true });
+            const formulaGeometry = new THREE.PlaneGeometry(7, 7 * (formulaCanvas.height / formulaCanvas.width));
+            formulaMesh = new THREE.Mesh(formulaGeometry, formulaMaterial);
+            formulaMesh.position.set(0, 6.5, 0);
+            scene.add(formulaMesh);
+
+            // --- Resize Handle ---
+            const handleGeometry = new THREE.BoxGeometry(0.25, 0.25, 0.25);
+            const handleMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            resizeHandle = new THREE.Mesh(handleGeometry, handleMaterial);
+            resizeHandle.position.set(
+                formulaGeometry.parameters.width / 2,
+                -formulaGeometry.parameters.height / 2,
+                0.01
+            );
+            formulaMesh.add(resizeHandle);
+
+            // --- Controls ---
+            dragControls = new DragControls([formulaMesh], camera, renderer.domElement);
+            dragControls.addEventListener('dragstart', () => { if (!isResizing) controls.enabled = false; });
+            dragControls.addEventListener('dragend', () => { if (!isResizing) controls.enabled = true; });
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+            
+            renderer.domElement.addEventListener('mousedown', onMouseDown, false);
+            renderer.domElement.addEventListener('mousemove', onMouseMove, false);
+            renderer.domElement.addEventListener('mouseup', onMouseUp, false);
+
+            Object.values(sliders).forEach(slider => slider.addEventListener('input', updateTransforms));
+            Object.keys(buttons).forEach(key => buttons[key].addEventListener('click', () => toggleSlider(key)));
+            
+            document.getElementById('reset-btn').addEventListener('click', resetControls);
+            dofToggleCheckbox.addEventListener('change', () => toggleDoF(dofToggleCheckbox, positionControls, divider));
+
+            window.addEventListener('resize', onWindowResize);
+            updateTransforms();
+        }
+
+        function onMouseDown(event) {
+            event.preventDefault();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(resizeHandle);
+
+            if (intersects.length > 0) {
+                isResizing = true;
+                controls.enabled = false;
+                dragControls.deactivate();
+                initialScale.copy(formulaMesh.scale);
+                initialMouseNDC.copy(mouse);
+            }
+        }
+
+        function onMouseMove(event) {
+            if (!isResizing) return;
+            event.preventDefault();
+            const currentMouseNDC = new THREE.Vector2(
+                (event.clientX / window.innerWidth) * 2 - 1,
+                -(event.clientY / window.innerHeight) * 2 + 1
+            );
+            
+            const deltaX = currentMouseNDC.x - initialMouseNDC.x;
+            const scaleFactor = 1 + deltaX * 2.5; // Sensitivity multiplier
+
+            const newScaleX = initialScale.x * scaleFactor;
+            const newScaleY = initialScale.y * scaleFactor;
+
+            if (newScaleX > 0.1 && newScaleY > 0.1) {
+                formulaMesh.scale.set(newScaleX, newScaleY, 1);
+            }
+        }
+
+        function onMouseUp(event) {
+            if (isResizing) {
+                isResizing = false;
+                controls.enabled = true;
+                dragControls.activate();
+            }
+        }
+
+        function toggleDoF(checkbox, positionControls, divider) {
+            is6DoF = checkbox.checked;
+            if (is6DoF) {
+                positionControls.classList.remove('hidden');
+                divider.classList.remove('hidden');
+            } else {
+                positionControls.classList.add('hidden');
+                divider.classList.add('hidden');
+                sliders.x.value = 0; sliders.y.value = 0; sliders.z.value = 0;
+            }
+            Object.values(sliderContainers).forEach(container => container.classList.remove('active'));
+            Object.values(buttons).forEach(button => button.classList.remove('active'));
+            updateTransforms();
+        }
+        
+        function createTextSprite(text, { fontsize = 64, fontface = "Arial", color = "#FFFFFF" } = {}) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 128; canvas.height = 128;
+            context.font = `Bold ${fontsize}px ${fontface}`;
+            context.fillStyle = color;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.Texture(canvas);
+            texture.needsUpdate = true;
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(1.0, 1.0, 1.0);
+            return sprite;
+        }
+
+        function toggleSlider(activeKey) {
+            Object.keys(sliderContainers).forEach(key => {
+                const isActive = key === activeKey;
+                const container = sliderContainers[key];
+                const button = buttons[key];
+                const shouldBeActive = isActive && !container.classList.contains('active');
+                container.classList.toggle('active', shouldBeActive);
+                button.classList.toggle('active', shouldBeActive);
+            });
+        }
+        
+        function resetControls() {
+            Object.values(sliders).forEach(slider => slider.value = 0);
+            Object.values(sliderContainers).forEach(container => container.classList.remove('active'));
+            Object.values(buttons).forEach(button => button.classList.remove('active'));
+            formulaMesh.scale.set(1, 1, 1); // Reset formula scale
+            updateTransforms();
+        }
+
+        function updateTransforms() {
+            const x_rot = parseFloat(sliders.i.value);
+            const y_rot = parseFloat(sliders.j.value);
+            const z_rot = parseFloat(sliders.k.value);
+            valueSpans.i.textContent = x_rot.toFixed(2);
+            valueSpans.j.textContent = y_rot.toFixed(2);
+            valueSpans.k.textContent = z_rot.toFixed(2);
+            
+            const rotationAxisVector = new THREE.Vector3(x_rot, y_rot, z_rot);
+            const magnitudeSq = rotationAxisVector.lengthSq();
+
+            if (magnitudeSq < 0.0001) {
+                rotationAxisHelper.visible = false;
+            } else {
+                const vectorLength = Math.sqrt(magnitudeSq);
+                const direction = rotationAxisVector.clone().normalize();
+                rotationAxisHelper.setDirection(direction);
+                const headLength = vectorLength * 0.2;
+                const headWidth = headLength * 0.5;
+                rotationAxisHelper.setLength(vectorLength, headLength, headWidth);
+                rotationAxisHelper.visible = true;
+            }
+
+            const L = x_rot*x_rot + y_rot*y_rot + z_rot*z_rot;
+            let w = (L < 1.0) ? Math.sqrt(1.0 - L) : 0;
+            quaternion.set(x_rot, y_rot, z_rot, w).normalize();
+            sphere.setRotationFromQuaternion(quaternion);
+            updateFormula(quaternion.w, quaternion.x, quaternion.y, quaternion.z);
+
+            let x_pos = 0, y_pos = 0, z_pos = 0;
+            if (is6DoF) {
+                x_pos = parseFloat(sliders.x.value);
+                y_pos = parseFloat(sliders.y.value);
+                z_pos = parseFloat(sliders.z.value);
+            }
+            valueSpans.x.textContent = x_pos.toFixed(2);
+            valueSpans.y.textContent = y_pos.toFixed(2);
+            valueSpans.z.textContent = z_pos.toFixed(2);
+            sphere.position.set(x_pos, y_pos, z_pos);
+            rotationAxisHelper.position.copy(sphere.position);
+        }
+
+        function updateFormula(w, x, y, z) {
+            const wStr = `q = ${w.toFixed(3)}`;
+            const xStr = ` ${x >= 0 ? '+' : '-'} ${Math.abs(x).toFixed(3)}i`;
+            const yStr = ` ${y >= 0 ? '+' : '-'} ${Math.abs(y).toFixed(3)}j`;
+            const zStr = ` ${z >= 0 ? '+' : '-'} ${Math.abs(z).toFixed(3)}k`;
+            const font = 'bold 96px Inter, sans-serif';
+            formulaContext.font = font;
+            const wWidth = formulaContext.measureText(wStr).width;
+            const xWidth = formulaContext.measureText(xStr).width;
+            const yWidth = formulaContext.measureText(yStr).width;
+            const zWidth = formulaContext.measureText(zStr).width;
+            const totalWidth = wWidth + xWidth + yWidth + zWidth;
+
+            formulaContext.clearRect(0, 0, formulaCanvas.width, formulaCanvas.height);
+            formulaContext.fillStyle = 'rgba(0, 0, 0, 0.9)';
+            const roundRect = (ctx, x, y, w, h, r) => {
+                ctx.beginPath(); ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+                ctx.quadraticCurveTo(x + w, y, x + w, y + r); ctx.lineTo(x + w, y + h - r);
+                ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h); ctx.lineTo(x + r, y + h);
+                ctx.quadraticCurveTo(x, y + h, x, y + h - r); ctx.lineTo(x, y + r);
+                ctx.quadraticCurveTo(x, y, x + r, y); ctx.closePath(); ctx.fill();
+            };
+            roundRect(formulaContext, 0, 0, formulaCanvas.width, formulaCanvas.height, 40);
+
+            let currentX = (formulaCanvas.width - totalWidth) / 2;
+            const V_CENTER = formulaCanvas.height / 2 + 10;
+            formulaContext.fillStyle = 'white';
+            formulaContext.fillText(wStr, currentX, V_CENTER);
+            currentX += wWidth;
+            formulaContext.fillStyle = `#${iColor.toString(16).padStart(6, '0')}`;
+            formulaContext.fillText(xStr, currentX, V_CENTER);
+            currentX += xWidth;
+            formulaContext.fillStyle = `#${jColor.toString(16).padStart(6, '0')}`;
+            formulaContext.fillText(yStr, currentX, V_CENTER);
+            currentX += yWidth;
+            formulaContext.fillStyle = `#${kColor.toString(16).padStart(6, '0')}`;
+            formulaContext.fillText(zStr, currentX, V_CENTER);
+            formulaTexture.needsUpdate = true;
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            if(formulaMesh) formulaMesh.lookAt(camera.position);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+    </script>
+</body>
+</html>
+

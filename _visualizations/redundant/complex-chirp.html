@@ -1,0 +1,231 @@
+---
+date: 2025-08-27
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive 4D Complex Chirp Visualization</title>
+    <style>
+        body { margin: 0; background-color: #111827; color: #e5e7eb; font-family: 'Inter', sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            padding: 1rem;
+            pointer-events: none;
+        }
+        #info h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+        }
+        #info p {
+            margin: 0 auto;
+            max-width: 600px;
+            color: #9ca3af;
+            font-size: 0.875rem;
+        }
+        /* NEW: Styles for the slider controls */
+        #controls-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(31, 41, 55, 0.8);
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            z-index: 101;
+        }
+        #controls-container label {
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        #controls-container input[type="range"] {
+            width: 200px;
+        }
+        #frequency-value {
+            font-weight: bold;
+            min-width: 40px;
+            text-align: center;
+            background-color: #111827;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="info">
+        <h1>Complex Plane with Increasing Frequency</h1>
+        <p>A 4D concept in 3D. The Z-axis represents frequency, which increases from back (blue) to front (red), causing the spiral to get tighter.</p>
+    </div>
+
+    <!-- NEW: HTML for the slider -->
+    <div id="controls-container">
+        <label for="frequency-slider">End Frequency:</label>
+        <input type="range" id="frequency-slider" min="1" max="30" value="10" step="0.5">
+        <span id="frequency-value">10.0</span>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // === Basic Scene Setup ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(8, 6, 8);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+        
+        const axesHelper = new THREE.AxesHelper(5);
+        scene.add(axesHelper);
+
+        function createAxisLabel(text, position, color = '#e5e7eb', size = 48) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = `Bold ${size}px Inter, sans-serif`;
+            const textMetrics = context.measureText(text);
+            canvas.width = textMetrics.width;
+            canvas.height = size * 1.5;
+            context.font = `Bold ${size}px Inter, sans-serif`;
+            context.fillStyle = color;
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(canvas.width / 100, canvas.height / 100, 1.0);
+            sprite.position.copy(position);
+            return sprite;
+        }
+
+        const realLabel = createAxisLabel('x', new THREE.Vector3(5.5, 0, 0), '#e5e7eb', 30);
+        scene.add(realLabel);
+        const imaginaryLabel = createAxisLabel('i', new THREE.Vector3(0, 5.5, 0), '#e5e7eb', 30);
+        scene.add(imaginaryLabel);
+        const frequencyLabel = createAxisLabel('Hz', new THREE.Vector3(0, 0, 5.5), '#e5e7eb', 30);
+        scene.add(frequencyLabel);
+
+        // === Interactive Chirp Spiral ===
+        
+        let chirpHelix; // This will hold our 3D mesh
+
+        // NEW: Function to generate (or regenerate) the chirp helix
+        function regenerateChirp(startTurns, endTurns) {
+            // If a helix already exists, remove it and clean up memory
+            if (chirpHelix) {
+                scene.remove(chirpHelix);
+                chirpHelix.geometry.dispose();
+                chirpHelix.material.dispose();
+            }
+
+            // 1. Define the custom curve with the new frequency
+            class ChirpCurve extends THREE.Curve {
+                constructor(scale = 1, start = 0.5, end = 10) {
+                    super();
+                    this.scale = scale;
+                    this.startTurns = start;
+                    this.endTurns = end;
+                }
+                getPoint(t) {
+                    const totalTurns = this.startTurns * t + (this.endTurns - this.startTurns) * t * t;
+                    const angle = 2 * Math.PI * totalTurns;
+                    const x = Math.cos(angle);
+                    const y = Math.sin(angle);
+                    const z = this.scale * t;
+                    return new THREE.Vector3(x, y, z);
+                }
+            }
+
+            const path = new ChirpCurve(10, startTurns, endTurns);
+            const geometry = new THREE.TubeGeometry(path, 500, 0.1, 8, false);
+
+            // 2. Add vertex colors
+            const colors = [];
+            const colorA = new THREE.Color(0x3b82f6); // Blue
+            const colorB = new THREE.Color(0xef4444); // Red
+            for (let i = 0; i < geometry.attributes.position.count; i++) {
+                const t = i / geometry.attributes.position.count;
+                const color = colorA.clone().lerp(colorB, t);
+                colors.push(color.r, color.g, color.b);
+            }
+            geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+            // 3. Create material and mesh
+            const material = new THREE.MeshPhongMaterial({
+                side: THREE.DoubleSide,
+                vertexColors: true,
+                shininess: 50
+            });
+
+            chirpHelix = new THREE.Mesh(geometry, material);
+            chirpHelix.position.z = -5; // Center the helix
+            scene.add(chirpHelix);
+        }
+
+        // === Event Listeners for the Slider ===
+        const slider = document.getElementById('frequency-slider');
+        const frequencyValueSpan = document.getElementById('frequency-value');
+
+        slider.addEventListener('input', (event) => {
+            const newEndFrequency = parseFloat(event.target.value);
+            // Update the text display
+            frequencyValueSpan.textContent = newEndFrequency.toFixed(1);
+            // Regenerate the 3D model with the new value
+            regenerateChirp(0.5, newEndFrequency);
+        });
+
+        // === Initial Generation ===
+        regenerateChirp(0.5, parseFloat(slider.value));
+
+        // === Animation Loop ===
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // === Window Resize Handler ===
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

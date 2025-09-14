@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Radon Transform & Back-Projection</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712; /* bg-gray-950 */
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px; /* Collapsed */
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        .formula-placeholder {
+            font-family: 'Georgia', serif;
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            color: #d1d5db;
+            border: 1px solid #374151;
+        }
+        .formula-placeholder h4 { font-size: 1.1em; font-weight: bold; color: #a5b4fc; margin-bottom: 0.5rem; }
+        .formula-placeholder code { font-size: 1.2rem; display: block; text-align: center; padding: 0.5rem; background-color: #111827; border-radius: 4px; }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.25rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu {
+            display: flex;
+            gap: 10px;
+        }
+        .menu-button, .preset-button, .toggle-button, .action-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s, opacity 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .menu-button:hover, .preset-button:hover, .toggle-button:hover, .action-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button:disabled, .preset-button:disabled, .toggle-button:disabled, .action-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            background-color: rgba(55, 65, 81, 0.8);
+        }
+        .menu-button.active, .preset-button.active, .toggle-button.active, .action-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        .action-button.primary {
+            background-color: #4f46e5;
+        }
+        .action-button.primary:hover:not(:disabled) {
+            background-color: #6366f1;
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #818cf8;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+
+        #settings-button, #fullscreen-button {
+            position: absolute;
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #settings-button {
+            top: 80px;
+            right: 20px;
+            z-index: 11;
+        }
+        #fullscreen-button {
+            bottom: 120px;
+            right: 20px;
+            z-index: 11;
+        }
+        #settings-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px) rotate(45deg);
+        }
+        #fullscreen-button:hover {
+             background-color: #4338ca;
+            transform: translateY(-2px) scale(1.1);
+        }
+        #settings-panel {
+            top: 80px;
+            right: 0;
+            width: 300px;
+            max-width: 90vw;
+            border-radius: 12px 0 0 12px;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            padding-right: 2rem; 
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            z-index: 12;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+        }
+        #close-settings {
+            font-size: 2.5rem;
+            line-height: 1;
+            padding: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        body.fullscreen-active header,
+        body.fullscreen-active #info-panel {
+            display: none !important;
+        }
+        body.fullscreen-active #controls-panel,
+        body.fullscreen-active #settings-button,
+        body.fullscreen-active #fullscreen-button {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        body.fullscreen-active #controls-panel.show-on-hover,
+        body.fullscreen-active #settings-button.show-on-hover,
+        body.fullscreen-active #fullscreen-button.show-on-hover {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+        .mobile-menu-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 16px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .mobile-menu-item:hover {
+            background-color: #4338ca;
+        }
+        .mobile-menu-item.active {
+            background-color: #4f46e5;
+            font-weight: bold;
+        }
+        #mobile-menu-container { display: none; }
+
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            header h1 { font-size: 1.125rem; }
+            #menu { display: none !important; }
+            #mobile-menu-container { display: block; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; width: auto; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #settings-panel { top: 70px; width: 280px; max-height: calc(100vh - 80px);}
+            #controls-panel { padding: 0.75rem; gap: 0.75rem; justify-content: space-around; flex-direction: column; }
+            .control-group { gap: 0.25rem; }
+            #controls-panel .text-3xl { font-size: 1.5rem; }
+            #controls-panel label, #controls-panel .text-sm, #controls-panel .text-xs { font-size: 0.75rem; }
+            input[type="range"]::-webkit-slider-thumb { width: 24px; height: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-gray-950 bg-opacity-80 flex flex-col items-center justify-center z-50 transition-opacity duration-300 ease-in-out">
+        <div class="loader rounded-full h-32 w-32 mb-4"></div>
+        <p id="loading-text" class="text-xl text-gray-300 font-medium">Loading...</p>
+    </div>
+
+    <header>
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider opacity-90">3D Tomography Visualizer</h1>
+        <div id="menu"></div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+        </div>
+    </header>
+
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400">Welcome!</h2>
+            <div id="toggle-icon" class="text-indigo-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+        </div>
+        <div id="info-content" class="pt-4 space-y-3">
+             <p id="info-description" class="text-gray-300"></p>
+             <div id="info-placeholder" class="space-y-4"></div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+   
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+   
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+   
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6 sticky top-0 bg-inherit z-10 py-2">
+            <h3 class="text-xl font-bold text-gray-200">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white transition-colors">&times;</button>
+        </div>
+        <div class="space-y-6">
+             <div class="control-group text-left w-full">
+                <label for="graphics-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Graphics Quality:</span>
+                    <span id="graphics-quality-value">High</span>
+                </label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+                 <div class="text-xs text-gray-500 w-full flex justify-between mt-1">
+                     <span>Low</span>
+                     <span>Native</span>
+                     <span>High</span>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    let scene, camera, renderer, controls, clock;
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {};
+    let currentCleanup = () => {};
+    let currentSceneKey = null;
+
+    const scenes = {
+        radon_transform: {
+            title: '3D Radon Transform',
+            description: `This visualization demonstrates the principles of Computed Tomography (CT). A 3D "phantom" object is scanned from multiple angles to create 2D projections (the Radon Transform). These projections are then "back-projected" to reconstruct the original 3D object. You can switch between a simple back-projection and a more accurate filtered back-projection.`,
+            init: initRadonTransform,
+        },
+        starfield: {
+            title: 'Starfield',
+            description: 'A simple, dynamic starfield background.',
+            init: initStarfield,
+        },
+    };
+
+    function showLoader(message = 'Loading...') {
+        document.getElementById('loading-text').textContent = message;
+        document.getElementById('loading-overlay').classList.remove('hidden');
+    }
+    function hideLoader() {
+        document.getElementById('loading-overlay').classList.add('hidden');
+    }
+
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 7, 22);
+       
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(10, 10, 10);
+        scene.add(dirLight);
+
+        scene.add(activeSceneObjects);
+
+        createMenu();
+        setupMobileMenu();
+        setupInfoPanel();
+        setupSettingsPanel();
+        setupFullscreen();
+       
+        switchScene('radon_transform');
+
+        window.addEventListener('resize', onWindowResize, false);
+        renderer.setAnimationLoop(animate);
+    }
+
+    function switchScene(key) {
+        showLoader('Switching View...');
+
+        setTimeout(() => {
+            if(currentCleanup) currentCleanup();
+
+            while(activeSceneObjects.children.length > 0) { 
+                const obj = activeSceneObjects.children[0];
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                        obj.material.forEach(m => {
+                            if (m.map) m.map.dispose();
+                            m.dispose();
+                        });
+                    } else {
+                        if (obj.material.map) obj.material.map.dispose();
+                        obj.material.dispose();
+                    }
+                }
+                activeSceneObjects.remove(obj); 
+            }
+            document.getElementById('controls-panel').innerHTML = '';
+
+            const sceneData = scenes[key];
+            document.getElementById('info-title').textContent = sceneData.title;
+            document.getElementById('info-description').textContent = sceneData.description;
+            
+            if (currentSceneKey) {
+                document.getElementById(`btn-${currentSceneKey}`)?.classList.remove('active');
+                document.getElementById(`mobile-btn-${currentSceneKey}`)?.classList.remove('active');
+            }
+            document.getElementById(`btn-${key}`).classList.add('active');
+            document.getElementById(`mobile-btn-${key}`)?.classList.add('active');
+            document.getElementById('mobile-menu-label').textContent = sceneData.title;
+
+            currentSceneKey = key;
+            const result = sceneData.init();
+            currentUpdate = result.update || (() => {});
+            currentCleanup = result.cleanup || (() => {});
+
+            hideLoader();
+        }, 50);
+    }
+
+    // --- Scene Definitions ---
+    function initRadonTransform() {
+        camera.position.set(0, 7, 22);
+        controls.target.set(0, 0, 0);
+
+        const infoPlaceholder = document.getElementById('info-placeholder');
+        infoPlaceholder.innerHTML = `
+            <div class="formula-placeholder">
+                <h4>3D Radon Transform</h4>
+                <code>R(p, n) = ∫ f(x) δ(x·n - p) dx</code>
+            </div>
+            <div class="formula-placeholder">
+                <h4>Filtered Back-Projection</h4>
+                <code>f(x) ≈ B( H * R(f) )</code>
+            </div>
+        `;
+        
+        const BOX_SIZE = 7;
+        const PROJECTION_RESOLUTION = 64;
+        const VOLUME_RESOLUTION = 32;
+        let isAnimating = false;
+        let projectionData = [];
+        let volumeMesh = null;
+        let viewMode = 'process';
+        let rayStyle = 'waves'; // 'waves' or 'lines'
+
+        let waveParticles, rayLines;
+        let waveSettings = { density: 15, speed: 20 };
+
+        let reconstructionGroup = new THREE.Group();
+        reconstructionGroup.position.x = 8;
+        activeSceneObjects.add(reconstructionGroup);
+        const reconBox = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE)), 0x4f46e5);
+        reconstructionGroup.add(reconBox);
+
+        let phantomGroup = new THREE.Group();
+        phantomGroup.position.x = -8;
+        activeSceneObjects.add(phantomGroup);
+        const phantomBox = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE)), 0x9ca3af);
+        phantomGroup.add(phantomBox);
+
+        const phantomMaterial = new THREE.MeshPhongMaterial({ color: 0xe5e7eb, transparent: true, opacity: 0.3, side: THREE.DoubleSide });
+        const sphere = new THREE.Mesh(new THREE.SphereGeometry(BOX_SIZE / 4, 32, 32), phantomMaterial);
+        phantomGroup.add(sphere);
+        const cube = new THREE.Mesh(new THREE.BoxGeometry(BOX_SIZE / 3, BOX_SIZE / 3, BOX_SIZE / 3), phantomMaterial);
+        cube.position.set(BOX_SIZE / 6, BOX_SIZE / 6, 0);
+        phantomGroup.add(cube);
+        
+        const scannerGroup = new THREE.Group();
+        scannerGroup.position.x = phantomGroup.position.x;
+        activeSceneObjects.add(scannerGroup);
+
+        const sourcePlane = new THREE.Mesh(
+            new THREE.PlaneGeometry(BOX_SIZE * 1.2, BOX_SIZE * 1.2),
+            new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
+        );
+        sourcePlane.position.z = BOX_SIZE / 2 + 0.5;
+        scannerGroup.add(sourcePlane);
+
+        const detectorMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+        const detectorGeom = new THREE.BoxGeometry(0.1, BOX_SIZE * 1.2, 0.1);
+        const detectorLine = new THREE.Mesh(detectorGeom, detectorMat);
+        detectorLine.position.z = -(BOX_SIZE / 2 + 0.5);
+        scannerGroup.add(detectorLine);
+        
+        const projectionContainer = new THREE.Group();
+        activeSceneObjects.add(projectionContainer);
+
+        const projCanvas = document.createElement('canvas');
+        projCanvas.width = PROJECTION_RESOLUTION;
+        projCanvas.height = PROJECTION_RESOLUTION;
+        const projCtx = projCanvas.getContext('2d');
+        const projTexture = new THREE.CanvasTexture(projCanvas);
+        const projMaterial = new THREE.MeshBasicMaterial({ map: projTexture, side: THREE.DoubleSide });
+        const projPlane = new THREE.Mesh(new THREE.PlaneGeometry(BOX_SIZE, BOX_SIZE), projMaterial);
+        projectionContainer.add(projPlane);
+
+        let projectionCount = 0;
+        let useFiltered = true;
+
+        const backProjectionShader = {
+            uniforms: { 'tDiffuse': { value: null }, 'uOpacity': { value: 0.1 }, 'uInvert': { value: 0.0 } },
+            vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+            fragmentShader: `uniform sampler2D tDiffuse; uniform float uOpacity; uniform float uInvert; varying vec2 vUv; void main() { vec4 color = texture2D(tDiffuse, vUv); vec3 invertedColor = vec3(1.0) - color.rgb; gl_FragColor = vec4(mix(color.rgb, invertedColor, uInvert), color.a * uOpacity); }`
+        };
+
+
+        function acquireProjection(angleDeg) {
+            const angleRad = (angleDeg / 180) * Math.PI;
+
+            const originalRotation = phantomGroup.rotation.y;
+            phantomGroup.rotation.y = -angleRad;
+
+            projCtx.fillStyle = '#000000';
+            projCtx.fillRect(0, 0, PROJECTION_RESOLUTION, PROJECTION_RESOLUTION);
+            const imageData = projCtx.getImageData(0, 0, PROJECTION_RESOLUTION, PROJECTION_RESOLUTION);
+            const data = imageData.data;
+            
+            const raycaster = new THREE.Raycaster();
+            const startPoint = new THREE.Vector3();
+            const direction = new THREE.Vector3(0, 0, -1);
+
+            for (let y = 0; y < PROJECTION_RESOLUTION; y++) {
+                for (let x = 0; x < PROJECTION_RESOLUTION; x++) {
+                    const u = (x / PROJECTION_RESOLUTION - 0.5) * BOX_SIZE;
+                    const v = (y / PROJECTION_RESOLUTION - 0.5) * BOX_SIZE;
+                    startPoint.set(phantomGroup.position.x + u, v, BOX_SIZE);
+                    raycaster.set(startPoint, direction);
+                    const intersects = raycaster.intersectObjects(phantomGroup.children, true);
+                    let totalDistance = 0;
+                    for (let i = 0; i < intersects.length; i += 2) {
+                        if (intersects[i+1]) totalDistance += Math.abs(intersects[i].distance - intersects[i+1].distance);
+                    }
+                    const intensity = Math.min(255, (totalDistance / BOX_SIZE) * 255 * 3);
+                    const index = (y * PROJECTION_RESOLUTION + x) * 4;
+                    data[index] = data[index + 1] = data[index + 2] = intensity;
+                    data[index + 3] = 255;
+                }
+            }
+            
+            phantomGroup.rotation.y = originalRotation;
+
+            let finalImageData = useFiltered ? applyFilter(imageData) : imageData;
+            projCtx.putImageData(finalImageData, 0, 0);
+            projTexture.needsUpdate = true;
+            
+            projectionData.push({ angle: angleRad, data: finalImageData });
+
+            const backProjTexture = new THREE.CanvasTexture(projCtx.canvas);
+            const backProjMat = new THREE.ShaderMaterial({
+                uniforms: THREE.UniformsUtils.clone(backProjectionShader.uniforms),
+                vertexShader: backProjectionShader.vertexShader,
+                fragmentShader: backProjectionShader.fragmentShader,
+                transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+            });
+            backProjMat.uniforms.tDiffuse.value = backProjTexture;
+            backProjMat.uniforms.uInvert.value = document.getElementById('invert-result-toggle').classList.contains('active') ? 1.0 : 0.0;
+            const backProjPlane = new THREE.Mesh(new THREE.PlaneGeometry(BOX_SIZE, BOX_SIZE * Math.sqrt(2)), backProjMat);
+            backProjPlane.rotation.y = -angleRad;
+            reconstructionGroup.add(backProjPlane);
+
+            projectionCount++;
+            document.getElementById('proj-count').textContent = projectionCount;
+        }
+
+        function applyFilter(imageData) {
+            const kernel = [ 0, -1,  0, -1,  5, -1, 0, -1,  0 ];
+            const side = Math.round(Math.sqrt(kernel.length));
+            const halfSide = Math.floor(side / 2);
+            const src = imageData.data;
+            const sw = imageData.width;
+            const sh = imageData.height;
+            const output = new ImageData(sw, sh);
+            const dst = output.data;
+
+            for (let y = 0; y < sh; y++) {
+                for (let x = 0; x < sw; x++) {
+                    let r = 0, g = 0, b = 0;
+                    for (let cy = 0; cy < side; cy++) {
+                        for (let cx = 0; cx < side; cx++) {
+                            const scy = Math.min(sh - 1, Math.max(0, y + cy - halfSide));
+                            const scx = Math.min(sw - 1, Math.max(0, x + cx - halfSide));
+                            const srcOff = (scy * sw + scx) * 4;
+                            const wt = kernel[cy * side + cx];
+                            r += src[srcOff] * wt;
+                            g += src[srcOff + 1] * wt;
+                            b += src[srcOff + 2] * wt;
+                        }
+                    }
+                    const dstOff = (y * sw + x) * 4;
+                    dst[dstOff] = r;
+                    dst[dstOff + 1] = g;
+                    dst[dstOff + 2] = b;
+                    dst[dstOff + 3] = 255;
+                }
+            }
+            return output;
+        }
+
+        function resetReconstruction() {
+            isAnimating = false;
+            while (reconstructionGroup.children.length > 1) {
+                const child = reconstructionGroup.children[1];
+                child.geometry.dispose();
+                if(child.material.uniforms && child.material.uniforms.tDiffuse.value) child.material.uniforms.tDiffuse.value.dispose();
+                child.material.dispose();
+                reconstructionGroup.remove(child);
+            }
+            if (volumeMesh) {
+                scene.remove(volumeMesh);
+                volumeMesh.geometry.dispose();
+                volumeMesh.material.uniforms.tVolume.value.dispose();
+                volumeMesh.material.dispose();
+                volumeMesh = null;
+            }
+            projectionCount = 0;
+            projectionData = [];
+            document.getElementById('proj-count').textContent = projectionCount;
+            updateViewMode('process');
+        }
+
+        async function createFinalVolume() {
+            if (projectionData.length === 0) return;
+            showLoader("Reconstructing 3D Volume...");
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            const volData = new Float32Array(VOLUME_RESOLUTION * VOLUME_RESOLUTION * VOLUME_RESOLUTION);
+            let maxVal = 0;
+
+            for (let i = 0; i < projectionData.length; i++) {
+                const proj = projectionData[i];
+                const angle = proj.angle;
+                const sin = Math.sin(angle);
+                const cos = Math.cos(angle);
+                const data = proj.data.data;
+
+                for (let z = 0; z < VOLUME_RESOLUTION; z++) {
+                    for (let y = 0; y < VOLUME_RESOLUTION; y++) {
+                        for (let x = 0; x < VOLUME_RESOLUTION; x++) {
+                            const Px = (x / (VOLUME_RESOLUTION - 1) - 0.5) * BOX_SIZE;
+                            const Py = (y / (VOLUME_RESOLUTION - 1) - 0.5) * BOX_SIZE;
+                            const Pz = (z / (VOLUME_RESOLUTION - 1) - 0.5) * BOX_SIZE;
+
+                            const u = Px * cos + Pz * sin;
+                            const v = Py;
+
+                            if (u >= -BOX_SIZE/2 && u <= BOX_SIZE/2 && v >= -BOX_SIZE/2 && v <= BOX_SIZE/2) {
+                                const projX = Math.floor((u / BOX_SIZE + 0.5) * (PROJECTION_RESOLUTION - 1));
+                                const projY = Math.floor((v / BOX_SIZE + 0.5) * (PROJECTION_RESOLUTION - 1));
+                                const val = data[(projY * PROJECTION_RESOLUTION + projX) * 4] / 255.0;
+                                
+                                const volIndex = z * VOLUME_RESOLUTION * VOLUME_RESOLUTION + y * VOLUME_RESOLUTION + x;
+                                volData[volIndex] += val;
+                                if (volData[volIndex] > maxVal) maxVal = volData[volIndex];
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (maxVal > 0) for (let i = 0; i < volData.length; i++) volData[i] /= maxVal;
+
+            if(volumeMesh) scene.remove(volumeMesh);
+            const texture = new THREE.Data3DTexture(volData, VOLUME_RESOLUTION, VOLUME_RESOLUTION, VOLUME_RESOLUTION);
+            texture.format = THREE.RedFormat;
+            texture.type = THREE.FloatType;
+            texture.minFilter = texture.magFilter = THREE.LinearFilter;
+            texture.unpackAlignment = 1;
+            texture.needsUpdate = true;
+            
+            const volMaterial = new THREE.ShaderMaterial({
+                glslVersion: THREE.GLSL3,
+                uniforms: {
+                    tVolume: { value: texture },
+                    u_size: { value: new THREE.Vector3(VOLUME_RESOLUTION, VOLUME_RESOLUTION, VOLUME_RESOLUTION) },
+                    u_cameraPos: { value: camera.position },
+                    u_invert: { value: document.getElementById('invert-result-toggle').classList.contains('active') ? 1.0 : 0.0 },
+                },
+                vertexShader: `
+                    out vec3 v_rayOrigin;
+                    out vec3 v_rayDirection;
+                    void main() {
+                        vec4 modelPos = modelViewMatrix * vec4(position, 1.0);
+                        v_rayOrigin = (inverse(modelViewMatrix) * vec4(0,0,0,1)).xyz;
+                        v_rayDirection = position - v_rayOrigin;
+                        gl_Position = projectionMatrix * modelPos;
+                    }
+                `,
+                fragmentShader: `
+                    precision highp float;
+                    precision highp sampler3D;
+                    out vec4 out_FragColor;
+                    in vec3 v_rayOrigin;
+                    in vec3 v_rayDirection;
+                    uniform vec3 u_size;
+                    uniform sampler3D tVolume;
+                    uniform float u_invert;
+                    
+                    vec2 hitBox(vec3 orig, vec3 dir) {
+                        const vec3 box_min = vec3(-0.5);
+                        const vec3 box_max = vec3(0.5);
+                        vec3 inv_dir = 1.0 / dir;
+                        vec3 tmin_tmp = (box_min - orig) * inv_dir;
+                        vec3 tmax_tmp = (box_max - orig) * inv_dir;
+                        vec3 tmin = min(tmin_tmp, tmax_tmp);
+                        vec3 tmax = max(tmin_tmp, tmax_tmp);
+                        float t0 = max(tmin.x, max(tmin.y, tmin.z));
+                        float t1 = min(tmax.x, min(tmax.y, tmax.z));
+                        return vec2(t0, t1);
+                    }
+
+                    void main() {
+                        vec3 rayDir = normalize(v_rayDirection);
+                        vec2 t_hit = hitBox(v_rayOrigin, rayDir);
+                        if (t_hit.x > t_hit.y) discard;
+                        t_hit.x = max(t_hit.x, 0.0);
+                        vec3 dt_vec = 1.0 / (u_size * abs(rayDir));
+                        float dt = min(dt_vec.x, min(dt_vec.y, dt_vec.z));
+                        vec3 p = v_rayOrigin + t_hit.x * rayDir;
+                        vec4 color = vec4(0.0);
+
+                        for (float t = t_hit.x; t < t_hit.y; t += dt) {
+                            float val = texture(tVolume, p + 0.5).r;
+                            if (val > 0.1) {
+                                vec3 val_color = vec3(val);
+                                color.rgb += (1.0 - color.a) * val_color * 0.2;
+                                color.a += (1.0 - color.a) * val * 0.5;
+                            }
+                            if (color.a >= 0.95) break;
+                            p += rayDir * dt;
+                        }
+                        
+                        vec3 final_color = mix(color.rgb, vec3(1.0) - color.rgb, u_invert);
+                        out_FragColor = vec4(final_color, color.a);
+                    }
+                `,
+                transparent: true, side: THREE.BackSide
+            });
+            const volGeometry = new THREE.BoxGeometry(BOX_SIZE, BOX_SIZE, BOX_SIZE);
+            volumeMesh = new THREE.Mesh(volGeometry, volMaterial);
+            volumeMesh.position.copy(reconstructionGroup.position);
+            scene.add(volumeMesh);
+
+            hideLoader();
+            updateViewMode('final');
+        }
+
+        const controlsDiv = document.getElementById('controls-panel');
+        controlsDiv.innerHTML = `
+            <div id="wave-controls" class="flex items-center gap-4">
+                 <div class="control-group">
+                    <label for="wave-density-slider" class="text-sm font-medium">Wave Density: <span id="wave-density-value">15</span></label>
+                    <input id="wave-density-slider" type="range" min="5" max="30" value="15" step="1" class="w-32">
+                </div>
+                <div class="control-group">
+                    <label for="wave-speed-slider" class="text-sm font-medium">Wave Speed: <span id="wave-speed-value">20</span></label>
+                    <input id="wave-speed-slider" type="range" min="5" max="50" value="20" step="1" class="w-32">
+                </div>
+            </div>
+            <div class="control-group">
+                <label for="opacity-slider" class="text-sm font-medium">Object Opacity: <span id="opacity-value">0.3</span></label>
+                <input id="opacity-slider" type="range" min="0" max="1" value="0.3" step="0.05" class="w-32">
+            </div>
+             <div class="h-8 border-l border-gray-600 hidden md:block"></div>
+            <div class="control-group">
+                <label for="angle-slider" class="text-sm font-medium">Projection Angle: <span id="angle-value">0°</span></label>
+                <input id="angle-slider" type="range" min="0" max="360" value="0" step="1" class="w-48">
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="acquire-btn" class="action-button">Acquire</button>
+                <button id="animate-btn" class="action-button">Animate All</button>
+            </div>
+             <div class="h-8 border-l border-gray-600 hidden md:block"></div>
+             <button id="reconstruct-btn" class="action-button primary">Reconstruct 3D Image</button>
+             <div class="flex flex-col gap-2">
+                 <div class="flex items-center gap-3">
+                     <button id="ray-style-toggle" class="toggle-button active">Waves</button>
+                     <button id="filter-toggle" class="toggle-button active">Filtered</button>
+                 </div>
+                 <div class="flex items-center gap-3">
+                     <button id="invert-projection-toggle" class="toggle-button">Invert Projection</button>
+                     <button id="invert-result-toggle" class="toggle-button">Invert Result</button>
+                 </div>
+                <button id="reset-btn" class="action-button w-full">Reset (<span id="proj-count">0</span>)</button>
+             </div>
+        `;
+        
+        const acquireBtn = document.getElementById('acquire-btn');
+        const animateBtn = document.getElementById('animate-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const angleSlider = document.getElementById('angle-slider');
+        const angleValue = document.getElementById('angle-value');
+        const opacitySlider = document.getElementById('opacity-slider');
+        const opacityValue = document.getElementById('opacity-value');
+        const filterToggle = document.getElementById('filter-toggle');
+        const invertProjToggle = document.getElementById('invert-projection-toggle');
+        const invertResultToggle = document.getElementById('invert-result-toggle');
+        const reconstructBtn = document.getElementById('reconstruct-btn');
+        const rayStyleToggle = document.getElementById('ray-style-toggle');
+        const waveControls = document.getElementById('wave-controls');
+        const waveDensitySlider = document.getElementById('wave-density-slider');
+        const waveDensityValue = document.getElementById('wave-density-value');
+        const waveSpeedSlider = document.getElementById('wave-speed-slider');
+        const waveSpeedValue = document.getElementById('wave-speed-value');
+
+        function runAnimation() {
+            if (isAnimating) return;
+            resetReconstruction();
+            isAnimating = true;
+
+            const buttonsToDisable = [acquireBtn, animateBtn, resetBtn, filterToggle, opacitySlider, angleSlider, invertProjToggle, invertResultToggle, reconstructBtn];
+            buttonsToDisable.forEach(btn => btn.disabled = true);
+
+            const totalProjections = 180;
+            let currentProjection = 0;
+
+            function animateStep() {
+                if (!isAnimating || currentProjection >= totalProjections) {
+                    isAnimating = false;
+                    buttonsToDisable.forEach(btn => btn.disabled = false);
+                    createFinalVolume();
+                    return;
+                }
+                const angle = (currentProjection / (totalProjections - 1)) * 360;
+                angleSlider.value = angle;
+                angleSlider.dispatchEvent(new Event('input', { bubbles: true }));
+                acquireProjection(angle);
+                currentProjection++;
+                requestAnimationFrame(animateStep);
+            }
+            animateStep();
+        }
+        
+        function updateViewMode(mode) {
+            viewMode = mode;
+            reconstructionGroup.visible = viewMode === 'process';
+            if (volumeMesh) volumeMesh.visible = viewMode === 'final';
+            reconstructBtn.textContent = viewMode === 'process' ? 'Reconstruct 3D Image' : 'Show Process';
+        }
+
+        acquireBtn.addEventListener('click', () => acquireProjection(parseFloat(angleSlider.value)));
+        resetBtn.addEventListener('click', () => { isAnimating = false; resetReconstruction(); });
+        animateBtn.addEventListener('click', runAnimation);
+        reconstructBtn.addEventListener('click', () => {
+            if (viewMode === 'process') createFinalVolume();
+            else updateViewMode('process');
+        });
+
+        filterToggle.addEventListener('click', (e) => { useFiltered = !useFiltered; e.target.classList.toggle('active', useFiltered); e.target.textContent = useFiltered ? 'Filtered' : 'Simple'; });
+        invertProjToggle.addEventListener('click', (e) => { e.target.classList.toggle('active'); projCanvas.style.filter = e.target.classList.contains('active') ? 'invert(1)' : 'invert(0)'; });
+        invertResultToggle.addEventListener('click', (e) => {
+            e.target.classList.toggle('active');
+            const invertValue = e.target.classList.contains('active') ? 1.0 : 0.0;
+            reconstructionGroup.children.forEach(child => {
+                if (child.material?.uniforms?.uInvert) child.material.uniforms.uInvert.value = invertValue;
+            });
+            if (volumeMesh) volumeMesh.material.uniforms.u_invert.value = invertValue;
+        });
+
+        angleSlider.addEventListener('input', (e) => {
+            const angle = parseFloat(e.target.value);
+            angleValue.textContent = `${angle.toFixed(0)}°`;
+            const radAngle = (angle / 180) * Math.PI;
+            projectionContainer.rotation.y = radAngle;
+            scannerGroup.rotation.y = radAngle;
+            if (rayStyle === 'lines') updateRayTrajectories();
+        });
+        opacitySlider.addEventListener('input', (e) => { const opacity = parseFloat(e.target.value); phantomMaterial.opacity = opacity; opacityValue.textContent = opacity.toFixed(2); });
+
+        waveDensitySlider.addEventListener('input', e => {
+            waveSettings.density = parseInt(e.target.value);
+            waveDensityValue.textContent = waveSettings.density;
+            resetWaveParticles();
+        });
+        waveSpeedSlider.addEventListener('input', e => {
+            waveSettings.speed = parseInt(e.target.value);
+            waveSpeedValue.textContent = waveSettings.speed;
+        });
+        
+        function updateRayStyle() {
+            rayStyle = rayStyle === 'waves' ? 'lines' : 'waves';
+            rayStyleToggle.textContent = rayStyle === 'waves' ? 'Waves' : 'Lines';
+            waveControls.style.display = rayStyle === 'waves' ? 'flex' : 'none';
+
+            if (rayStyle === 'waves') {
+                if(!waveParticles) resetWaveParticles();
+                waveParticles.visible = true;
+                if(rayLines) rayLines.visible = false;
+            } else { // lines
+                if(!rayLines) createRayLines();
+                rayLines.visible = true;
+                if(waveParticles) waveParticles.visible = false;
+                updateRayTrajectories();
+            }
+        }
+        rayStyleToggle.addEventListener('click', updateRayStyle);
+
+        function createRayLines() {
+            rayLines = new THREE.LineSegments(
+                new THREE.BufferGeometry(),
+                new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.5 })
+            );
+            scannerGroup.add(rayLines);
+        }
+        
+        function updateRayTrajectories() {
+            if (!rayLines) return;
+            const vertices = [];
+            const colors = [];
+            const colorBefore = new THREE.Color(0x3b82f6);
+            const colorAfter = new THREE.Color(0xf59e0b);
+            const raycaster = new THREE.Raycaster();
+            
+            for (let y = 0; y < waveSettings.density; y++) {
+                for (let x = 0; x < waveSettings.density; x++) {
+                    const u = (x / (waveSettings.density - 1) - 0.5) * BOX_SIZE * 1.1;
+                    const v = (y / (waveSettings.density - 1) - 0.5) * BOX_SIZE * 1.1;
+                    
+                    const startLocal = new THREE.Vector3(u, v, BOX_SIZE / 2 + 0.5);
+                    const endLocal = new THREE.Vector3(u, v, -(BOX_SIZE / 2 + 0.5));
+                    
+                    const startWorld = startLocal.clone().applyMatrix4(scannerGroup.matrixWorld);
+                    const endWorld = endLocal.clone().applyMatrix4(scannerGroup.matrixWorld);
+                    
+                    const direction = endWorld.clone().sub(startWorld).normalize();
+                    raycaster.set(startWorld, direction);
+                    
+                    const intersects = raycaster.intersectObjects(phantomGroup.children, true);
+                    
+                    if (intersects.length > 0) {
+                        const firstHit = scannerGroup.worldToLocal(intersects[0].point.clone());
+                        vertices.push(startLocal.x, startLocal.y, startLocal.z, firstHit.x, firstHit.y, firstHit.z);
+                        colors.push(colorBefore.r, colorBefore.g, colorBefore.b, colorBefore.r, colorBefore.g, colorBefore.b);
+                        
+                        const lastHit = scannerGroup.worldToLocal(intersects[intersects.length - 1].point.clone());
+                        vertices.push(lastHit.x, lastHit.y, lastHit.z, endLocal.x, endLocal.y, endLocal.z);
+                        colors.push(colorAfter.r, colorAfter.g, colorAfter.b, colorAfter.r, colorAfter.g, colorAfter.b);
+                    } else {
+                        vertices.push(startLocal.x, startLocal.y, startLocal.z, endLocal.x, endLocal.y, endLocal.z);
+                        colors.push(colorBefore.r, colorBefore.g, colorBefore.b, colorBefore.r, colorBefore.g, colorBefore.b);
+                    }
+                }
+            }
+            rayLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+            rayLines.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        }
+        
+        function resetWaveParticles() {
+            if (waveParticles) scannerGroup.remove(waveParticles);
+            
+            const numPoints = waveSettings.density * waveSettings.density;
+            const positions = new Float32Array(numPoints * 3);
+            const colors = new Float32Array(numPoints * 3);
+            const color = new THREE.Color(0x3b82f6);
+
+            for(let i=0; i<numPoints; i++){
+                const x = (i % waveSettings.density) / (waveSettings.density - 1) - 0.5;
+                const y = Math.floor(i / waveSettings.density) / (waveSettings.density - 1) - 0.5;
+                positions[i*3] = x * BOX_SIZE * 1.1;
+                positions[i*3+1] = y * BOX_SIZE * 1.1;
+                positions[i*3+2] = BOX_SIZE / 2 + 0.5;
+                color.toArray(colors, i * 3);
+            }
+
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const material = new THREE.PointsMaterial({ size: 0.05, vertexColors: true, transparent: true });
+            waveParticles = new THREE.Points(geometry, material);
+            scannerGroup.add(waveParticles);
+            waveParticles.visible = rayStyle === 'waves';
+        }
+
+        function updateWaves(delta) {
+            if(!waveParticles || !waveParticles.visible) return;
+            const positions = waveParticles.geometry.attributes.position;
+            const colors = waveParticles.geometry.attributes.color;
+            const colorAbsorbed = new THREE.Color(0xf59e0b);
+            const raycaster = new THREE.Raycaster();
+            const direction = new THREE.Vector3(0, 0, -1);
+
+            for (let i = 0; i < positions.count; i++) {
+                positions.array[i*3+2] -= waveSettings.speed * delta;
+
+                if (positions.array[i*3+2] < -(BOX_SIZE / 2 + 0.5)) {
+                    positions.array[i*3+2] = BOX_SIZE / 2 + 0.5; // Reset
+                    colors.setXYZ(i, 0x3b/255, 0x82/255, 0xf6/255); // Reset color
+                }
+                
+                const startPoint = new THREE.Vector3(positions.array[i*3], positions.array[i*3+1], positions.array[i*3+2]).applyMatrix4(scannerGroup.matrixWorld);
+                raycaster.set(startPoint, direction.clone().applyQuaternion(scannerGroup.quaternion));
+                const intersects = raycaster.intersectObjects(phantomGroup.children, true);
+                if (intersects.length > 0 && intersects[0].distance < 0.1) {
+                    colors.setXYZ(i, colorAbsorbed.r, colorAbsorbed.g, colorAbsorbed.b);
+                }
+            }
+            positions.needsUpdate = true;
+            colors.needsUpdate = true;
+        }
+
+        function cleanup() { isAnimating = false; resetReconstruction(); }
+
+        createRayLines();
+        resetWaveParticles();
+        updateRayStyle();
+        
+        return { 
+            update: (delta) => { 
+                if (volumeMesh) volumeMesh.material.uniforms.u_cameraPos.value.copy(camera.position);
+                updateWaves(delta);
+            }, 
+            cleanup 
+        };
+    }
+
+    function initStarfield() {
+        camera.position.set(0, 0, 10);
+        controls.target.set(0,0,0);
+        document.getElementById('info-placeholder').innerHTML = ``;
+        const starCount = 10000;
+        const vertices = [];
+        for (let i = 0; i < starCount; i++) {
+            vertices.push(THREE.MathUtils.randFloatSpread(1000), THREE.MathUtils.randFloatSpread(1000), THREE.MathUtils.randFloatSpread(1000));
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true });
+        const stars = new THREE.Points(geometry, material);
+        activeSceneObjects.add(stars);
+        document.getElementById('controls-panel').innerHTML = `<div class="text-lg text-gray-400">A dynamic starfield background.</div>`;
+        return { update: (delta) => { stars.rotation.y += delta * 0.05; }, cleanup: () => {} };
+    }
+   
+    // --- UI & CORE SYSTEM SETUP (Boilerplate) ---
+
+    function createMenu() {
+        const menuDiv = document.getElementById('menu');
+        const mobileMenuDropdown = document.getElementById('mobile-menu-dropdown');
+        menuDiv.innerHTML = '';
+        mobileMenuDropdown.innerHTML = '';
+        Object.keys(scenes).forEach(key => {
+            const sceneTitle = scenes[key].title;
+            const desktopButton = document.createElement('button');
+            desktopButton.id = `btn-${key}`;
+            desktopButton.className = 'menu-button';
+            desktopButton.textContent = sceneTitle;
+            desktopButton.onclick = () => switchScene(key);
+            menuDiv.appendChild(desktopButton);
+            const mobileButton = document.createElement('button');
+            mobileButton.id = `mobile-btn-${key}`;
+            mobileButton.className = 'mobile-menu-item text-white';
+            mobileButton.textContent = sceneTitle;
+            mobileButton.onclick = () => { switchScene(key); mobileMenuDropdown.classList.add('hidden'); };
+            mobileMenuDropdown.appendChild(mobileButton);
+        });
+    }
+
+    function setupMobileMenu() {
+        const menuButton = document.getElementById('mobile-menu-button');
+        const dropdown = document.getElementById('mobile-menu-dropdown');
+        menuButton.addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('hidden'); });
+        window.addEventListener('click', () => { if (!dropdown.classList.contains('hidden')) dropdown.classList.add('hidden'); });
+    }
+
+    function setupInfoPanel() {
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (e.target.closest('canvas') || e.target.closest('a') || e.target.closest('code')) return;
+            e.currentTarget.classList.toggle('expanded');
+        });
+    }
+
+    function setupFullscreen() {
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; return; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        const handleFullscreenChange = () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+            document.body.classList.toggle('fullscreen-active', isFullscreen);
+            setTimeout(onWindowResize, 100);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+    }
+   
+    function setupSettingsPanel() {
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsButton = document.getElementById('settings-button');
+        const closeSettingsButton = document.getElementById('close-settings');
+        const graphicsSlider = document.getElementById('graphics-slider');
+        const graphicsQualityValue = document.getElementById('graphics-quality-value');
+        
+        function toggleSettingsPanel() {
+            if (settingsPanel.classList.contains('open')) settingsPanel.classList.remove('open');
+            else { settingsPanel.classList.remove('hidden'); requestAnimationFrame(() => settingsPanel.classList.add('open')); }
+        }
+        settingsButton.addEventListener('click', toggleSettingsPanel);
+        closeSettingsButton.addEventListener('click', () => settingsPanel.classList.remove('open'));
+        settingsPanel.addEventListener('transitionend', (e) => {
+            if (e.propertyName === 'transform' && !settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+        
+        graphicsSlider.addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value); renderer.setPixelRatio(quality);
+            if (quality < 0.8) graphicsQualityValue.textContent = "Low";
+            else if (quality < 1.5) graphicsQualityValue.textContent = "Medium";
+            else graphicsQualityValue.textContent = "High";
+        });
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        controls.update(); 
+        if(currentUpdate) currentUpdate(delta); 
+        renderer.render(scene, camera); 
+    }
+   
+    init();
+
+</script>
+</body>
+</html>
+

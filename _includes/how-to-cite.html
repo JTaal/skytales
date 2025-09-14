@@ -1,0 +1,77 @@
+<!-- _includes/how-to-cite.html -->
+<style>
+  .cite-container {
+    position: relative;
+  }
+  .copy-btn {
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
+    background-color: #555;
+    color: white;
+    border: none;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease-in-out;
+  }
+  .copy-btn:hover {
+    background-color: #777;
+  }
+  .copy-btn.copied {
+    background-color: #28a745; /* Green color for success */
+  }
+  .copy-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+  }
+</style>
+
+<div class="pt-4 mt-4">
+  <h2 class="pb-2 border-bottom">How to Cite</h2>
+  <p>If you find the content on this website useful for your research or work, please consider citing it. You can use the following BibTeX entry:</p>
+  
+  <div class="cite-container">
+    <button class="copy-btn" onclick="copyToClipboard('bibtex-code', this)" aria-label="Copy to clipboard">
+      <!-- Initial Copy Icon -->
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    </button>
+    <pre id="bibtex-code" class="bg-dark text-white p-3 rounded-3"><code>@misc{TaalPages{{ "now" | date: "%Y" }},
+  author = {Taal, Jasper},
+  title  = {Math, Statistics and Machine Learning Visualizations & Projects},
+  year   = {2025},
+  url    = {https://jtaal.github.io/}
+}</code></pre>
+  </div>
+</div>
+
+<script>
+// Define the SVG icons as strings
+const copyIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-copy"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-check"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+
+function copyToClipboard(elementId, button) {
+  const text = document.getElementById(elementId).innerText;
+  
+  navigator.clipboard.writeText(text).then(function() {
+    // On success, change the icon and class
+    button.innerHTML = checkIcon;
+    button.classList.add('copied');
+    
+    // After 2 seconds, revert the icon and class
+    setTimeout(() => {
+      button.innerHTML = copyIcon;
+      button.classList.remove('copied');
+    }, 2000);
+
+  }, function(err) {
+    // Log error if copying fails
+    console.error('Could not copy text: ', err);
+  });
+}
+</script>

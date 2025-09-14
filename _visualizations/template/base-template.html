@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal Three.js Scene Template</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px;
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu { display: flex; gap: 10px; }
+        .menu-button, .toggle-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        .menu-button:hover, .toggle-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #4b5563; border-radius: 2px; outline: none;
+            opacity: 0.7; transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; background: #818cf8;
+            cursor: pointer; border-radius: 50%;
+        }
+        .control-group {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+        #settings-button, #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%;
+            cursor: pointer; transition: all 0.3s;
+        }
+        #settings-button { top: 80px; right: 20px; z-index: 11; }
+        #fullscreen-button { bottom: 120px; right: 20px; z-index: 11; }
+        #settings-button:hover { background-color: #4338ca; transform: translateY(-2px) rotate(45deg); }
+        #fullscreen-button:hover { background-color: #4338ca; transform: translateY(-2px) scale(1.1); }
+        #settings-panel {
+            top: 80px; right: 0; width: 300px;
+            max-width: 90vw; border-radius: 12px 0 0 12px;
+            transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            max-height: calc(100vh - 100px); overflow-y: auto; z-index: 12;
+        }
+        #settings-panel.open { transform: translateX(0); }
+        #close-settings { font-size: 2.5rem; line-height: 1; background: none; border: none; cursor: pointer; }
+        
+        /* Mobile adjustments */
+        #mobile-menu-container { display: none; }
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            #menu { display: none !important; }
+            #mobile-menu-container { display: block; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Static HTML Shell for UI Panels -->
+    <header>
+        <h1 class="text-xl font-bold">Project Title</h1>
+        <div id="menu"></div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+        </div>
+    </header>
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400"></h2>
+            <div id="toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="info-content" class="pt-4"><p id="info-description"></p></div>
+    </div>
+    <div id="controls-panel" class="ui-panel"></div>
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">VR Mode</label>
+                <button id="vr-button" class="toggle-button w-full" disabled>Enter VR</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Follow Target</label>
+                <button id="follow-toggle" class="toggle-button">Off</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Animation Speed: <span id="speed-value">1.0x</span></label>
+                <input id="speed-slider" type="range" min="0" max="5" step="0.1" value="1" class="w-full">
+            </div>
+             <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Graphics Quality: <span id="graphics-quality-value">High</span></label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+
+    // =================================================================================================
+    // ||                                   SCENE DEFINITIONS                                         ||
+    // =================================================================================================
+    //
+    // HOW TO USE THIS TEMPLATE:
+    // 1.  ADD YOUR PROJECT to the `scenes` object below.
+    //     - Give it a unique key (e.g., `my_awesome_project`).
+    //     - Provide a `title` and `description` for the UI.
+    //     - Set `init` to the name of your project's setup function (e.g., `initMyAwesomeProject`).
+    //
+    // 2.  CREATE YOUR SETUP FUNCTION (e.g., `function initMyAwesomeProject() { ... }`).
+    //     - Inside, create your 3D objects, UI controls, and define your animation and cleanup logic.
+    //     - Your function MUST return an object with `update` and `cleanup` functions.
+    //     - Example: `return { update, cleanup, followTarget: myMainObject };`
+    //
+    // 3.  The template engine will handle the rest (switching scenes, rendering, UI, etc.).
+    //
+    // =================================================================================================
+
+    const scenes = {
+        scene_one: {
+            title: 'Project One: Rotating Cube',
+            description: 'A simple example showing a rotating cube with a UI control to change its scale.',
+            init: initSceneOne,
+        },
+        scene_two: {
+            title: 'Project Two: Starfield',
+            description: 'A second example demonstrating a particle-based starfield.',
+            init: initSceneTwo,
+        },
+        // --- ADD YOUR NEW SCENE HERE ---
+        // my_awesome_project: {
+        //     title: 'My Awesome Project',
+        //     description: 'This is where I will build something amazing!',
+        //     init: initMyAwesomeProject,
+        // },
+    };
+
+    /**
+     * Example Scene 1: A rotating cube with a scale controller.
+     */
+    function initSceneOne() {
+        // --- 1. CREATE YOUR 3D OBJECTS ---
+        const geometry = new THREE.BoxGeometry(2, 2, 2);
+        const material = new THREE.MeshStandardMaterial({ color: 0x4f46e5, roughness: 0.5 });
+        const cube = new THREE.Mesh(geometry, material);
+        activeSceneObjects.add(cube); // Add your objects to the global `activeSceneObjects` group
+
+        // --- 2. CREATE YOUR UI CONTROLS ---
+        const controlsPanel = document.getElementById('controls-panel');
+        controlsPanel.innerHTML = `
+            <div class="control-group">
+                <label for="scale-slider" class="text-sm font-medium">Cube Scale: <span id="scale-value">1.0</span></label>
+                <input id="scale-slider" type="range" min="0.1" max="3" step="0.1" value="1" class="w-48">
+            </div>
+        `;
+
+        // --- 3. ADD EVENT LISTENERS FOR YOUR CONTROLS ---
+        document.getElementById('scale-slider').addEventListener('input', (e) => {
+            const scale = parseFloat(e.target.value);
+            cube.scale.set(scale, scale, scale);
+            document.getElementById('scale-value').textContent = scale.toFixed(1);
+        });
+
+        // --- 4. DEFINE THE ANIMATION LOGIC FOR THIS SCENE ---
+        function update(delta) {
+            cube.rotation.x += delta * 0.2 * animationSpeed;
+            cube.rotation.y += delta * 0.3 * animationSpeed;
+        }
+
+        // --- 5. DEFINE THE CLEANUP LOGIC FOR THIS SCENE ---
+        function cleanup() {
+            // Dispose of Three.js resources to free up memory
+            geometry.dispose();
+            material.dispose();
+            console.log("Cleaned up Scene One");
+        }
+
+        // --- 6. RETURN THE SCENE OBJECT ---
+        return { 
+            update,         // The function to call every frame
+            cleanup,        // The function to call when switching away from this scene
+            followTarget: cube // (Optional) The object for the "Follow Target" setting to track
+        };
+    }
+
+    /**
+     * Example Scene 2: A simple starfield.
+     */
+    function initSceneTwo() {
+        // --- 1. CREATE YOUR 3D OBJECTS ---
+        const starCount = 5000;
+        const vertices = [];
+        for (let i = 0; i < starCount; i++) {
+            vertices.push(THREE.MathUtils.randFloatSpread(500), THREE.MathUtils.randFloatSpread(500), THREE.MathUtils.randFloatSpread(500)); 
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 });
+        const stars = new THREE.Points(geometry, material);
+        activeSceneObjects.add(stars);
+
+        // --- 2. CREATE UI (Optional) ---
+        document.getElementById('controls-panel').innerHTML = `<p class="text-gray-400">A simple particle starfield.</p>`;
+
+        // --- 3. DEFINE ANIMATION ---
+        function update(delta) {
+            stars.rotation.y += delta * 0.02 * animationSpeed;
+        }
+
+        // --- 4. DEFINE CLEANUP ---
+        function cleanup() {
+            geometry.dispose();
+            material.dispose();
+            console.log("Cleaned up Scene Two");
+        }
+
+        // --- 5. RETURN THE SCENE OBJECT ---
+        return { update, cleanup };
+    }
+
+
+    // =================================================================================================
+    // ||                                     TEMPLATE ENGINE                                         ||
+    // =================================================================================================
+    //
+    //  The code below is the core boilerplate that runs the template.
+    //  You shouldn't need to modify it to add new scenes.
+    //
+    // =================================================================================================
+
+    // --- Core Three.js Components ---
+    let scene, camera, renderer, controls, clock;
+    let playerDolly; // For VR movement
+    
+    // --- Scene Management State ---
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {};
+    let currentCleanup = () => {};
+    let currentSceneKey = null;
+
+    // --- Global Settings State ---
+    let animationSpeed = 1.0;
+    let followMode = false;
+    let followObject = null;
+    
+    /**
+     * Main initialization function. Sets up the entire environment.
+     */
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x030712);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 2, 8);
+        
+        playerDolly = new THREE.Group();
+        playerDolly.add(camera);
+        scene.add(playerDolly);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(5, 10, 7.5);
+        scene.add(dirLight);
+
+        scene.add(activeSceneObjects);
+
+        setupUI();
+        
+        const firstSceneKey = Object.keys(scenes)[0];
+        if (firstSceneKey) {
+            switchScene(firstSceneKey);
+        }
+
+        window.addEventListener('resize', onWindowResize);
+        renderer.setAnimationLoop(animate);
+    }
+
+    /**
+     * Switches from the current scene to a new one.
+     */
+    function switchScene(key) {
+        if (key === currentSceneKey) return;
+        
+        if (currentCleanup) {
+            currentCleanup();
+        }
+        
+        while(activeSceneObjects.children.length > 0) { 
+            activeSceneObjects.remove(activeSceneObjects.children[0]); 
+        }
+        document.getElementById('controls-panel').innerHTML = '';
+        followObject = null;
+
+        const sceneData = scenes[key];
+        document.getElementById('info-title').textContent = sceneData.title;
+        document.getElementById('info-description').textContent = sceneData.description;
+
+        document.querySelectorAll('.menu-button').forEach(b => b.classList.remove('active'));
+        document.getElementById(`btn-${key}`)?.classList.add('active');
+        
+        currentSceneKey = key;
+        const result = sceneData.init();
+        currentUpdate = result.update || (() => {});
+        currentCleanup = result.cleanup || (() => {});
+        if (result.followTarget) {
+            followObject = result.followTarget;
+        }
+    }
+
+    /**
+     * The main animation loop, called every frame by the renderer.
+     */
+    function animate() { 
+        const delta = clock.getDelta();
+        controls.update();
+        currentUpdate(delta);
+        updateCameraFollow();
+        renderer.render(scene, camera); 
+    }
+
+    function updateCameraFollow() {
+        if (followMode && followObject) {
+            const targetPosition = new THREE.Vector3();
+            followObject.getWorldPosition(targetPosition);
+            controls.target.lerp(targetPosition, 0.1);
+        }
+    }
+    
+    /**
+     * Sets up all generic UI elements and their event listeners.
+     */
+    function setupUI() {
+        // Create Menu
+        const menuDiv = document.getElementById('menu');
+        Object.keys(scenes).forEach(key => {
+            const button = document.createElement('button');
+            button.id = `btn-${key}`;
+            button.className = 'menu-button';
+            button.textContent = scenes[key].title;
+            button.onclick = () => switchScene(key);
+            menuDiv.appendChild(button);
+        });
+
+        // Info Panel
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (!e.target.closest('button, a, input')) {
+                e.currentTarget.classList.toggle('expanded');
+            }
+        });
+
+        // Settings Panel
+        const settingsPanel = document.getElementById('settings-panel');
+        document.getElementById('settings-button').addEventListener('click', () => {
+            settingsPanel.classList.remove('hidden');
+            requestAnimationFrame(() => settingsPanel.classList.add('open'));
+        });
+        document.getElementById('close-settings').addEventListener('click', () => {
+            settingsPanel.classList.remove('open');
+        });
+        settingsPanel.addEventListener('transitionend', () => {
+            if (!settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+
+        // Settings Controls
+        document.getElementById('follow-toggle').addEventListener('click', (e) => {
+            followMode = !followMode;
+            e.target.textContent = followMode ? 'On' : 'Off';
+            e.target.classList.toggle('active', followMode);
+            if (!followMode) {
+                const target = new THREE.Vector3();
+                controls.target.lerp(target, 0.2); // Smoothly reset target
+            }
+        });
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value);
+            document.getElementById('speed-value').textContent = `${animationSpeed.toFixed(1)}x`;
+        });
+        document.getElementById('graphics-slider').addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value);
+            renderer.setPixelRatio(window.devicePixelRatio * quality);
+            const qualityValueEl = document.getElementById('graphics-quality-value');
+            if (quality < 0.8) qualityValueEl.textContent = "Low";
+            else if (quality < 1.5) qualityValueEl.textContent = "Medium";
+            else qualityValueEl.textContent = "High";
+        });
+
+        // Fullscreen
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        document.addEventListener('fullscreenchange', () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+        });
+
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+    
+    // --- Start the application ---
+    init();
+
+</script>
+</body>
+</html>
+

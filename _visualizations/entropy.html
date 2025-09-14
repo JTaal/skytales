@@ -1,0 +1,2363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Interactive Entropy Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+                "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712; /* bg-gray-950 */
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px; /* Collapsed */
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        .formula {
+            font-family: 'Georgia', serif;
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            color: #d1d5db;
+            border: 1px solid #374151;
+        }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu {
+            display: flex;
+            gap: 10px;
+        }
+        .menu-button, .preset-button, .toggle-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .menu-button:hover, .preset-button:hover, .toggle-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .preset-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #818cf8;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: white;
+            text-align: center;
+            padding: 0.25rem;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .chart-container {
+            background-color: #111827;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+        .surprisal-gradient {
+            background-image: linear-gradient( to right, hsl(240, 90%, 60%), hsl(180, 90%, 60%), hsl(120, 90%, 60%), hsl(60, 90%, 60%), hsl(0, 90%, 60%) );
+        }
+        #settings-button, #fullscreen-button {
+            position: absolute;
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #settings-button {
+            top: 80px;
+            right: 20px;
+            z-index: 11;
+        }
+        #fullscreen-button {
+            bottom: 120px;
+            right: 20px;
+            z-index: 11;
+        }
+        #settings-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px) rotate(45deg);
+        }
+        #fullscreen-button:hover {
+             background-color: #4338ca;
+            transform: translateY(-2px) scale(1.1);
+        }
+        #settings-panel {
+            top: 80px;
+            right: 0;
+            width: 300px;
+            max-width: 90vw;
+            border-radius: 12px 0 0 12px;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            padding-right: 2rem; 
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            z-index: 12;
+        }
+        #settings-panel::-webkit-scrollbar {
+            width: 12px;
+        }
+        #settings-panel::-webkit-scrollbar-track {
+            background: rgba(17, 24, 39, 0.1);
+        }
+        #settings-panel::-webkit-scrollbar-thumb {
+            background-color: #4f46e5;
+            border-radius: 10px;
+            border: 3px solid rgba(17, 24, 39, 0.85); 
+            background-clip: padding-box;
+        }
+        #settings-panel::-webkit-scrollbar-thumb:hover {
+            background-color: #6366f1;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+        }
+        #close-settings {
+            font-size: 2.5rem;
+            line-height: 1;
+            padding: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 40px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+
+        body.fullscreen-active header,
+        body.fullscreen-active #info-panel {
+            display: none !important;
+        }
+
+        body.fullscreen-active #controls-panel,
+        body.fullscreen-active #settings-button,
+        body.fullscreen-active #fullscreen-button {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        
+        body.fullscreen-active #controls-panel.show-on-hover,
+        body.fullscreen-active #settings-button.show-on-hover,
+        body.fullscreen-active #fullscreen-button.show-on-hover {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+        
+        /* Add these new styles for the mobile dropdown items */
+        .mobile-menu-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 16px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .mobile-menu-item:hover {
+            background-color: #4338ca;
+        }
+        .mobile-menu-item.active {
+            background-color: #4f46e5;
+            font-weight: bold;
+        }
+        /* This style will hide the mobile menu on larger screens by default */
+        #mobile-menu-container {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            header h1 { font-size: 1.125rem; }
+            #menu { 
+                display: none !important;
+            }
+            #mobile-menu-container {
+                display: block;
+            }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; width: auto; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #settings-panel { top: 70px; width: 280px; max-height: calc(100vh - 80px);}
+            #controls-panel { padding: 0.75rem; gap: 0.75rem; justify-content: space-around; }
+            .control-group { gap: 0.25rem; }
+            #controls-panel .text-3xl { font-size: 1.5rem; }
+            #controls-panel label, #controls-panel .text-sm, #controls-panel .text-xs { font-size: 0.75rem; }
+            input[type="range"]::-webkit-slider-thumb { width: 24px; height: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider opacity-90">Entropy Explorer</h1>
+        <div id="menu"></div>
+
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30">
+            </div>
+        </div>
+    </header>
+
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400">Welcome!</h2>
+            <div id="toggle-icon" class="text-indigo-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+        </div>
+        <div id="info-content" class="pt-4 space-y-3">
+             <p id="info-description" class="text-gray-300"></p>
+             <div id="info-formula" class="formula"></div>
+             <div id="shannon-explanation-content">
+                  <h3 class="font-bold text-lg text-indigo-400 mt-4">Max Entropy vs. States</h3>
+                  <p class="text-sm text-gray-300">This chart shows the logarithmic growth of maximum possible entropy ($H_{max} = \log_2(N)$) as the number of states (N) increases. The red dot indicates the maximum entropy for the current number of states in the simulation.</p>
+                  <div class="chart-container">
+                       <canvas id="shannon-growth-chart"></canvas>
+                  </div>
+                   <h3 class="font-bold text-lg text-indigo-400 mt-4">The Classic Coin Flip</h3>
+                  <p class="text-sm text-gray-300">This graph shows the entropy of a single coin flip. Entropy is lowest (0) when the outcome is certain (an unfair coin that always lands on heads or tails). It reaches its maximum (1 bit) when the coin is fair (p=0.5), representing the highest uncertainty.</p>
+                  <div class="chart-container">
+                       <canvas id="coin-flip-chart"></canvas>
+                  </div>
+             </div>
+             <div id="differential-explanation-content">
+                  <h3 class="font-bold text-lg text-teal-400 mt-4">Probability Density (PDF)</h3>
+                  <p id="pdf-description" class="text-sm text-gray-300"></p>
+                   <div class="chart-container">
+                       <canvas id="differential-pdf-chart"></canvas>
+                  </div>
+             </div>
+             <div id="blackhole-explanation-content">
+                  <h3 class="font-bold text-lg text-purple-400 mt-4">Visualizing Spacetime</h3>
+                  <p class="text-sm text-gray-300">The vector field represents the curvature of spacetime as dictated by Einstein's Field Equations. Each arrow shows the direction of the "geodesic," the straightest possible path an object can take through this curved space. The flowing particles represent matter ($T_{\mu\nu}$) following these paths.</p>
+                  <p class="text-sm text-gray-300 mt-2">Light rays are also bent by gravity. They appear blue (blueshifted) when falling towards the gravity well and lose energy, becoming red (redshifted) as they escape.</p>
+             </div>
+             <div>
+//https://www.w3schools.com/howto/howto_html_include.asp
+                //{% include how-to-cite.html %}
+             </div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+        </svg>
+    </button>
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+        </svg>
+    </button>
+    
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6 sticky top-0 bg-inherit z-10 py-2">
+            <h3 class="text-xl font-bold text-gray-200">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white transition-colors">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">Diagnostics</label>
+                <button id="run-tests-button" class="toggle-button">Run Integrity Checks</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">VR Mode</label>
+                <button id="vr-button" title="Enter VR Mode" class="toggle-button w-full flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M2 12.3C2 7.8 5.8 4 10.3 4s8.3 3.8 8.3 8.3-3.5 8.3-8.3 8.3S2 16.8 2 12.3z"/>
+                        <path d="M12.3 4a8.3 8.3 0 0 1 8.3 8.3 8.3 8.3 0 0 1-8.3 8.3"/>
+                    </svg>
+                    <span>Enter VR</span>
+                </button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">Follow Object</label>
+                <button id="follow-toggle" class="toggle-button">Off</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="light-speed-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Light Speed / Time Flow:</span>
+                    <span id="light-speed-value">999x</span>
+                </label>
+                <input id="light-speed-slider" type="range" min="0.1" max="1000" step="1" value="999" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="trace-length-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Light Ray Trace Length:</span>
+                    <span id="trace-length-value">40</span>
+                </label>
+                <input id="trace-length-slider" type="range" min="5" max="100" step="1" value="40" class="w-full">
+            </div>
+            <div id="blackhole-spin-control" class="control-group text-left w-full hidden">
+                <label for="spin-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Black Hole Spin:</span>
+                    <span id="spin-value">0.00</span>
+                </label>
+                <input id="spin-slider" type="range" min="0" max="0.99" step="0.01" value="0.0" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="particle-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Particle Count:</span>
+                    <span id="particle-count-value">5000</span>
+                </label>
+                <input id="particle-slider" type="range" min="100" max="20000" step="100" value="5000" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="energy-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>System Energy (Temp):</span>
+                    <span id="energy-value">1.0x</span>
+                </label>
+                <input id="energy-slider" type="range" min="0.1" max="5" step="0.1" value="1.0" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="particle-size-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Particle Size:</span>
+                    <span id="particle-size-value">0.10</span>
+                </label>
+                <input id="particle-size-slider" type="range" min="0.02" max="0.5" step="0.01" value="0.1" class="w-full">
+            </div>
+             <hr class="border-gray-600">
+             <h4 class="text-lg font-bold text-gray-300 text-left w-full">Grid Settings</h4>
+             <div class="control-group text-left w-full">
+                <label for="grid-color-input" class="text-sm font-medium self-start w-full">Grid Color</label>
+                <input id="grid-color-input" type="color" value="#CCCCCC">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="grid-slice-button" class="text-sm font-medium self-start w-full">Grid View</label>
+                <button id="grid-slice-button" class="toggle-button w-full">3D Full</button>
+            </div>
+            <div id="grid-thickness-control" class="control-group text-left w-full hidden">
+                <label for="grid-thickness-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Slice Thickness:</span>
+                    <span id="grid-thickness-value">0 layers</span>
+                </label>
+                <input id="grid-thickness-slider" type="range" min="0" max="5" step="1" value="0" class="w-full">
+            </div>
+             <div class="control-group text-left w-full">
+                <label for="grid-scale-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Grid Scale:</span>
+                    <span id="grid-scale-value">1.0x</span>
+                </label>
+                <input id="grid-scale-slider" type="range" min="0.1" max="1000" step="0.1" value="1.0" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="grid-lines-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Grid Line Count:</span>
+                    <span id="grid-lines-value">15</span>
+                </label>
+                <input id="grid-lines-slider" type="range" min="5" max="50" step="1" value="15" class="w-full">
+            </div>
+            <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label for="graphics-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Graphics Quality:</span>
+                    <span id="graphics-quality-value">High</span>
+                </label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+                 <div class="text-xs text-gray-500 w-full flex justify-between mt-1">
+                     <span>Low</span>
+                     <span>Native</span>
+                     <span>High</span>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+    import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
+    import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
+
+    let scene, camera, renderer, controls, raycaster, mouse, clock;
+    let playerDolly; // For VR movement
+    let controller1, controller2, controllerGrip1, controllerGrip2;
+    let hand1, hand2;
+    let activeSceneObjects = new THREE.Group();
+    let currentParticleSystem = null;
+    let particles = [];
+
+    // --- VR Input State Manager ---
+    const vrInputs = {
+        left: { grip: { pressed: false }, trigger: { pressed: false }, thumbstick: { x: 0, y: 0 } },
+        right: { grip: { pressed: false }, trigger: { pressed: false }, thumbstick: { x: 0, y: 0 } },
+        isZooming: false,
+        initialZoomDistance: 0,
+        initialDollyScale: new THREE.Vector3()
+    };
+
+    // --- Global Settings ---
+    let particleCount = 1500; // Lowered for initial performance
+    let particleSize = 0.1;
+    let systemEnergy = 1.0;
+    let timeMultiplier = 999;
+    let lightRayRange = 40;
+    let followMode = false;
+    let isPaused = false;
+    let gridColor = '#CCCCCC';
+    let gridScale = 1.0;
+    let gridLineCount = 15;
+    let gridSliceMode = '3d'; // '3d', 'x', 'y', 'z'
+    let gridSliceThickness = 0; // In layers
+    let blackHoleSpin = 0.0;
+
+    let shannonGrowthChart, differentialInfoChart;
+    let followObject = null;
+    
+    const concepts = {
+        shannon_entropy: {
+            title: 'Shannon Entropy',
+            description: 'This cloud of particles represents a system with discrete states (the glowing attractors). Entropy measures the average "surprise" of finding a particle in any one state. When particles are concentrated, the system is predictable (low entropy).',
+            formula: 'H(X) = - &Sigma; p(x<sub>i</sub>) log<sub>2</sub>(p(x<sub>i</sub>))',
+            init: initShannon,
+        },
+        differential_entropy: {
+            title: 'Differential Entropy',
+            description: 'Here, particles move freely within a probability distribution. Differential entropy measures the uncertainty of a particle\'s position. As the distribution spreads out, so does the uncertainty and the entropy.',
+            formula: 'h(X) = - &int; f(x) log<sub>2</sub>(f(x)) dx',
+            init: initDifferential,
+        },
+        boltzmann_entropy: {
+            title: 'Boltzmann Entropy',
+            description: 'This concept from physics relates the statistical randomness of a system (the number of possible microscopic arrangements, W) to its overall entropy (S). This view shows the CHANGE in entropy (ΔS) as a system expands.',
+            formula: '&#916;S = k<sub>B</sub> ln(W<sub>final</sub> / W<sub>initial</sub>)',
+            init: initBoltzmann,
+        },
+        blackhole_entropy: {
+            title: 'Black Hole Entropy',
+            description: 'This concept relates the entropy of a black hole to its event horizon\'s surface area. The formula shown is Einstein\'s Field Equation, which describes how mass-energy ($T_{\mu\nu}$) curves spacetime ($G_{\mu\nu}$).',
+            formula: 'G<sub>&mu;&nu;</sub> = R<sub>&mu;&nu;</sub> - &frac12;R g<sub>&mu;&nu;</sub> = (8&pi;G/c<sup>4</sup>)T<sub>&mu;&nu;</sub>',
+            init: initBlackHole,
+        }
+    };
+
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 4, 15);
+        
+        // VR Dolly for movement
+        playerDolly = new THREE.Group();
+        playerDolly.add(camera);
+        scene.add(playerDolly);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        renderer.xr.enabled = true;
+
+        raycaster = new THREE.Raycaster();
+        mouse = new THREE.Vector2();
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+        const pointLight = new THREE.PointLight(0xffffff, 0.8, 2000);
+        pointLight.position.set(0, 50, 50);
+        scene.add(pointLight);
+
+        scene.add(activeSceneObjects);
+
+        createMenu();
+        setupMobileMenu(); // Setup dropdown logic
+        setupInfoPanelCharts();
+        setupSettingsPanel();
+        setupFullscreen();
+        setupVR();
+        switchConcept('shannon_entropy');
+
+        window.addEventListener('resize', onWindowResize, false);
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (e.target.closest('canvas') || e.target.closest('a')) return;
+            e.currentTarget.classList.toggle('expanded');
+        });
+
+        renderer.setAnimationLoop(animate);
+    }
+
+    let currentCleanup = () => {};
+    let currentUpdate = () => {};
+    let currentConceptKey = null;
+
+    // --- UNIT TESTING FRAMEWORK --- //
+    const TestRunner = {
+        run: async function() {
+            console.clear();
+            console.log('%c[TESTING] Starting integrity checks...', 'color: #f59e0b; font-weight: bold;');
+            const testSuites = [
+                this.testInitialization,
+                this.testConceptSwitching,
+                this.testShannonControls,
+                this.testDifferentialControls,
+                this.testBoltzmannControls,
+                this.testBlackHoleControls,
+                this.testSettingsPanel,
+            ];
+            let passed = 0;
+            let failed = 0;
+
+            for (const testSuite of testSuites) {
+                try {
+                    await testSuite();
+                    console.log(`%c  ✓ PASS: ${testSuite.name}`, 'color: #22c55e;');
+                    passed++;
+                } catch (error) {
+                    console.error(`%c  ✗ FAIL: ${testSuite.name}`, 'color: #ef4444; font-weight: bold;');
+                    console.error('    Reason:', error.message);
+                    failed++;
+                }
+            }
+            
+            console.log('%c[TESTING] Checks complete.', 'color: #f59e0b; font-weight: bold;');
+            console.log(`%c  Passed: ${passed}`, 'color: #22c55e;');
+            console.log(`%c  Failed: ${failed}`, failed > 0 ? 'color: #ef4444;' : 'color: #9ca3af;');
+            
+            // Reset to a known good state
+            console.log('[TESTING] Resetting simulation to initial state.');
+            resetCurrentConcept();
+        },
+
+        assert: function(condition, message) {
+            if (!condition) {
+                throw new Error(message || 'Assertion failed');
+            }
+        },
+        
+        // Individual Test Suites
+        testInitialization: function() {
+            TestRunner.assert(scene, 'Scene should be initialized.');
+            TestRunner.assert(camera, 'Camera should be initialized.');
+            TestRunner.assert(renderer, 'Renderer should be initialized.');
+            TestRunner.assert(Object.keys(concepts).length === 4, 'Should have 4 concepts loaded.');
+        },
+
+        testConceptSwitching: async function() {
+            for (const key of Object.keys(concepts)) {
+                switchConcept(key);
+                // A minimal delay to allow any async operations or transitions to start
+                await new Promise(resolve => setTimeout(resolve, 50));
+                TestRunner.assert(currentConceptKey === key, `Switching to ${key} failed.`);
+                TestRunner.assert(activeSceneObjects.children.length > 0, `${key} did not initialize any scene objects.`);
+            }
+        },
+
+        testShannonControls: function() {
+            switchConcept('shannon_entropy');
+            const statesInput = document.getElementById('states-input');
+            TestRunner.assert(statesInput, 'Shannon states input not found.');
+            statesInput.value = 5;
+            statesInput.dispatchEvent(new Event('input', { bubbles:true }));
+            // Direct access to attractors is tricky as it's scoped, but we can check if controls were created
+             const distControls = document.getElementById('dist-controls');
+            TestRunner.assert(distControls.querySelectorAll('.dist-slider').length === 4, 'Should create 4 distribution sliders for 5 states.');
+        },
+
+        testDifferentialControls: function() {
+            switchConcept('differential_entropy');
+            const sizeSlider = document.getElementById('size-slider');
+            TestRunner.assert(sizeSlider, 'Differential size slider not found.');
+            sizeSlider.value = 8;
+            sizeSlider.dispatchEvent(new Event('input', { bubbles:true }));
+            // Cannot directly check boundingBox size easily, but we know the control exists and fires.
+            const gaussianButton = document.querySelector('button[data-shape=\"gaussian\"]');
+            gaussianButton.click();
+            TestRunner.assert(document.getElementById('gaussian-controls').classList.contains('hidden') === false, 'Gaussian controls should be visible after click.');
+        },
+
+        testBoltzmannControls: function() {
+            switchConcept('boltzmann_entropy');
+            const shapeToggle = document.getElementById('shape-toggle');
+            TestRunner.assert(shapeToggle, 'Boltzmann shape toggle not found.');
+            shapeToggle.click(); // Switch to sphere
+            TestRunner.assert(shapeToggle.textContent.includes('Sphere'), 'Shape toggle text did not update to Sphere.');
+            const sphereControls = document.getElementById('sphere-barrier-controls');
+            TestRunner.assert(!sphereControls.classList.contains('hidden'), 'Sphere controls should be visible.');
+        },
+        
+        testBlackHoleControls: function() {
+            switchConcept('blackhole_entropy');
+            const massSlider = document.getElementById('mass-slider');
+            TestRunner.assert(massSlider, 'Black hole mass slider not found.');
+            massSlider.value = 5;
+            massSlider.dispatchEvent(new Event('input', { bubbles:true }));
+            TestRunner.assert(mass > 1000, 'Global mass variable was not updated correctly.');
+            const pauseButton = document.getElementById('pause-toggle');
+            pauseButton.click();
+            TestRunner.assert(isPaused === true, 'Pause toggle did not set isPaused to true.');
+            pauseButton.click();
+            TestRunner.assert(isPaused === false, 'Pause toggle did not set isPaused to false.');
+        },
+        
+        testSettingsPanel: function() {
+            const particleSlider = document.getElementById('particle-slider');
+            particleSlider.value = 12345;
+            // We test the 'change' event which triggers the reset
+            particleSlider.dispatchEvent(new Event('change', { bubbles:true }));
+            TestRunner.assert(particleCount === 12345, 'Global particleCount was not updated.');
+
+            const energySlider = document.getElementById('energy-slider');
+            energySlider.value = 4.2;
+            energySlider.dispatchEvent(new Event('input', { bubbles:true }));
+            TestRunner.assert(systemEnergy === 4.2, 'Global systemEnergy was not updated.');
+        },
+    };
+
+
+    function switchConcept(key) {
+        if (key === currentConceptKey) return;
+        isPaused = false;
+        currentCleanup();
+        followObject = null;
+        currentParticleSystem = null;
+        while(activeSceneObjects.children.length > 0) { 
+            const obj = activeSceneObjects.children[0];
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                    obj.material.forEach(m => m.dispose());
+                } else {
+                    obj.material.dispose();
+                }
+            }
+            activeSceneObjects.remove(obj); 
+        }
+        document.getElementById('controls-panel').innerHTML = '';
+
+        const concept = concepts[key];
+        document.getElementById('info-title').textContent = concept.title;
+        document.getElementById('info-description').textContent = concept.description;
+        document.getElementById('info-formula').innerHTML = concept.formula;
+        document.getElementById('shannon-explanation-content').style.display = key === 'shannon_entropy' ? 'block' : 'none';
+        document.getElementById('differential-explanation-content').style.display = key === 'differential_entropy' ? 'block' : 'none';
+        document.getElementById('blackhole-explanation-content').style.display = key === 'blackhole_entropy' ? 'block' : 'none';
+
+        document.getElementById('info-panel').classList.remove('expanded');
+
+        // Update active states for BOTH menus
+        if (currentConceptKey) {
+            document.getElementById(`btn-${currentConceptKey}`).classList.remove('active');
+            const mobileBtn = document.getElementById(`mobile-btn-${currentConceptKey}`);
+            if (mobileBtn) mobileBtn.classList.remove('active');
+        }
+        document.getElementById(`btn-${key}`).classList.add('active');
+        const newMobileBtn = document.getElementById(`mobile-btn-${key}`);
+        if(newMobileBtn) newMobileBtn.classList.add('active');
+
+        // Update the mobile menu's main button label
+        document.getElementById('mobile-menu-label').textContent = concepts[key].title.split('(')[0].trim();
+
+
+        currentConceptKey = key;
+        const result = concept.init();
+        currentUpdate = result.update;
+        currentCleanup = result.cleanup;
+        if (result.followTarget) {
+            followObject = result.followTarget;
+        }
+
+        // Show/hide context-specific settings
+        document.getElementById('blackhole-spin-control').classList.toggle('hidden', key !== 'blackhole_entropy');
+    }
+
+    function createMenu() {
+        const menuDiv = document.getElementById('menu');
+        const mobileMenuDropdown = document.getElementById('mobile-menu-dropdown');
+        
+        // Clear any existing buttons
+        menuDiv.innerHTML = '';
+        mobileMenuDropdown.innerHTML = '';
+
+        Object.keys(concepts).forEach(key => {
+            const conceptTitle = concepts[key].title.split('(')[0].trim();
+
+            // 1. Create button for the desktop menu
+            const desktopButton = document.createElement('button');
+            desktopButton.id = `btn-${key}`;
+            desktopButton.className = 'menu-button';
+            desktopButton.textContent = conceptTitle;
+            desktopButton.onclick = () => switchConcept(key);
+            menuDiv.appendChild(desktopButton);
+
+            // 2. Create button for the mobile dropdown
+            const mobileButton = document.createElement('button');
+            mobileButton.id = `mobile-btn-${key}`;
+            mobileButton.className = 'mobile-menu-item text-white'; // Use new class
+            mobileButton.textContent = conceptTitle;
+            mobileButton.onclick = () => {
+                switchConcept(key);
+                mobileMenuDropdown.classList.add('hidden'); // Close dropdown on selection
+            };
+            mobileMenuDropdown.appendChild(mobileButton);
+        });
+    }
+
+    function setupMobileMenu() {
+        const menuButton = document.getElementById('mobile-menu-button');
+        const dropdown = document.getElementById('mobile-menu-dropdown');
+
+        menuButton.addEventListener('click', (event) => {
+            event.stopPropagation(); // Prevents the window click listener from firing
+            dropdown.classList.toggle('hidden');
+        });
+
+        // Add a listener to the whole window to close the dropdown
+        window.addEventListener('click', () => {
+            if (!dropdown.classList.contains('hidden')) {
+                dropdown.classList.add('hidden');
+            }
+        });
+    }
+
+    function setupFullscreen() {
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        const body = document.body;
+
+        if (!document.fullscreenEnabled && !document.webkitFullscreenEnabled) {
+            fullscreenButton.style.display = 'none'; // Hide if not supported
+            return;
+        }
+
+        function openFullscreen() {
+            if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            } else if (document.documentElement.webkitRequestFullscreen) { /* Safari */
+                document.documentElement.webkitRequestFullscreen();
+            }
+        }
+
+        function closeFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) { /* Safari */
+                document.webkitExitFullscreen();
+            }
+        }
+
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                openFullscreen();
+            } else {
+                closeFullscreen();
+            }
+        });
+
+        const handleFullscreenChange = () => {
+            const isFullscreen = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+            body.classList.toggle('fullscreen-active', isFullscreen);
+            // When exiting fullscreen, remove any lingering hover classes
+            if (!isFullscreen) {
+                document.querySelectorAll('.show-on-hover').forEach(el => el.classList.remove('show-on-hover'));
+            }
+            setTimeout(onWindowResize, 100);
+        };
+
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+        // --- Hover Logic for Fullscreen ---
+        let hideTimer = null;
+        window.addEventListener('mousemove', (e) => {
+            if (!body.classList.contains('fullscreen-active')) return;
+
+            const hotzoneHeight = 120; // Active area in pixels from top or bottom
+
+            const isNearTop = e.clientY < hotzoneHeight;
+            const isNearBottom = window.innerHeight - e.clientY < hotzoneHeight;
+            
+            const controlsPanel = document.getElementById('controls-panel');
+            const settingsButton = document.getElementById('settings-button');
+            const fsButton = document.getElementById('fullscreen-button');
+
+            clearTimeout(hideTimer);
+
+            const showElements = (elements) => elements.forEach(el => el.classList.add('show-on-hover'));
+            const hideElements = (elements) => elements.forEach(el => el.classList.remove('show-on-hover'));
+            
+            if (isNearTop) {
+                showElements([settingsButton]);
+                hideElements([controlsPanel, fsButton]);
+            } else if (isNearBottom) {
+                showElements([controlsPanel, fsButton]);
+                hideElements([settingsButton]);
+            } else {
+                hideTimer = setTimeout(() => {
+                    hideElements([settingsButton, controlsPanel, fsButton]);
+                }, 500);
+            }
+        });
+    }
+
+    function setupVR() {
+        const vrButton = document.getElementById('vr-button');
+
+        if ('xr' in navigator) {
+            navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                if (supported) {
+                    vrButton.addEventListener('click', () => {
+                        if (renderer.xr.isPresenting) {
+                            const session = renderer.xr.getSession();
+                            if (session) session.end();
+                        } else {
+                            const sessionInit = { optionalFeatures: [ 'local-floor', 'bounded-floor', 'hand-tracking' ] };
+                            navigator.xr.requestSession('immersive-vr', sessionInit).then((session) => {
+                                renderer.xr.setSession(session);
+                            });
+                        }
+                    });
+
+                    renderer.xr.addEventListener('sessionstart', () => {
+                        // When entering VR, move the dolly to the camera's current position
+                        playerDolly.position.copy(camera.position);
+                        playerDolly.quaternion.copy(camera.quaternion);
+                        camera.position.set(0, 0, 0);
+                        camera.quaternion.identity();
+                        controls.enabled = false;
+
+                        vrButton.innerHTML = `
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 12.3C2 7.8 5.8 4 10.3 4s8.3 3.8 8.3 8.3-3.5 8.3-8.3 8.3S2 16.8 2 12.3z"/>
+                                <path d="M12.3 4a8.3 8.3 0 0 1 8.3 8.3 8.3 8.3 0 0 1-8.3 8.3"/>
+                            </svg>
+                            <span>Exit VR</span>
+                        `;
+                        vrButton.classList.add('active');
+                    });
+                    renderer.xr.addEventListener('sessionend', () => {
+                        // When exiting VR, move camera back to dolly's position and reset dolly
+                        camera.position.copy(playerDolly.position);
+                        // Also reset scale
+                        camera.scale.copy(playerDolly.scale);
+                        playerDolly.position.set(0, 0, 0);
+                        playerDolly.quaternion.identity();
+                        playerDolly.scale.set(1, 1, 1);
+                        controls.enabled = true;
+
+                        vrButton.innerHTML = `
+                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2 12.3C2 7.8 5.8 4 10.3 4s8.3 3.8 8.3 8.3-3.5 8.3-8.3 8.3S2 16.8 2 12.3z"/>
+                                <path d="M12.3 4a8.3 8.3 0 0 1 8.3 8.3 8.3 8.3 0 0 1-8.3 8.3"/>
+                            </svg>
+                            <span>Enter VR</span>
+                        `;
+                        vrButton.classList.remove('active');
+                    });
+
+                } else {
+                    vrButton.disabled = true;
+                    vrButton.textContent = 'VR Not Supported';
+                }
+            });
+        } else {
+             vrButton.disabled = true;
+             vrButton.textContent = 'VR Not Supported';
+        }
+
+        // --- Controllers & Hands Setup ---
+        controller1 = renderer.xr.getController(0);
+        playerDolly.add(controller1);
+
+        controller2 = renderer.xr.getController(1);
+        playerDolly.add(controller2);
+
+        const controllerModelFactory = new XRControllerModelFactory();
+        const handModelFactory = new XRHandModelFactory();
+
+        // Controller Grips
+        controllerGrip1 = renderer.xr.getControllerGrip(0);
+        controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+        playerDolly.add(controllerGrip1);
+
+        controllerGrip2 = renderer.xr.getControllerGrip(1);
+        controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+        playerDolly.add(controllerGrip2);
+
+        // Hand Models
+        hand1 = renderer.xr.getHand(0);
+        hand1.add(handModelFactory.createHandModel(hand1));
+        playerDolly.add(hand1);
+
+        hand2 = renderer.xr.getHand(1);
+        hand2.add(handModelFactory.createHandModel(hand2));
+        playerDolly.add(hand2);
+    }
+
+    function setupSettingsPanel() {
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsButton = document.getElementById('settings-button');
+        const closeSettingsButton = document.getElementById('close-settings');
+
+        const particleSlider = document.getElementById('particle-slider');
+        const particleCountValue = document.getElementById('particle-count-value');
+        const graphicsSlider = document.getElementById('graphics-slider');
+        const graphicsQualityValue = document.getElementById('graphics-quality-value');
+        const energySlider = document.getElementById('energy-slider');
+        const energyValue = document.getElementById('energy-value');
+        const particleSizeSlider = document.getElementById('particle-size-slider');
+        const particleSizeValue = document.getElementById('particle-size-value');
+        const lightSpeedSlider = document.getElementById('light-speed-slider');
+        const lightSpeedValue = document.getElementById('light-speed-value');
+        const traceLengthSlider = document.getElementById('trace-length-slider');
+        const traceLengthValue = document.getElementById('trace-length-value');
+        const spinSlider = document.getElementById('spin-slider');
+        const spinValue = document.getElementById('spin-value');
+        const followToggle = document.getElementById('follow-toggle');
+        const gridColorInput = document.getElementById('grid-color-input');
+        const gridScaleSlider = document.getElementById('grid-scale-slider');
+        const gridScaleValue = document.getElementById('grid-scale-value');
+        const gridLinesSlider = document.getElementById('grid-lines-slider');
+        const gridLinesValue = document.getElementById('grid-lines-value');
+        const gridSliceButton = document.getElementById('grid-slice-button');
+        const gridThicknessControl = document.getElementById('grid-thickness-control');
+        const gridThicknessSlider = document.getElementById('grid-thickness-slider');
+        const gridThicknessValue = document.getElementById('grid-thickness-value');
+        const runTestsButton = document.getElementById('run-tests-button');
+
+        runTestsButton.addEventListener('click', () => {
+            TestRunner.run();
+            // Close the panel to show the console
+            if (settingsPanel.classList.contains('open')) {
+                toggleSettingsPanel();
+            }
+        });
+
+        const sliceModes = ['3d', 'x', 'y', 'z'];
+        let currentSliceIndex = 0;
+        gridSliceButton.addEventListener('click', () => {
+            currentSliceIndex = (currentSliceIndex + 1) % sliceModes.length;
+            gridSliceMode = sliceModes[currentSliceIndex];
+            
+            const modeText = {
+                '3d': '3D Full',
+                'x': 'Slice: YZ Plane',
+                'y': 'Slice: XZ Plane',
+                'z': 'Slice: XY Plane'
+            };
+            gridSliceButton.textContent = modeText[gridSliceMode];
+            
+            const isSlice = gridSliceMode !== '3d';
+            gridThicknessControl.classList.toggle('hidden', !isSlice);
+        });
+
+        gridThicknessSlider.addEventListener('input', e => {
+            gridSliceThickness = parseInt(e.target.value, 10);
+            gridThicknessValue.textContent = `${gridSliceThickness} layer${gridSliceThickness === 1 ? '' : 's'}`;
+        });
+
+        function toggleSettingsPanel() {
+            const isOpen = settingsPanel.classList.contains('open');
+            if (isOpen) {
+                settingsPanel.classList.remove('open');
+            } else {
+                settingsPanel.classList.remove('hidden');
+                requestAnimationFrame(() => {
+                    settingsPanel.classList.add('open');
+                });
+            }
+        }
+
+        settingsButton.addEventListener('click', toggleSettingsPanel);
+        closeSettingsButton.addEventListener('click', () => {
+            settingsPanel.classList.remove('open');
+        });
+
+        settingsPanel.addEventListener('transitionend', (event) => {
+            if (event.propertyName !== 'transform') return;
+            if (!settingsPanel.classList.contains('open')) {
+                settingsPanel.classList.add('hidden');
+            }
+        });
+
+        const initialPixelRatio = 1.0; // Set to native resolution for better performance on Quest
+        graphicsSlider.value = initialPixelRatio;
+        renderer.setPixelRatio(initialPixelRatio);
+        updateGraphicsLabel(initialPixelRatio);
+
+        followToggle.addEventListener('click', (e) => {
+            followMode = !followMode;
+            e.target.textContent = followMode ? 'On' : 'Off';
+            e.target.classList.toggle('active', followMode);
+        });
+        lightSpeedSlider.addEventListener('input', (e) => {
+            timeMultiplier = parseFloat(e.target.value);
+            lightSpeedValue.textContent = `${timeMultiplier.toFixed(0)}x`;
+        });
+        traceLengthSlider.addEventListener('input', (e) => {
+            lightRayRange = parseFloat(e.target.value);
+            traceLengthValue.textContent = lightRayRange;
+        });
+        spinSlider.addEventListener('input', (e) => {
+            blackHoleSpin = parseFloat(e.target.value);
+            spinValue.textContent = blackHoleSpin.toFixed(2);
+        });
+        particleSlider.addEventListener('input', (e) => particleCountValue.textContent = e.target.value);
+        particleSlider.addEventListener('change', (e) => {
+            particleCount = parseInt(e.target.value, 10);
+            resetCurrentConcept(); 
+        });
+        energySlider.addEventListener('input', (e) => {
+            systemEnergy = parseFloat(e.target.value);
+            energyValue.textContent = `${systemEnergy.toFixed(1)}x`;
+        });
+        particleSizeSlider.addEventListener('input', (e) => {
+            particleSize = parseFloat(e.target.value);
+            particleSizeValue.textContent = particleSize.toFixed(2);
+            if(currentParticleSystem) {
+                currentParticleSystem.material.size = particleSize;
+            }
+        });
+        gridColorInput.addEventListener('input', (e) => {
+            gridColor = e.target.value;
+        });
+        gridScaleSlider.addEventListener('input', (e) => {
+            gridScale = parseFloat(e.target.value);
+            gridScaleValue.textContent = `${gridScale.toFixed(1)}x`;
+        });
+        gridLinesSlider.addEventListener('input', (e) => {
+            gridLinesValue.textContent = e.target.value;
+        });
+        gridLinesSlider.addEventListener('change', (e) => {
+            gridLineCount = parseInt(e.target.value, 10);
+            resetCurrentConcept();
+        });
+        graphicsSlider.addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value);
+            renderer.setPixelRatio(quality);
+            updateGraphicsLabel(quality);
+        });
+
+        function updateGraphicsLabel(quality) {
+            if (quality < 0.8) graphicsQualityValue.textContent = "Low";
+            else if (quality < 1.5) graphicsQualityValue.textContent = "Medium";
+            else if (quality < 1.9) graphicsQualityValue.textContent = "High";
+            else graphicsQualityValue.textContent = "Ultra";
+        }
+    }
+
+    function resetCurrentConcept() {
+        if (!currentConceptKey) return;
+        const key = currentConceptKey;
+        isPaused = false;
+        const pauseButton = document.getElementById('pause-toggle');
+        if (pauseButton) {
+            pauseButton.textContent = 'Pause';
+            pauseButton.classList.remove('active');
+        }
+        currentConceptKey = null;
+        switchConcept(key);
+    }
+
+    function setupInfoPanelCharts() {
+        const shannonCtx = document.getElementById('shannon-growth-chart').getContext('2d');
+        const labels = Array.from({length: 1000}, (_, i) => i + 1);
+        const data = labels.map(n => Math.log2(n));
+
+        shannonGrowthChart = new Chart(shannonCtx, {
+            type: 'line',
+            data: { labels: labels, datasets: [ { label: 'H_max = log2(N)', data: data, borderColor: '#818cf8', tension: 0.1, pointRadius: 0 }, { label: 'Current N', data: [], type: 'scatter', backgroundColor: '#ef4444', pointRadius: 5 } ] },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { title: { display: true, text: 'Number of States (N)', color: '#9ca3af'}, ticks: { color: '#9ca3af' }}, y: { title: { display: true, text: 'Max Entropy (bits)', color: '#9ca3af'}, ticks: { color: '#9ca3af' }} } }
+        });
+
+        const coinFlipCtx = document.getElementById('coin-flip-chart').getContext('2d');
+        const coinFlipData = [];
+        for (let i = 0; i <= 100; i++) {
+            const p = i / 100;
+            if (p === 0 || p === 1) coinFlipData.push({x: p, y: 0});
+            else coinFlipData.push({x:p, y: -(p * Math.log2(p) + (1 - p) * Math.log2(1 - p))});
+        }
+
+        new Chart(coinFlipCtx, {
+            type: 'line',
+            data: { datasets: [{ label: 'H(p)', data: coinFlipData, borderColor: '#f472b6', backgroundColor: 'rgba(244, 114, 182, 0.3)', fill: 'origin', tension: 0.1, pointRadius: 0 }] },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { type: 'linear', title: { display: true, text: 'Probability of Heads (p)', color: '#9ca3af' }, ticks: { color: '#9ca3af' } }, y: { title: { display: true, text: 'Entropy (bits)', color: '#9ca3af' }, ticks: { color: '#9ca3af' }, beginAtZero: true, max: 1.1 } } }
+        });
+
+        const diffCtx = document.getElementById('differential-pdf-chart').getContext('2d');
+        differentialInfoChart = new Chart(diffCtx, {
+            type: 'line', data: { datasets: [] }, options: { maintainAspectRatio: false, plugins: { legend: { display: false }}, scales: { x: { type: 'linear', min: -10, max: 10, ticks: { color: '#9ca3af' }}, y: { beginAtZero: true, ticks: { color: '#9ca3af' }}} }
+        });
+    }
+
+    function updateShannonGrowthChartMarker(numStates) {
+        if (!shannonGrowthChart || numStates === undefined || numStates < 1) return;
+        const maxEntropy = Math.log2(numStates);
+        shannonGrowthChart.data.datasets[1].data = [{x: numStates, y: maxEntropy}];
+        shannonGrowthChart.update();
+    }
+
+    function createParticles(count, color = 0x818cf8) {
+        particles = [];
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+        const material = new THREE.PointsMaterial({ size: particleSize, blending: THREE.AdditiveBlending, transparent: true, sizeAttenuation: true, vertexColors: true });
+        for (let i = 0; i < count; i++) {
+            const [x,y,z] = [(Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10];
+            positions.set([x,y,z], i*3);
+            const baseColor = new THREE.Color(color);
+            colors.set([baseColor.r, baseColor.g, baseColor.b], i * 3);
+            particles.push({ position: new THREE.Vector3(x, y, z), velocity: new THREE.Vector3(), lastY: y });
+        }
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        currentParticleSystem = new THREE.Points(geometry, material);
+        activeSceneObjects.add(currentParticleSystem);
+        return currentParticleSystem;
+    }
+
+    function initShannon() {
+        const particleSystem = createParticles(particleCount);
+        let attractors = [];
+        let distributions = [];
+        let entropyText;
+        let surprisalMode = false;
+
+        function setup(numStates) {
+            attractors.forEach(attr => activeSceneObjects.remove(attr));
+            attractors = [];
+            for (let i = 0; i < numStates; i++) {
+                const angle = (i / numStates) * Math.PI * 2;
+                const radius = numStates > 1 ? 4 + numStates * 0.05 : 0;
+                const attractor = new THREE.PointLight(0xfbbf24, 2, 5 + numStates * 0.1);
+                attractor.position.set(Math.cos(angle) * radius, Math.sin(angle) * radius, 0);
+                activeSceneObjects.add(attractor);
+                attractors.push(attractor);
+            }
+            updateShannonGrowthChartMarker(numStates);
+            applyDistribution();
+        }
+
+        function applyDistribution() {
+            let particleIndex = 0;
+            for (let i = 0; i < attractors.length; i++) {
+                const count = Math.round(particleCount * (distributions[i] || 0));
+                for (let j = 0; j < count; j++) {
+                    if (particles[particleIndex]) particles[particleIndex].attractorIndex = i;
+                    particleIndex++;
+                }
+            }
+             while(particleIndex < particleCount) {
+                 if (particles[particleIndex]) particles[particleIndex].attractorIndex = particleIndex % attractors.length;
+                 particleIndex++;
+             }
+        }
+
+        function createControls(numStates) {
+            const controlsDiv = document.getElementById('controls-panel');
+            controlsDiv.innerHTML = `
+                <div class="control-group">
+                    <label for="states-input" class="text-sm font-medium">Number of States:</label>
+                    <input id="states-input" type="number" min="1" max="1000" value="${numStates}" class="w-20">
+                </div>
+                <div class="text-center text-3xl font-bold"><span id="entropy-value" class="text-white">1.00</span> bits</div>
+                <div id="dist-controls" class="flex items-center gap-4"></div>
+                <div class="control-group">
+                    <label class="text-sm font-medium">Visualization</label>
+                    <button id="surprisal-toggle" class="toggle-button">Surprisal</button>
+                </div>
+                <div id="surprisal-legend" class="control-group hidden w-full">
+                    <label class="text-sm font-medium">Surprisal Color Range</label>
+                    <div class="w-48 h-4 rounded-full surprisal-gradient"></div>
+                    <div class="flex justify-between w-48 text-xs text-gray-400">
+                        <span>Low</span>
+                        <span>High</span>
+                    </div>
+                </div>
+            `;
+            entropyText = document.getElementById('entropy-value');
+            const statesInput = document.getElementById('states-input');
+            statesInput.addEventListener('input', (e) => {
+                let n = parseInt(e.target.value); if (isNaN(n) || n < 1) return; if (n > 1000) n = 1000; e.target.value = n; setup(n); createDistributionControls(n);
+            });
+            document.getElementById('surprisal-toggle').addEventListener('click', (e) => {
+                surprisalMode = !surprisalMode; e.target.classList.toggle('active', surprisalMode); document.getElementById('surprisal-legend').classList.toggle('hidden', !surprisalMode);
+            });
+            createDistributionControls(numStates);
+        }
+
+        function createDistributionControls(numStates) {
+            const distControlsDiv = document.getElementById('dist-controls');
+            distControlsDiv.innerHTML = '';
+            if (numStates <= 1) { distributions = [1]; applyDistribution(); return; };
+            if (numStates <= 5) {
+                let sliderHTML = '<div class="flex flex-col gap-2 w-full max-w-xs">';
+                for(let i = 0; i < numStates - 1; i++) sliderHTML += `<div><input class="dist-slider" data-index="${i}" type="range" min="0" max="1" step="0.01" value="${1/(numStates-i)}"></div>`;
+                sliderHTML += '</div>';
+                distControlsDiv.innerHTML = sliderHTML;
+                document.querySelectorAll('.dist-slider').forEach(s => s.addEventListener('input', handleSliderChange));
+                handleSliderChange();
+            } else {
+                 distControlsDiv.innerHTML = `<div class="control-group"><label class="text-sm font-medium">Distribution Shape</label><div class="flex gap-2"><button class="preset-button active" data-shape="uniform">Uniform</button><button class="preset-button" data-shape="skewed">Skewed</button><button class="preset-button" data-shape="peaked">Peaked</button></div></div>`;
+                 document.querySelectorAll('.preset-button').forEach(b => b.addEventListener('click', handlePresetChange));
+                 handlePresetChange({ target: document.querySelector('.preset-button.active') });
+            }
+        }
+
+        function handleSliderChange() {
+            let remaining = 1.0;
+            const sliders = document.querySelectorAll('.dist-slider');
+            distributions = new Array(sliders.length + 1).fill(0);
+            sliders.forEach((slider, i) => {
+                const val = parseFloat(slider.value) * remaining;
+                distributions[i] = val;
+                remaining -= val;
+            });
+            distributions[sliders.length] = remaining;
+            applyDistribution();
+        }
+
+        function handlePresetChange(e) {
+            document.querySelectorAll('.preset-button').forEach(b => b.classList.remove('active'));
+            e.target.classList.add('active');
+            const shape = e.target.dataset.shape;
+            const n = attractors.length;
+            distributions = new Array(n);
+            let sum = 0;
+            for(let i=0; i < n; i++) {
+                if (shape === 'uniform') distributions[i] = 1;
+                else if (shape === 'skewed') distributions[i] = Math.pow(n - i, 2);
+                else if (shape === 'peaked') distributions[i] = Math.exp(-Math.pow(i - (n - 1) / 2, 2) / (n / 4));
+                sum += distributions[i];
+            }
+            distributions = distributions.map(d => d / sum);
+            applyDistribution();
+        }
+
+        function update() {
+            if (isPaused) return;
+            const positions = particleSystem.geometry.attributes.position.array;
+            const colors = particleSystem.geometry.attributes.color.array;
+            let entropy = 0;
+            const probs = new Array(attractors.length).fill(1e-9); 
+
+            particles.forEach(p => {
+                if (p.attractorIndex !== undefined && probs[p.attractorIndex] !== undefined) probs[p.attractorIndex]++;
+            });
+
+            const normalizedProbs = probs.map(c => c / (particleCount + attractors.length * 1e-9));
+            const surprisals = normalizedProbs.map(p => -Math.log2(p));
+            const maxSurprisal = Math.max(...surprisals, 1);
+
+            normalizedProbs.forEach(p => {
+                if(p > 0) entropy -= p * Math.log2(p);
+            });
+
+            const defaultColor = new THREE.Color(0x818cf8);
+            const surprisalColor = new THREE.Color();
+            const randomForce = 0.05 * systemEnergy;
+
+            particles.forEach((p, i) => {
+                const attractor = attractors[p.attractorIndex];
+                if(attractor) p.velocity.add(attractor.position.clone().sub(p.position).multiplyScalar(0.002));
+                p.velocity.add(new THREE.Vector3((Math.random()-0.5)*randomForce, (Math.random()-0.5)*randomForce, (Math.random()-0.5)*randomForce));
+                p.velocity.multiplyScalar(0.95);
+                p.position.add(p.velocity);
+                positions.set([p.position.x, p.position.y, p.position.z], i*3);
+
+                if (surprisalMode) {
+                    const surprisal = surprisals[p.attractorIndex] || 0;
+                    const normalizedSurprisal = Math.min(surprisal / maxSurprisal, 1.0);
+                    const hue = 0.66 * (1 - normalizedSurprisal);
+                    surprisalColor.setHSL(hue, 0.9, 0.6);
+                    colors.set([surprisalColor.r, surprisalColor.g, surprisalColor.b], i * 3);
+                } else {
+                    colors.set([defaultColor.r, defaultColor.g, defaultColor.b], i*3);
+                }
+            });
+
+            if (entropyText) entropyText.textContent = entropy.toFixed(2);
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+            particleSystem.geometry.attributes.color.needsUpdate = true;
+        }
+
+        createControls(2);
+        setup(2);
+        return { update, cleanup: () => {} };
+    }
+
+    function initDifferential() {
+        const particleSystem = createParticles(particleCount);
+        let boundingBox = new THREE.Box3(new THREE.Vector3(-5,-5,-5), new THREE.Vector3(5,5,5));
+        let boxHelper = new THREE.Box3Helper(boundingBox, 0x0d9488);
+        activeSceneObjects.add(boxHelper);
+        let entropyText;
+        let mode = 'uniform';
+        let variance = 5.0;
+
+        function updatePDFChart() {
+            const pdfDesc = document.getElementById('pdf-description');
+            if (mode === 'uniform') {
+                const size = parseFloat(document.getElementById('size-slider').value);
+                const volume = Math.pow(size*2, 3);
+                const height = volume > 0 ? 1 / volume : 0;
+                pdfDesc.textContent = "For a uniform distribution, the PDF is a constant value within the volume. The area under this 'curve' must equal 1.";
+                differentialInfoChart.data = { datasets: [{ stepped: true, data: [{x: -size, y: height}, {x: size, y: height}], borderColor: '#facc15', backgroundColor: 'rgba(250, 204, 21, 0.3)', fill: {target: 'origin'} }] };
+                differentialInfoChart.options.scales.x.min = -size - 1;
+                differentialInfoChart.options.scales.x.max = size + 1;
+            } else {
+                const sigma = Math.sqrt(variance);
+                pdfDesc.textContent = "For a Gaussian (Normal) distribution, the PDF is a bell curve. Higher variance means a wider, flatter curve, increasing entropy.";
+                const data = [];
+                for(let x = -15; x <= 15; x+=0.5) {
+                    const pdf = (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow(x / sigma, 2));
+                    data.push({x, y: pdf});
+                }
+                differentialInfoChart.data = { datasets: [{ data, borderColor: '#2dd4bf', backgroundColor: 'rgba(45, 212, 191, 0.3)', fill: 'origin', tension: 0.4 }] };
+                differentialInfoChart.options.scales.x.min = -15;
+                differentialInfoChart.options.scales.x.max = 15;
+            }
+            differentialInfoChart.update();
+        }
+
+        function createControls() {
+            const controlsDiv = document.getElementById('controls-panel');
+            controlsDiv.innerHTML = `
+                <div class="control-group">
+                    <label class="text-sm font-medium">Distribution Type</label>
+                    <div class="flex gap-2">
+                         <button class="preset-button active" data-shape="uniform">Uniform</button>
+                         <button class="preset-button" data-shape="gaussian">Gaussian</button>
+                    </div>
+                </div>
+                <div id="uniform-controls" class="control-group">
+                    <label class="text-sm font-medium">Container Half-Size: <span id="size-value">5.0</span></label>
+                    <input id="size-slider" type="range" min="0.1" max="10" step="0.1" value="5" class="w-full max-w-xs">
+                </div>
+                 <div id="gaussian-controls" class="control-group hidden">
+                    <label class="text-sm font-medium">Variance (&sigma;²): <span id="variance-value">5.0</span></label>
+                    <input id="variance-slider" type="range" min="0" max="100" step="1" value="50" class="w-full max-w-xs">
+                </div>
+                <div class="text-center text-3xl font-bold text-teal-400"><span id="entropy-value" class="text-white">9.97</span> bits</div>
+            `;
+            entropyText = document.getElementById('entropy-value');
+
+            document.querySelectorAll('#controls-panel .preset-button').forEach(b => b.addEventListener('click', (e) => {
+                mode = e.target.dataset.shape;
+                document.querySelectorAll('#controls-panel .preset-button').forEach(btn => btn.classList.remove('active'));
+                e.target.classList.add('active');
+                document.getElementById('uniform-controls').classList.toggle('hidden', mode !== 'uniform');
+                document.getElementById('gaussian-controls').classList.toggle('hidden', mode !== 'gaussian');
+                boxHelper.visible = (mode === 'uniform');
+                updatePDFChart();
+            }));
+
+            document.getElementById('size-slider').addEventListener('input', (e) => {
+                const size = parseFloat(e.target.value);
+                boundingBox.setFromCenterAndSize(new THREE.Vector3(), new THREE.Vector3(2*size, 2*size, 2*size));
+                document.getElementById('size-value').textContent = size.toFixed(1);
+                updatePDFChart();
+            });
+            document.getElementById('variance-slider').addEventListener('input', e => {
+                const sliderValue = parseFloat(e.target.value);
+                const minVar = 0.1; const maxVar = 1000000;
+                const minLog = Math.log(minVar); const maxLog = Math.log(maxVar);
+                const scale = (maxLog - minLog) / 100;
+                const actualVariance = Math.exp(minLog + scale * sliderValue);
+                variance = actualVariance;
+                document.getElementById('variance-value').textContent = actualVariance > 1000 ? actualVariance.toExponential(1) : actualVariance.toFixed(1);
+                updatePDFChart();
+            });
+            updatePDFChart();
+        }
+
+        function update() {
+            if (isPaused) return;
+             const positions = particleSystem.geometry.attributes.position.array;
+            const randomForce = 0.1 * systemEnergy;
+            particles.forEach((p, i) => {
+                if (mode === 'uniform') {
+                    p.velocity.add(new THREE.Vector3((Math.random()-0.5)*randomForce, (Math.random()-0.5)*randomForce, (Math.random()-0.5)*randomForce));
+                    p.position.add(p.velocity);
+                    ['x', 'y', 'z'].forEach(axis => {
+                        if (p.position[axis] < boundingBox.min[axis] || p.position[axis] > boundingBox.max[axis]) {
+                            p.position[axis] = THREE.MathUtils.clamp(p.position[axis], boundingBox.min[axis], boundingBox.max[axis]); p.velocity[axis] *= -0.8;
+                        }
+                    });
+                    p.velocity.multiplyScalar(0.99);
+                } else { 
+                    const restoringForce = p.position.clone().multiplyScalar(-0.005 / variance);
+                    p.velocity.add(restoringForce);
+                    p.velocity.add(new THREE.Vector3((Math.random()-0.5)*0.05*systemEnergy, (Math.random()-0.5)*0.05*systemEnergy, (Math.random()-0.5)*0.05*systemEnergy));
+                    p.velocity.multiplyScalar(0.95);
+                    p.position.add(p.velocity);
+                }
+                positions.set([p.position.x, p.position.y, p.position.z], i*3);
+            });
+
+            let entropy = 0; if (mode === 'uniform') { const size = boundingBox.getSize(new THREE.Vector3()); const volume = size.x * size.y * size.z; entropy = Math.log2(volume); } else { entropy = 0.5 * Math.log2(Math.pow(2 * Math.PI * Math.E * variance, 3)); }
+            if (entropyText) entropyText.textContent = entropy.toFixed(2);
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+        }
+
+        createControls();
+        updatePDFChart();
+        return { update, cleanup: () => {} };
+    }
+
+    function initBoltzmann() {
+        const BOX_SIZE = 10;
+        const particleSystem = createParticles(particleCount, 0xffa500);
+        let boundingBox = new THREE.Box3(new THREE.Vector3(-BOX_SIZE/2, -BOX_SIZE/2, -BOX_SIZE/2), new THREE.Vector3(BOX_SIZE/2, BOX_SIZE/2, BOX_SIZE/2));
+        const boxHelper = new THREE.Box3Helper(boundingBox, 0xffffff);
+        const barrierGeo = new THREE.PlaneGeometry(BOX_SIZE, BOX_SIZE);
+        const barrierMat = new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.3, side: THREE.DoubleSide});
+        const barrier = new THREE.Mesh(barrierGeo, barrierMat);
+        barrier.rotation.x = Math.PI / 2;
+
+        const sphereGeo = new THREE.SphereGeometry(BOX_SIZE/2, 32, 32);
+        const sphereMat = new THREE.MeshBasicMaterial({color: 0xffffff, wireframe: true, transparent: true, opacity: 0.3});
+        const sphereHelper = new THREE.Mesh(sphereGeo, sphereMat);
+        sphereHelper.visible = false;
+
+        const sphericalBarrierGeo = new THREE.SphereGeometry(1, 32, 16);
+        const sphericalBarrierMat = new THREE.MeshBasicMaterial({color: 0xffa500, wireframe: true, transparent: true, opacity: 0.5});
+        const sphericalBarrier = new THREE.Mesh(sphericalBarrierGeo, sphericalBarrierMat);
+        sphericalBarrier.visible = false;
+        let sphericalBarrierRadius = BOX_SIZE / 4;
+        sphericalBarrier.scale.set(sphericalBarrierRadius, sphericalBarrierRadius, sphericalBarrierRadius);
+
+        activeSceneObjects.add(boxHelper, sphereHelper, barrier, sphericalBarrier);
+
+        let entropyText, barrierSlider, selectedObject = null;
+        const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        let shapeMode = 'cube'; let gravityMode = false; let collisionsMode = false;
+
+        function resetParticles() {
+            particles.forEach(p => {
+                p.velocity.set(0,0,0);
+                if(shapeMode === 'cube') {
+                    p.position.set( (Math.random() - 0.5) * BOX_SIZE, Math.random() * BOX_SIZE / 2, (Math.random() - 0.5) * BOX_SIZE );
+                } else {
+                     const r = sphericalBarrierRadius + Math.random() * (BOX_SIZE/2 - sphericalBarrierRadius);
+                     p.position.setFromSphericalCoords(r, Math.acos(2 * Math.random() - 1), Math.random() * 2 * Math.PI );
+                }
+                p.lastY = p.position.y;
+            });
+            if (shapeMode === 'cube') {
+                barrier.position.y = 0;
+                if(barrierSlider) barrierSlider.value = 0;
+            }
+        }
+
+        function createControls() {
+            const controlsDiv = document.getElementById('controls-panel');
+            controlsDiv.innerHTML = `
+                <div class="control-group"> <div class="text-center text-3xl font-bold my-2 text-orange-400">&#916;S ~ <span id="entropy-value" class="text-white">0.00</span></div> </div>
+                <div class="flex gap-4 flex-wrap justify-center"> 
+                    <button id="shape-toggle" class="toggle-button">Shape: Cube</button> 
+                    <button id="gravity-toggle" class="toggle-button">Gravity: Off</button> 
+                    <button id="collision-toggle" class="toggle-button">Collisions: Off</button>
+                </div>
+                <div id="barrier-controls" class="control-group"> <label class="text-sm font-medium">Floor Position</label> <input id="barrier-slider" type="range" min="${-BOX_SIZE/2}" max="${BOX_SIZE/2}" step="0.01" value="0" class="w-full max-w-xs"> </div>
+                <div id="sphere-barrier-controls" class="control-group hidden"> <label class="text-sm font-medium">Inner Barrier Radius: <span id="radius-value">${sphericalBarrierRadius.toFixed(1)}</span></label> <input id="sphere-barrier-slider" type="range" min="0" max="${BOX_SIZE/2}" step="0.01" value="${sphericalBarrierRadius}" class="w-full max-w-xs"> </div>
+            `;
+            entropyText = document.getElementById('entropy-value');
+            barrierSlider = document.getElementById('barrier-slider');
+            const shapeBtn = document.getElementById('shape-toggle'); const gravityBtn = document.getElementById('gravity-toggle'); const collisionBtn = document.getElementById('collision-toggle');
+            const barrierControls = document.getElementById('barrier-controls'); const sphereBarrierControls = document.getElementById('sphere-barrier-controls');
+            const sphereBarrierSlider = document.getElementById('sphere-barrier-slider'); const radiusValueSpan = document.getElementById('radius-value');
+
+            shapeBtn.addEventListener('click', () => {
+                shapeMode = shapeMode === 'cube' ? 'sphere' : 'cube'; shapeBtn.textContent = `Shape: ${shapeMode === 'cube' ? 'Cube' : 'Sphere'}`;
+                boxHelper.visible = shapeMode === 'cube'; sphereHelper.visible = shapeMode === 'sphere'; barrier.visible = shapeMode === 'cube'; sphericalBarrier.visible = shapeMode === 'sphere';
+                barrierControls.classList.toggle('hidden', shapeMode !== 'cube'); sphereBarrierControls.classList.toggle('hidden', shapeMode !== 'sphere'); resetParticles();
+            });
+            gravityBtn.addEventListener('click', () => { gravityMode = !gravityMode; gravityBtn.textContent = `Gravity: ${gravityMode ? 'On' : 'Off'}`; gravityBtn.classList.toggle('active', gravityMode); });
+            collisionBtn.addEventListener('click', () => { collisionsMode = !collisionsMode; collisionBtn.textContent = `Collisions: ${collisionsMode ? 'On' : 'Off'}`; collisionBtn.classList.toggle('active', collisionsMode); });
+            barrierSlider.addEventListener('input', (e) => barrier.position.y = parseFloat(e.target.value));
+            sphereBarrierSlider.addEventListener('input', (e) => {
+                sphericalBarrierRadius = parseFloat(e.target.value); sphericalBarrier.scale.set(sphericalBarrierRadius, sphericalBarrierRadius, sphericalBarrierRadius); radiusValueSpan.textContent = sphericalBarrierRadius.toFixed(1);
+            });
+        }
+
+        const onPointerDown = (e) => {
+            if (shapeMode !== 'cube') return;
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(barrier);
+            if (intersects.length > 0) { selectedObject = barrier; controls.enabled = false; }
+        };
+        const onPointerMove = (e) => {
+            if (selectedObject) {
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1; mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const intersectionPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane.setFromNormalAndCoplanarPoint(camera.getWorldDirection(plane.normal), selectedObject.position), intersectionPoint);
+                let newY = intersectionPoint.y; newY = Math.max(-BOX_SIZE/2, Math.min(newY, BOX_SIZE / 2));
+                barrier.position.y = newY; barrierSlider.value = newY;
+            }
+        };
+        const onPointerUp = () => { selectedObject = null; controls.enabled = true; };
+
+        renderer.domElement.addEventListener('pointerdown', onPointerDown);
+        renderer.domElement.addEventListener('pointermove', onPointerMove);
+        renderer.domElement.addEventListener('pointerup', onPointerUp);
+
+        function handleCollisions() {
+            const collisionRadius = particleSize * 2;
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p1 = particles[i]; const p2 = particles[j];
+                    const dist = p1.position.distanceTo(p2.position);
+                    if (dist < collisionRadius) {
+                        const v1 = p1.velocity; const v2 = p2.velocity;
+                        const pos1 = p1.position; const pos2 = p2.position;
+                        const collisionNormal = pos1.clone().sub(pos2).normalize();
+                        const v_relative = v1.clone().sub(v2);
+                        const speed = v_relative.dot(collisionNormal);
+                        if (speed < 0) {
+                            const impulse = (2 * speed) / 2; // Assuming equal mass
+                            v1.sub(collisionNormal.clone().multiplyScalar(impulse));
+                            v2.add(collisionNormal.clone().multiplyScalar(impulse));
+                        }
+                    }
+                }
+            }
+        }
+
+        function update() {
+            if (isPaused) return;
+            if (collisionsMode) handleCollisions();
+            const positions = particleSystem.geometry.attributes.position.array;
+            const randomForce = 0.01 * systemEnergy;
+
+            particles.forEach((p, i) => {
+                if (!gravityMode) p.velocity.add(new THREE.Vector3((Math.random()-0.5)*randomForce, (Math.random()-0.5)*randomForce, (Math.random()-0.5)*randomForce));
+                else {
+                    if (shapeMode === 'cube') p.velocity.y -= 0.005 * systemEnergy;
+                    else p.velocity.add(p.position.clone().multiplyScalar(-0.001 * systemEnergy));
+                }
+                p.position.add(p.velocity);
+                const pos = p.position; const vel = p.velocity;
+
+                if(shapeMode === 'cube') {
+                    if (pos.x < -BOX_SIZE/2 || pos.x > BOX_SIZE/2) { vel.x *= -0.9; pos.x = Math.sign(pos.x) * BOX_SIZE/2; }
+                    if (pos.y > BOX_SIZE/2) { vel.y *= -0.9; pos.y = BOX_SIZE/2; } 
+                    if (pos.z < -BOX_SIZE/2 || pos.z > BOX_SIZE/2) { vel.z *= -0.9; pos.z = Math.sign(pos.z) * BOX_SIZE/2; }
+
+                    const barrierY = barrier.position.y;
+                    if (pos.y < barrierY) { vel.y *= -0.9; pos.y = barrierY; }
+                } else {
+                    if(pos.length() > BOX_SIZE/2) { const n = pos.clone().normalize(); vel.reflect(n).multiplyScalar(0.9); pos.copy(n.multiplyScalar(BOX_SIZE/2)); }
+                    if (pos.length() < sphericalBarrierRadius) { const n = pos.clone().normalize(); vel.reflect(n).multiplyScalar(0.9); pos.copy(n.multiplyScalar(sphericalBarrierRadius)); }
+                }
+                positions.set([pos.x, pos.y, pos.z], i*3);
+            });
+
+            if (shapeMode === 'cube') {
+                const initialHeight = BOX_SIZE / 2;
+                const finalHeight = (BOX_SIZE / 2) - barrier.position.y;
+                const W_ratio = finalHeight / initialHeight;
+                const deltaS = Math.log(W_ratio);
+                if (entropyText) entropyText.innerHTML = W_ratio > 1e-3 ? deltaS.toFixed(2) : "-&infin;";
+            } else {
+                 const R_outer = BOX_SIZE / 2;
+                 const R_inner = sphericalBarrierRadius;
+                 const W_proportional = Math.pow(R_outer, 3) - Math.pow(R_inner, 3);
+                 const entropy = Math.log(W_proportional);
+                 if (entropyText) entropyText.innerHTML = isFinite(entropy) && W_proportional > 0 ? entropy.toFixed(2) : "-&infin;";
+            }
+            particleSystem.geometry.attributes.position.needsUpdate = true;
+        }
+
+        createControls();
+        resetParticles();
+        return { 
+            update, 
+            cleanup: () => {
+                renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+                renderer.domElement.removeEventListener('pointermove', onPointerMove);
+                renderer.domElement.removeEventListener('pointerup', onPointerUp);
+            } 
+        };
+    }
+
+    function initBlackHole() {
+        const G = 1, c = 10, STAR_THRESHOLD = 3.0;
+        let mass = 1.0;
+        let time = 0;
+        let entropyText, radiusText, kappaText, ratioText, lorentzText;
+        let vectorFieldVisible = false;
+        let lightRaysVisible = true;
+        let geodesicLinesVisible = false;
+        let gridVisible = true;
+        let particlesVisible = true;
+
+        const GRID_SIZE = 20;
+        const GRID_SPACING = 5;
+        const SIMULATION_RADIUS = GRID_SIZE * GRID_SPACING;
+
+        // --- Starfield Background ---
+        const starVertices = [];
+        for (let i = 0; i < 10000; i++) starVertices.push(THREE.MathUtils.randFloatSpread(2000), THREE.MathUtils.randFloatSpread(2000), THREE.MathUtils.randFloatSpread(2000));
+        const starGeometry = new THREE.BufferGeometry();
+        starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+        const stars = new THREE.Points(starGeometry, new THREE.PointsMaterial({ color: 0x888888, size: 0.7 }));
+        activeSceneObjects.add(stars);
+
+        // --- Central Object (Black Hole or Star) ---
+        const centralObject = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        activeSceneObjects.add(centralObject);
+        followObject = centralObject;
+
+        // --- Event Horizon Outline ---
+        const horizonOutline = new THREE.Mesh(new THREE.TorusGeometry(1, 0.1, 16, 100), new THREE.MeshBasicMaterial({ color: 0xffa500, side: THREE.DoubleSide }));
+        activeSceneObjects.add(horizonOutline);
+
+       // --- Spacetime Vector Field ---
+        const vectorField = new THREE.Group();
+        const arrows = [];
+        for (let x = -GRID_SIZE; x <= GRID_SIZE; x++) {
+            for (let y = -GRID_SIZE; y <= GRID_SIZE; y++) {
+                for (let z = -GRID_SIZE; z <= GRID_SIZE; z++) {
+                    const origin = new THREE.Vector3(x * GRID_SPACING, y * GRID_SPACING, z * GRID_SPACING);
+                    if (origin.length() < GRID_SPACING * 1.5 || Math.random() > 0.3) continue; 
+                    const arrow = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), origin, 2, 0x4b5563, 1, 0.5);
+                    arrows.push(arrow);
+                    vectorField.add(arrow);
+                }
+            }
+        }
+        activeSceneObjects.add(vectorField);
+
+        // --- Flowing Particles ---
+        const flowingParticles = createParticles(particleCount, 0xffffff);
+        flowingParticles.material.size = 0.08;
+
+        // --- Geodesic Lines ---
+        const geodesicGroup = new THREE.Group();
+        const geodesicLines = [];
+        const NUM_GEODESICS = 100;
+        const GEO_POINTS = 200;
+
+        for(let i=0; i < NUM_GEODESICS; i++) {
+            const material = new THREE.LineBasicMaterial({color: 0x60a5fa, transparent: true, opacity: 0.7, linewidth: 2});
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(GEO_POINTS * 3);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const line = new THREE.Line(geometry, material);
+
+            const startPos = new THREE.Vector3();
+            const face = Math.floor(Math.random() * 6);
+            const coord = (val) => (Math.random() - 0.5) * 2 * val;
+            switch(face) {
+               case 0: startPos.set(SIMULATION_RADIUS, coord(SIMULATION_RADIUS), coord(SIMULATION_RADIUS)); break;
+               case 1: startPos.set(-SIMULATION_RADIUS, coord(SIMULATION_RADIUS), coord(SIMULATION_RADIUS)); break;
+               case 2: startPos.set(coord(SIMULATION_RADIUS), SIMULATION_RADIUS, coord(SIMULATION_RADIUS)); break;
+               case 3: startPos.set(coord(SIMULATION_RADIUS), -SIMULATION_RADIUS, coord(SIMULATION_RADIUS)); break;
+               case 4: startPos.set(coord(SIMULATION_RADIUS), coord(SIMULATION_RADIUS), SIMULATION_RADIUS); break;
+               case 5: startPos.set(coord(SIMULATION_RADIUS), coord(SIMULATION_RADIUS), -SIMULATION_RADIUS); break;
+            }
+
+            const vecToCenter = startPos.clone().normalize().multiplyScalar(-1);
+            const randomVec = new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5).normalize();
+            const tangentVec = vecToCenter.clone().cross(randomVec).normalize();
+            const initialVelocity = tangentVec.multiplyScalar(c * 0.05); 
+
+            geodesicLines.push({line, startPos, initialVelocity});
+            geodesicGroup.add(line);
+        }
+        activeSceneObjects.add(geodesicGroup);
+
+        // --- Static 3D Grid ---
+        const staticGridGroup = new THREE.Group();
+        staticGridGroup.userData.lines = [];
+        const gridLineMaterial = new THREE.LineBasicMaterial({ color: new THREE.Color(gridColor), transparent: true, opacity: 0.5 });
+        const gridLineSegments = 50;
+        const gridStep = (SIMULATION_RADIUS * 2) / (gridLineCount - 1);
+
+        for (let i = 0; i < gridLineCount; i++) {
+            const current = -SIMULATION_RADIUS + i * gridStep;
+            // XY plane lines
+            for (let j = 0; j < gridLineCount; j++) {
+                const z = -SIMULATION_RADIUS + j * gridStep;
+                staticGridGroup.userData.lines.push({ start: new THREE.Vector3(-SIMULATION_RADIUS, current, z), end: new THREE.Vector3(SIMULATION_RADIUS, current, z) });
+                staticGridGroup.userData.lines.push({ start: new THREE.Vector3(current, -SIMULATION_RADIUS, z), end: new THREE.Vector3(current, SIMULATION_RADIUS, z) });
+            }
+             // XZ planes
+            for (let j = 0; j < gridLineCount; j++) {
+                 const y = -SIMULATION_RADIUS + j * gridStep;
+                staticGridGroup.userData.lines.push({ start: new THREE.Vector3(-SIMULATION_RADIUS, y, current), end: new THREE.Vector3(SIMULATION_RADIUS, y, current) });
+                staticGridGroup.userData.lines.push({ start: new THREE.Vector3(current, y, -SIMULATION_RADIUS), end: new THREE.Vector3(current, y, SIMULATION_RADIUS) });
+            }
+        }
+
+        staticGridGroup.userData.lines.forEach(data => {
+            const points = [];
+            for(let i=0; i <= gridLineSegments; i++){
+                points.push(data.start.clone().lerp(data.end, i/gridLineSegments));
+            }
+            let geom = new THREE.BufferGeometry().setFromPoints(points);
+            data.line = new THREE.Line(geom, gridLineMaterial.clone());
+            data.originalVertices = points;
+            staticGridGroup.add(data.line);
+        });
+        activeSceneObjects.add(staticGridGroup);
+
+
+        const resetParticle = (p) => {
+            const gridX = Math.floor(Math.random() * (2 * GRID_SIZE + 1)) - GRID_SIZE;
+            const gridY = Math.floor(Math.random() * (2 * GRID_SIZE + 1)) - GRID_SIZE;
+            const gridZ = Math.floor(Math.random() * (2 * GRID_SIZE + 1)) - GRID_SIZE;
+
+            const axis = Math.floor(Math.random() * 3);
+            const pos = new THREE.Vector3(gridX * GRID_SPACING, gridY * GRID_SPACING, gridZ * GRID_SPACING);
+
+            if(axis === 0) pos.x += (Math.random() - 0.5) * GRID_SPACING;
+            else if(axis === 1) pos.y += (Math.random() - 0.5) * GRID_SPACING;
+            else pos.z += (Math.random() - 0.5) * GRID_SPACING;
+
+            p.position.copy(pos);
+        };
+        particles.forEach(resetParticle);
+
+
+        // --- Light Rays ---
+        const lightRayGroup = new THREE.Group();
+        const MAX_RAYS = 200, NUM_WAVE_POINTS = 20;
+        const rays = [];
+        for (let i = 0; i < MAX_RAYS; i++) {
+            const material = new THREE.LineBasicMaterial({ vertexColors: true });
+            const geometry = new THREE.BufferGeometry();
+            const positions = new Float32Array(NUM_WAVE_POINTS * 3);
+            geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            const line = new THREE.Line(geometry, material);
+            lightRayGroup.add(line);
+            rays.push({ line, position: new THREE.Vector3(), velocity: new THREE.Vector3(), prevDist: 0 });
+        }
+        activeSceneObjects.add(lightRayGroup);
+
+        function resetRay(ray) {
+            const rs = (2 * G * mass) / (c * c);
+            const startRadius = rs * 1.5 + Math.random() * 10;
+            ray.position.setFromSphericalCoords(startRadius, Math.acos(2 * Math.random() - 1), Math.random() * Math.PI * 2);
+            ray.velocity.copy(ray.position).clone().cross(new THREE.Vector3(Math.random()-0.5, Math.random()-0.5, Math.random()-0.5)).normalize().multiplyScalar(c * 0.1);
+            ray.prevDist = startRadius;
+            const positions = ray.line.geometry.attributes.position.array;
+            for(let i = 0; i < positions.length; i+=3) {
+                positions[i] = ray.position.x;
+                positions[i+1] = ray.position.y;
+                positions[i+2] = ray.position.z;
+            }
+            ray.line.geometry.attributes.position.needsUpdate = true;
+        }
+        rays.forEach(resetRay);
+
+        function createControls() {
+            const controlsDiv = document.getElementById('controls-panel');
+            controlsDiv.innerHTML = `
+                 <div class="control-group">
+                      <label class="text-sm font-medium">Mass (10^x Solar Masses): <span id="mass-value">1.00e+0</span></label>
+                      <div class="flex items-center gap-2 flex-wrap justify-center">
+                          <input id="mass-slider" type="range" min="-2" max="10.6" step="0.05" value="0" class="w-full max-w-[180px]">
+                          <button id="particle-toggle" class="toggle-button active text-xs p-2">Particles: On</button>
+                          <button id="grid-toggle" class="toggle-button active text-xs p-2">Spacetime Grid: On</button>
+                          <button id="vector-field-toggle" class="toggle-button text-xs p-2">Vectors: Off</button>
+                          <button id="light-rays-toggle" class="toggle-button active text-xs p-2">Light Rays: On</button>
+                          <button id="geodesic-toggle" class="toggle-button text-xs p-2">Geodesics: Off</button>
+                      </div>
+                 </div>
+                 <div class="flex items-center gap-2 flex-wrap justify-center">
+                      <button id="pause-toggle" class="toggle-button text-sm p-2">Pause</button>
+                      <button id="reset-button" class="toggle-button text-sm p-2">Reset</button>
+                 </div>
+                 <div class="flex flex-wrap gap-x-6 gap-y-2 justify-center">
+                      <div class="control-group"> <div class="text-xs text-purple-400">Entropy (S/k<sub>B</sub>)</div> <div id="bh-entropy-value" class="text-lg font-bold">...</div> </div>
+                      <div class="control-group"> <div class="text-xs text-purple-400">Object Radius</div> <div id="rs-value" class="text-lg font-bold">...</div> </div>
+                      <div class="control-group"> <div class="text-xs text-purple-400">Surface Gravity (κ)</div> <div id="kappa-value" class="text-lg font-bold">...</div> </div>
+                      <div class="control-group"> <div class="text-xs text-purple-400">κ / c Ratio</div> <div id="ratio-value" class="text-lg font-bold">...</div> </div>
+                      <div class="control-group"> <div class="text-xs text-purple-400">Lorentz Factor (γ) at R<sub>S</sub></div> <div id="lorentz-value" class="text-lg font-bold">...</div> </div>
+                 </div>
+            `;
+            entropyText = document.getElementById('bh-entropy-value');
+            radiusText = document.getElementById('rs-value');
+            kappaText = document.getElementById('kappa-value');
+            ratioText = document.getElementById('ratio-value');
+            lorentzText = document.getElementById('lorentz-value');
+            const massValueSpan = document.getElementById('mass-value');
+            const massSlider = document.getElementById('mass-slider');
+            const vectorFieldToggle = document.getElementById('vector-field-toggle');
+            const lightRaysToggle = document.getElementById('light-rays-toggle');
+            const geodesicToggle = document.getElementById('geodesic-toggle');
+            const gridToggle = document.getElementById('grid-toggle');
+            const particleToggle = document.getElementById('particle-toggle');
+            const pauseButton = document.getElementById('pause-toggle');
+            const resetButton = document.getElementById('reset-button');
+
+
+            mass = Math.pow(10, parseFloat(massSlider.value));
+            massValueSpan.textContent = mass.toExponential(2);
+
+            massSlider.addEventListener('input', (e) => {
+                const logMass = parseFloat(e.target.value);
+                mass = Math.pow(10, logMass);
+                massValueSpan.textContent = mass.toExponential(2);
+            });
+
+            vectorFieldToggle.addEventListener('click', (e) => {
+                vectorFieldVisible = !vectorFieldVisible;
+                e.target.textContent = `Vectors: ${vectorFieldVisible ? 'On' : 'Off'}`;
+                e.target.classList.toggle('active', vectorFieldVisible);
+            });
+
+            lightRaysToggle.addEventListener('click', (e) => {
+                lightRaysVisible = !lightRaysVisible;
+                e.target.textContent = `Light Rays: ${lightRaysVisible ? 'On' : 'Off'}`;
+                e.target.classList.toggle('active', lightRaysVisible);
+            });
+
+            geodesicToggle.addEventListener('click', (e) => {
+                geodesicLinesVisible = !geodesicLinesVisible;
+                e.target.textContent = `Geodesics: ${geodesicLinesVisible ? 'On' : 'Off'}`;
+                e.target.classList.toggle('active', geodesicLinesVisible);
+            });
+
+            gridToggle.addEventListener('click', (e) => {
+                gridVisible = !gridVisible;
+                e.target.textContent = `Spacetime Grid: ${gridVisible ? 'On' : 'Off'}`;
+                e.target.classList.toggle('active', gridVisible);
+            });
+             particleToggle.addEventListener('click', (e) => {
+                particlesVisible = !particlesVisible;
+                e.target.textContent = `Particles: ${particlesVisible ? 'On' : 'Off'}`;
+                e.target.classList.toggle('active', particlesVisible);
+            });
+
+            pauseButton.addEventListener('click', (e) => {
+                isPaused = !isPaused;
+                e.target.textContent = isPaused ? 'Resume' : 'Pause';
+                e.target.classList.toggle('active', isPaused);
+            });
+
+            resetButton.addEventListener('click', () => {
+                resetCurrentConcept();
+            });
+        }
+
+        function update(delta) {
+            if (isPaused) return;
+
+            const dt = 0.016 * timeMultiplier;
+            time += dt;
+
+            const isBlackHole = mass >= STAR_THRESHOLD;
+            const M_geom = (G * mass) / (c * c);
+            const a = blackHoleSpin * M_geom; // Spin parameter
+            
+            let rs, objectRadius;
+
+            if (a > M_geom) { // Naked singularity, not physically expected
+                 rs = 0;
+                 objectRadius = 0.1; // small placeholder
+            } else {
+                 rs = M_geom + Math.sqrt(M_geom * M_geom - a * a); // Outer event horizon
+                 objectRadius = isBlackHole ? rs : Math.pow(mass, 1/3) * 0.5;
+            }
+
+
+            centralObject.scale.setScalar(objectRadius);
+            horizonOutline.scale.setScalar(rs);
+            horizonOutline.visible = isBlackHole;
+            centralObject.material.color.set(isBlackHole ? 0x000000 : 0xffffdd);
+
+            const A = 4 * Math.PI * (rs * rs + a * a);
+            const kappa_num = Math.sqrt(M_geom * M_geom - a * a);
+            const kappa_den = 2 * M_geom * (M_geom + Math.sqrt(M_geom * M_geom - a * a)) - 2*a*a;
+            const kappa = kappa_den > 1e-9 ? (c**4 / (G)) * (kappa_num / kappa_den) : 0;
+
+            entropyText.textContent = (A / 4).toExponential(2);
+            radiusText.textContent = objectRadius.toFixed(2);
+            kappaText.textContent = isFinite(kappa) ? kappa.toExponential(2) : 'N/A';
+            ratioText.textContent = isFinite(kappa) ? (kappa / c).toExponential(2) : 'N/A';
+
+            const v_at_rs = c; // Velocity at EH is c
+            const v_over_c_sq = 1;
+            lorentzText.innerHTML = "&infin;";
+
+
+            // --- Frame-dragging calculation ---
+            const spinAxis = new THREE.Vector3(0, 1, 0);
+
+            // --- Update Spacetime Vector Field ---
+            vectorField.visible = vectorFieldVisible;
+            if (vectorFieldVisible) {
+                arrows.forEach(arrow => {
+                    const r = arrow.position.length();
+                    if (r > 0.01) {
+                        const v_inflow_mag = Math.sqrt(rs / r) * c;
+                        const inflow_direction = arrow.position.clone().normalize().multiplyScalar(-1);
+                        arrow.setDirection(inflow_direction);
+                        arrow.setLength(Math.min(v_inflow_mag * 0.5, GRID_SPACING * 0.9), 0.5, 0.2);
+                    }
+                });
+            }
+
+            // --- Update Flowing Particles ---
+            flowingParticles.visible = particlesVisible;
+            if (particlesVisible) {
+                const particlePositions = flowingParticles.geometry.attributes.position;
+                particles.forEach((p, i) => {
+                    const r = p.position.length();
+                    if (r > 0.01) {
+                        const v_inflow_mag = Math.sqrt(rs / r) * c;
+                        const inflow_velocity = p.position.clone().normalize().multiplyScalar(-v_inflow_mag);
+                        
+                        // Frame-dragging
+                        const frameDragTerm = (2 * G * mass * a) / (r * r * r * c);
+                        const tangentDir = spinAxis.clone().cross(p.position).normalize();
+                        const frameDragVel = tangentDir.multiplyScalar(frameDragTerm * systemEnergy * 10);
+                        inflow_velocity.add(frameDragVel);
+
+                        p.position.add(inflow_velocity.multiplyScalar(dt * 0.2 * systemEnergy));
+                    }
+
+                    if (p.position.length() < objectRadius * 1.1) {
+                        resetParticle(p);
+                    }
+                    particlePositions.setXYZ(i, p.position.x, p.position.y, p.position.z);
+                });
+                particlePositions.needsUpdate = true;
+            }
+
+            // --- Update Geodesic Lines ---
+            geodesicGroup.visible = geodesicLinesVisible;
+            if (geodesicLinesVisible) {
+                geodesicLines.forEach(item => {
+                    const positions = item.line.geometry.attributes.position;
+                    let currentPos = item.startPos.clone();
+                    let currentVel = item.initialVelocity.clone();
+                    const sim_dt = 0.2; 
+
+                    for (let i = 0; i < GEO_POINTS; i++) {
+                        positions.setXYZ(i, currentPos.x, currentPos.y, currentPos.z);
+
+                        const r = currentPos.length();
+                        if (r < objectRadius * 1.05) {
+                            for (let j = i; j < GEO_POINTS; j++) positions.setXYZ(j, currentPos.x, currentPos.y, currentPos.z);
+                            break;
+                        }
+
+                        const gravitationalForce = -G * mass / (r * r);
+                        const acceleration = currentPos.clone().normalize().multiplyScalar(gravitationalForce);
+
+                        const v_inflow_mag = Math.sqrt(rs / r) * c;
+                        const inflow_velocity = currentPos.clone().normalize().multiplyScalar(-v_inflow_mag);
+
+                        // Frame-dragging on Geodesics
+                        const frameDragTerm = (2 * G * mass * a) / (r * r * r * c);
+                        const tangentDir = spinAxis.clone().cross(currentPos).normalize();
+                        const frameDragVel = tangentDir.multiplyScalar(frameDragTerm * 1000); // Enhanced effect for visibility
+                        currentVel.add(frameDragVel);
+
+
+                        currentVel.add(acceleration.multiplyScalar(sim_dt));
+
+                        const posChangeFromVel = currentVel.clone().multiplyScalar(sim_dt);
+                        const posChangeFromInflow = inflow_velocity.multiplyScalar(sim_dt * 0.5); 
+
+                        currentPos.add(posChangeFromVel).add(posChangeFromInflow);
+                    }
+                    positions.needsUpdate = true;
+                });
+            }
+             // --- Update Static Grid ---
+            staticGridGroup.visible = gridVisible;
+            if (gridVisible) {
+                const step = (SIMULATION_RADIUS * 2) / (gridLineCount - 1);
+                const tolerance = gridSliceThickness * step;
+
+                staticGridGroup.userData.lines.forEach(item => {
+                    let isVisible = false;
+                    const s = item.start;
+                    const e = item.end;
+                    
+                    switch (gridSliceMode) {
+                        case '3d':
+                            isVisible = true;
+                            break;
+                        case 'x': // Show YZ plane at x=0
+                            // Line is parallel to Y
+                            if (s.x === e.x && s.z === e.z && Math.abs(s.x) <= tolerance) isVisible = true;
+                            // Line is parallel to Z
+                            if (s.x === e.x && s.y === e.y && Math.abs(s.x) <= tolerance) isVisible = true;
+                            break;
+                        case 'y': // Show XZ plane at y=0
+                            // Line is parallel to X
+                            if (s.y === e.y && s.z === e.z && Math.abs(s.y) <= tolerance) isVisible = true;
+                            // Line is parallel to Z
+                            if (s.x === e.x && s.y === e.y && Math.abs(s.y) <= tolerance) isVisible = true;
+                            break;
+                        case 'z': // Show XY plane at z=0
+                            // Line is parallel to X
+                            if (s.y === e.y && s.z === e.z && Math.abs(s.z) <= tolerance) isVisible = true;
+                            // Line is parallel to Y
+                            if (s.x === e.x && s.z === e.z && Math.abs(s.z) <= tolerance) isVisible = true;
+                            break;
+                    }
+                    item.line.visible = isVisible;
+                });
+
+                 staticGridGroup.scale.set(gridScale, gridScale, gridScale);
+                 staticGridGroup.userData.lines.forEach(item => {
+                    if (!item.line.visible) return; // Skip updates for hidden lines
+
+                      item.line.material.color.set(gridColor);
+                    const positions = item.line.geometry.attributes.position;
+                    for (let i = 0; i <= gridLineSegments; i++) {
+                        let currentPos = item.originalVertices[i].clone();
+                        let r = currentPos.length() * gridScale;
+
+                        if (r > 0.01) {
+                            const v_inflow_mag = Math.sqrt(rs / r) * c;
+                            const inflow_velocity = currentPos.clone().normalize().multiplyScalar(-v_inflow_mag);
+
+                            // Frame-dragging on grid
+                            const frameDragTerm = (2 * G * mass * a) / (r * r * r * c);
+                            const tangentDir = spinAxis.clone().cross(currentPos).normalize();
+                            const frameDragVel = tangentDir.multiplyScalar(frameDragTerm * time * 50); // time makes it "wind up"
+                            inflow_velocity.add(frameDragVel);
+
+                            currentPos.add(inflow_velocity.multiplyScalar(time * 0.05));
+                        }
+                         if(currentPos.length() * gridScale < objectRadius * 1.1) {
+                              currentPos.copy(item.originalVertices[i]);
+                         }
+
+                        positions.setXYZ(i, currentPos.x, currentPos.y, currentPos.z);
+                    }
+                    positions.needsUpdate = true;
+                });
+            }
+
+
+            // --- Update Light Rays ---
+            lightRayGroup.visible = lightRaysVisible;
+            if(lightRaysVisible) {
+                rays.forEach((ray) => {
+                    const r = ray.position.length();
+                    if(r < objectRadius || r > lightRayRange) {
+                        resetRay(ray);
+                    }
+
+                    const gravitationalForce = -G * mass / (r * r);
+                    const acceleration = ray.position.clone().normalize().multiplyScalar(gravitationalForce);
+                    
+                     // Frame-dragging on light
+                    const frameDragTerm = (2 * G * mass * a) / (r * r * r * c);
+                    const tangentDir = spinAxis.clone().cross(ray.position).normalize();
+                    const frameDragVel = tangentDir.multiplyScalar(frameDragTerm * 100);
+                    acceleration.add(frameDragVel);
+                    
+                    ray.velocity.add(acceleration.multiplyScalar(dt * 20));
+                    ray.position.add(ray.velocity.clone().multiplyScalar(dt * 20));
+
+                    const positions = ray.line.geometry.attributes.position;
+                    const direction = ray.velocity.clone().normalize();
+                    let side = direction.clone().cross(new THREE.Vector3(0, 1, 0));
+                    if (side.lengthSq() < 0.001) side.cross(new THREE.Vector3(1, 0, 0));
+                    side.normalize();
+
+                    const amplitude = 0.2 / (timeMultiplier + 0.5);
+                    const wavePhase = time * 20;
+
+                    for (let i = 0; i < NUM_WAVE_POINTS; i++) {
+                        const pointOnLine = ray.position.clone().add(direction.clone().multiplyScalar(-i * 0.2));
+                        const offset = side.clone().multiplyScalar(amplitude * Math.sin(i * 2 + wavePhase));
+                        pointOnLine.add(offset);
+                        positions.setXYZ(i, pointOnLine.x, pointOnLine.y, pointOnLine.z);
+                    }
+
+                    const newDist = ray.position.length();
+                    let hue = newDist < ray.prevDist ? 0.66 : 0; 
+                    if (newDist >= ray.prevDist) {
+                        const redshiftFactor = Math.max(0, 1 - (rs*1.5 / r));
+                        hue = 0.16 * redshiftFactor;
+                    }
+                    ray.prevDist = newDist;
+
+                    const color = new THREE.Color();
+                    const colors = ray.line.geometry.attributes.color || new THREE.BufferAttribute(new Float32Array(NUM_WAVE_POINTS * 3), 3);
+                    for(let i = 0; i < NUM_WAVE_POINTS; i++){
+                        const fade = 1.0 - (i / NUM_WAVE_POINTS);
+                        color.setHSL(hue, 1.0, 0.5 * fade);
+                        colors.setXYZ(i, color.r, color.g, color.b);
+                    }
+                    ray.line.geometry.setAttribute('color', colors);
+                    positions.needsUpdate = true;
+                    if(ray.line.geometry.attributes.color) ray.line.geometry.attributes.color.needsUpdate = true;
+                });
+            }
+        }
+
+        createControls();
+        return { update, cleanup: () => {}, followTarget: centralObject };
+    }
+    
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+
+    function updateCameraFollow() {
+        if(followMode && followObject) {
+            const targetSize = followObject.scale.x;
+            const distance = targetSize * 10 + 25;
+
+            const offset = controls.target.clone().sub(camera.position).normalize().multiplyScalar(distance);
+            const targetPosition = followObject.position.clone().sub(offset);
+            
+            // In VR, we move the dolly, not the camera directly
+            const targetContainer = renderer.xr.isPresenting ? playerDolly : camera;
+            targetContainer.position.lerp(targetPosition, 0.1);
+            
+            if (!renderer.xr.isPresenting) {
+                controls.target.lerp(followObject.position, 0.1);
+            }
+        }
+    }
+
+    function updateVRInputs() {
+        if (!renderer.xr.isPresenting) return;
+
+        const deadzone = 0.15;
+
+        // Helper to update one controller's state
+        const updateControllerState = (controller, state) => {
+            if (controller && controller.gamepad) {
+                const gamepad = controller.gamepad;
+                // Quest 3 Mapping:
+                // buttons[0] = trigger
+                // buttons[1] = grip
+                // axes[2] = thumbstick X
+                // axes[3] = thumbstick Y
+                state.trigger.pressed = gamepad.buttons[0] && gamepad.buttons[0].pressed;
+                state.grip.pressed = gamepad.buttons[1] && gamepad.buttons[1].pressed;
+                state.thumbstick.x = Math.abs(gamepad.axes[2]) > deadzone ? gamepad.axes[2] : 0;
+                state.thumbstick.y = Math.abs(gamepad.axes[3]) > deadzone ? gamepad.axes[3] : 0;
+            }
+        };
+
+        updateControllerState(controller1, vrInputs.left);
+        updateControllerState(controller2, vrInputs.right);
+    }
+
+    function handleVRControllers(delta) {
+        if (renderer.xr.isPresenting) {
+            const speed = 3.0;
+            const turnSpeed = 1.5;
+            
+            const cameraDirection = new THREE.Quaternion();
+            camera.getWorldQuaternion(cameraDirection);
+
+            // --- Movement (Left Thumbstick) ---
+            const moveDirection = new THREE.Vector3(vrInputs.left.thumbstick.x, 0, vrInputs.left.thumbstick.y);
+            if (moveDirection.length() > 0.1) {
+                moveDirection.normalize().multiplyScalar(speed * delta);
+                // Apply movement relative to the camera's direction (Y component is ignored for ground movement)
+                const flatCameraQuaternion = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), new THREE.Euler().setFromQuaternion(cameraDirection).y);
+                moveDirection.applyQuaternion(flatCameraQuaternion);
+                playerDolly.position.add(moveDirection);
+            }
+
+            // --- Turning & Vertical Movement (Right Thumbstick) ---
+            if (Math.abs(vrInputs.right.thumbstick.x) > 0.1) {
+                 playerDolly.rotation.y -= vrInputs.right.thumbstick.x * turnSpeed * delta;
+            }
+             if (Math.abs(vrInputs.right.thumbstick.y) > 0.1) {
+                 playerDolly.position.y -= vrInputs.right.thumbstick.y * speed * delta;
+            }
+
+            // --- Grab and Pull Zoom (Both Grips) ---
+            const bothGripsPressed = vrInputs.left.grip.pressed && vrInputs.right.grip.pressed;
+
+            if (bothGripsPressed && !vrInputs.isZooming) {
+                // Start zooming
+                vrInputs.isZooming = true;
+                vrInputs.initialZoomDistance = controllerGrip1.position.distanceTo(controllerGrip2.position);
+                vrInputs.initialDollyScale.copy(playerDolly.scale);
+            } else if (bothGripsPressed && vrInputs.isZooming) {
+                // Continue zooming
+                const currentDistance = controllerGrip1.position.distanceTo(controllerGrip2.position);
+                if (vrInputs.initialZoomDistance > 0.01) {
+                    const scaleFactor = currentDistance / vrInputs.initialZoomDistance;
+                    const newScale = vrInputs.initialDollyScale.clone().multiplyScalar(scaleFactor);
+                    // Clamp scale to avoid issues
+                    newScale.clampScalar(0.1, 10.0);
+                    playerDolly.scale.copy(newScale);
+                }
+            } else if (!bothGripsPressed && vrInputs.isZooming) {
+                // Stop zooming
+                vrInputs.isZooming = false;
+            }
+        }
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        
+        updateVRInputs();
+
+        if (!renderer.xr.isPresenting) {
+            controls.update(); 
+        }
+        
+        if(!isPaused && currentUpdate) currentUpdate(delta); 
+        
+        handleVRControllers(delta);
+        updateCameraFollow();
+        renderer.render(scene, camera); 
+    }
+    
+    init();
+</script>
+</body>
+</html>
+

@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Arc Ball Viewer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+                "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712; /* bg-gray-950 */
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px; /* Collapsed */
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        .chart-container {
+            background-color: #111827;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu {
+            display: flex;
+            gap: 10px;
+        }
+        .menu-button, .preset-button, .toggle-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .menu-button:hover, .preset-button:hover, .toggle-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .preset-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #818cf8;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="text"], input[type="number"] {
+            -moz-appearance: textfield;
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: white;
+            text-align: center;
+            padding: 0.25rem 0.5rem;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+
+        #settings-button, #fullscreen-button {
+            position: absolute;
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #settings-button {
+            top: 80px;
+            right: 20px;
+            z-index: 11;
+        }
+        #fullscreen-button {
+            bottom: 120px;
+            right: 20px;
+            z-index: 11;
+        }
+        #settings-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px) rotate(45deg);
+        }
+        #fullscreen-button:hover {
+             background-color: #4338ca;
+            transform: translateY(-2px) scale(1.1);
+        }
+        #settings-panel {
+            top: 80px;
+            right: 0;
+            width: 300px;
+            max-width: 90vw;
+            border-radius: 12px 0 0 12px;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            padding-right: 2rem; 
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            z-index: 12;
+        }
+        #settings-panel::-webkit-scrollbar {
+            width: 12px;
+        }
+        #settings-panel::-webkit-scrollbar-track {
+            background: rgba(17, 24, 39, 0.1);
+        }
+        #settings-panel::-webkit-scrollbar-thumb {
+            background-color: #4f46e5;
+            border-radius: 10px;
+            border: 3px solid rgba(17, 24, 39, 0.85); 
+            background-clip: padding-box;
+        }
+        #settings-panel::-webkit-scrollbar-thumb:hover {
+            background-color: #6366f1;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+        }
+        #close-settings {
+            font-size: 2.5rem;
+            line-height: 1;
+            padding: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 40px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        body.fullscreen-active header,
+        body.fullscreen-active #info-panel {
+            display: none !important;
+        }
+        body.fullscreen-active #controls-panel,
+        body.fullscreen-active #settings-button,
+        body.fullscreen-active #fullscreen-button {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        body.fullscreen-active #controls-panel.show-on-hover,
+        body.fullscreen-active #settings-button.show-on-hover,
+        body.fullscreen-active #fullscreen-button.show-on-hover {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+        .mobile-menu-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 16px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .mobile-menu-item:hover {
+            background-color: #4338ca;
+        }
+        .mobile-menu-item.active {
+            background-color: #4f46e5;
+            font-weight: bold;
+        }
+        #mobile-menu-container { display: none; }
+        
+        /* Custom styles for equation fraction */
+        frac {
+            display: inline-flex;
+            flex-direction: column;
+            vertical-align: middle;
+            text-align: center;
+            position: relative;
+            margin: 0 0.2em;
+        }
+        .numerator {
+            border-bottom: 1px solid currentColor;
+            padding: 0 0.4em;
+        }
+        .denominator {
+            padding: 0 0.4em;
+        }
+
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            header h1 { font-size: 1.125rem; }
+            #menu { display: none !important; }
+            #mobile-menu-container { display: block; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; width: auto; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #settings-panel { top: 70px; width: 280px; max-height: calc(100vh - 80px);}
+            #controls-panel { padding: 0.75rem; gap: 0.75rem; justify-content: space-around; }
+            .control-group { gap: 0.25rem; }
+            #controls-panel .text-3xl { font-size: 1.5rem; }
+            #controls-panel label, #controls-panel .text-sm, #controls-panel .text-xs { font-size: 0.75rem; }
+            input[type="range"]::-webkit-slider-thumb { width: 24px; height: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider opacity-90">3D Arc Ball Viewer</h1>
+        <div id="menu"></div>
+        <div class="flex items-center gap-x-2">
+            <button id="cite-button" title="Copy BibTeX Citation" class="menu-button hidden md:flex items-center gap-2">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-quote" viewBox="0 0 16 16">
+                    <path d="M12 12a1 1 0 0 0 1-1V8.558a1 1 0 0 0-1-1h-1.388c0-.351.021-.703.062-1.054.062-.372.166-.703.31-.992.145-.29.331-.517.559-.683.227-.186.516-.279.868-.279V3c-.579 0-1.085.124-1.52.372a3.322 3.322 0 0 0-1.085.992 4.92 4.92 0 0 0-.62 1.458A7.712 7.712 0 0 0 9 7.558V11a1 1 0 0 0 1 1h2Zm-6 0a1 1 0 0 0 1-1V8.558a1 1 0 0 0-1-1H4.612c0-.351.021-.703.062-1.054.062-.372.166-.703.31-.992.145-.29.331-.517.559-.683.227-.186.516-.279.868-.279V3c-.579 0-1.085.124-1.52.372a3.322 3.322 0 0 0-1.085.992 4.92 4.92 0 0 0-.62 1.458A7.712 7.712 0 0 0 3 7.558V11a1 1 0 0 0 1 1h2Z"/>
+                </svg>
+                <span>Cite</span>
+             </button>
+            <div id="mobile-menu-container" class="relative">
+                <button id="mobile-menu-button" class="menu-button">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                    <span id="mobile-menu-label">Views</span>
+                </button>
+                <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+            </div>
+        </div>
+    </header>
+
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400">Welcome!</h2>
+            <div id="toggle-icon" class="text-indigo-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+        </div>
+        <div id="info-content" class="pt-4 space-y-3">
+             <p id="info-description" class="text-gray-300"></p>
+             <div id="metrics-display" class="space-y-4">
+                <h3 class="font-bold text-lg text-indigo-400 mt-4">Arc Properties</h3>
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <p class="text-sm text-gray-400">Arc Length</p>
+                        <p id="metric-arc-length" class="text-xl font-semibold text-white">0.00</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-400">Chord Length</p>
+                        <p id="metric-chord-length" class="text-xl font-semibold text-white">0.00</p>
+                    </div>
+                    <div>
+                        <p class="text-sm text-gray-400">Sector Area</p>
+                        <p id="metric-sector-area" class="text-xl font-semibold text-white">0.00</p>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="metrics-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6 sticky top-0 bg-inherit z-10 py-2">
+            <h3 class="text-xl font-bold text-gray-200">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white transition-colors">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">VR Mode</label>
+                <button id="vr-button" title="Enter VR Mode" class="toggle-button w-full flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12.3C2 7.8 5.8 4 10.3 4s8.3 3.8 8.3 8.3-3.5 8.3-8.3 8.3S2 16.8 2 12.3z"/><path d="M12.3 4a8.3 8.3 0 0 1 8.3 8.3 8.3 8.3 0 0 1-8.3 8.3"/></svg>
+                    <span>Enter VR</span>
+                </button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">Follow Planet</label>
+                <button id="follow-toggle" class="toggle-button">Off</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="energy-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Rotation Speed:</span>
+                    <span id="energy-value">0.1x</span>
+                </label>
+                <input id="energy-slider" type="range" min="0" max="2" step="0.05" value="0.1" class="w-full">
+            </div>
+             <hr class="border-gray-600">
+             <h4 class="text-lg font-bold text-gray-300 text-left w-full">Background Settings</h4>
+             <div class="control-group text-left w-full">
+                <label for="grid-color-input" class="text-sm font-medium self-start w-full">Grid Color</label>
+                <input id="grid-color-input" type="color" value="#4b5563">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="grid-lines-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Grid Line Count:</span>
+                    <span id="grid-lines-value">15</span>
+                </label>
+                <input id="grid-lines-slider" type="range" min="5" max="50" step="1" value="15" class="w-full">
+            </div>
+            <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label for="graphics-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Graphics Quality:</span>
+                    <span id="graphics-quality-value">High</span>
+                </label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+                 <div class="text-xs text-gray-500 w-full flex justify-between mt-1">
+                     <span>Low</span>
+                     <span>Native</span>
+                     <span>High</span>
+                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <textarea id="bibtex-citation" class="hidden">
+@misc{ArcBallViewer2025,
+  author = {Gemini},
+  title  = {3D Arc Ball and Minkowski Space-Time Viewer},
+  year   = {2025},
+  url    = {https://gemini.google.com/},
+  note   = {Interactive 3D visualization generated by Google Gemini.}
+}
+    </textarea>
+    <div id="toast-notification" class="hidden fixed top-20 right-5 bg-indigo-500 text-white py-2 px-4 rounded-lg shadow-lg text-sm z-50 transition-opacity duration-300">Copied to clipboard!</div>
+
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+    import { VRButton } from 'three/examples/jsm/webxr/VRButton.js';
+    import { XRControllerModelFactory } from 'three/examples/jsm/webxr/XRControllerModelFactory.js';
+    import { XRHandModelFactory } from 'three/examples/jsm/webxr/XRHandModelFactory.js';
+
+    // --- Core Three.js Components ---
+    let scene, camera, renderer, controls, clock;
+    
+    // --- VR Components ---
+    let playerDolly; 
+    let controller1, controller2, controllerGrip1, controllerGrip2;
+    let hand1, hand2;
+    
+    // --- App State & Scene Management ---
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {};
+    let currentCleanup = () => {};
+    let currentSceneKey = null;
+    let metricsChart;
+
+    // --- VR Input State ---
+    const vrInputs = {
+        left: { grip: { pressed: false }, trigger: { pressed: false }, thumbstick: { x: 0, y: 0 } },
+        right: { grip: { pressed: false }, trigger: { pressed: false }, thumbstick: { x: 0, y: 0 } },
+        isZooming: false,
+        initialZoomDistance: 0,
+        initialDollyScale: new THREE.Vector3()
+    };
+
+    // --- Global Settings ---
+    let animationSpeed = 0.1;
+    let followMode = false;
+    let isPaused = false;
+    let followObject = null;
+
+    const scenes = {
+        arc_ball_viewer: {
+            title: 'Arc Ball Viewer',
+            description: 'A simple 3D viewer. Use the slider at the bottom to adjust the length of the red arc on the sphere. Use your mouse to rotate, pan, and zoom the camera.',
+            init: initArcBallViewer,
+        },
+        bekenstein_hawking: {
+            title: 'Bekenstein-Hawking',
+            description: 'A visualization of a singularity emitting particles within a 45-degree light cone, representing the information paradox and entropy.',
+            init: initBekensteinHawking,
+        }
+    };
+
+    // --- Main Initialization ---
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 3, 8);
+        
+        playerDolly = new THREE.Group();
+        playerDolly.add(camera);
+        scene.add(playerDolly);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 5, 5);
+        scene.add(dirLight);
+
+        scene.add(activeSceneObjects);
+
+        createMenu();
+        setupMobileMenu();
+        setupInfoPanel();
+        setupSettingsPanel();
+        setupFullscreen();
+        setupCiteButton();
+        setupVR();
+        setupMetricsChart();
+        
+        switchScene('arc_ball_viewer');
+
+        window.addEventListener('resize', onWindowResize, false);
+        renderer.setAnimationLoop(animate);
+    }
+
+    // --- Scene Management ---
+    function switchScene(key) {
+        if (key === currentSceneKey) return;
+        isPaused = false;
+        if(currentCleanup) currentCleanup();
+        followObject = null;
+
+        while(activeSceneObjects.children.length > 0) { 
+            const obj = activeSceneObjects.children[0];
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material && obj.material.dispose) obj.material.dispose();
+            activeSceneObjects.remove(obj); 
+        }
+        document.getElementById('controls-panel').innerHTML = '';
+
+        const sceneData = scenes[key];
+        document.getElementById('info-title').textContent = sceneData.title;
+        document.getElementById('info-description').textContent = sceneData.description;
+        document.getElementById('info-panel').classList.toggle('hidden', key === 'bekenstein_hawking');
+
+
+        if (currentSceneKey) {
+            document.getElementById(`btn-${currentSceneKey}`)?.classList.remove('active');
+            document.getElementById(`mobile-btn-${currentSceneKey}`)?.classList.remove('active');
+        }
+        document.getElementById(`btn-${key}`)?.classList.add('active');
+        document.getElementById(`mobile-btn-${key}`)?.classList.add('active');
+        if(document.getElementById('mobile-menu-label')) document.getElementById('mobile-menu-label').textContent = sceneData.title;
+
+        currentSceneKey = key;
+        const result = sceneData.init();
+        currentUpdate = result.update;
+        currentCleanup = result.cleanup;
+        if (result.followTarget) followObject = result.followTarget;
+    }
+
+
+    // --- Scene Definitions ---
+    function initArcBallViewer() {
+        const SPHERE_RADIUS = 4;
+        let sphereMesh, arcMesh, planeMesh, areaMesh, minkowskiCone, worldLineMesh;
+        const arcMaterial = new THREE.MeshStandardMaterial({ color: 0xe63946, roughness: 0.4, metalness: 0.2, side: THREE.DoubleSide });
+        
+        // State
+        let metric = 'deg'; // 'deg', 'pi_single', 'pi_double', 'rad'
+        let isMinkowski = false;
+        let isPlaneVisible = false;
+        let isAreaVisible = false;
+        let isMinkowskiInverted = false;
+        let metrics = { arc: 0, chord: 0, area: 0 };
+        let minkowskiParams = { c: 1.0, v: 0.5 };
+
+        // --- 1. Create 3D Objects ---
+        const sphereGeom = new THREE.SphereGeometry(SPHERE_RADIUS, 32, 32);
+        const sphereMat = new THREE.MeshPhongMaterial({
+            color: 0x457b9d,
+            emissive: 0x1d3557,
+            shininess: 30,
+            wireframe: true,
+            transparent: true,
+            opacity: 0.2
+        });
+        sphereMesh = new THREE.Mesh(sphereGeom, sphereMat);
+        activeSceneObjects.add(sphereMesh);
+        
+        const planeGeom = new THREE.PlaneGeometry(20, 20);
+        const planeMat = new THREE.MeshStandardMaterial({ color: 0x1d3557, roughness: 0.8, metalness: 0.2 });
+        planeMesh = new THREE.Mesh(planeGeom, planeMat);
+        planeMesh.rotation.x = -Math.PI / 2;
+        planeMesh.position.y = -SPHERE_RADIUS - 0.5;
+        planeMesh.visible = false;
+        activeSceneObjects.add(planeMesh);
+        
+        minkowskiCone = new THREE.Group();
+        minkowskiCone.visible = false;
+        activeSceneObjects.add(minkowskiCone);
+
+        // --- 2. Generation Logic ---
+        function updateMinkowskiCone(c) {
+            while(minkowskiCone.children.length > 0) {
+                const child = minkowskiCone.children[0];
+                minkowskiCone.remove(child);
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            }
+            const coneHeight = 5;
+            const coneRadius = coneHeight / c; 
+            
+            const coneGeom = new THREE.ConeGeometry(coneRadius, coneHeight, 32, 1, true);
+            const coneMat = new THREE.MeshBasicMaterial({ color: 0xfca311, wireframe: true, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+            
+            const futureCone = new THREE.Mesh(coneGeom, coneMat);
+            futureCone.position.y = isMinkowskiInverted ? -coneHeight / 2 : coneHeight / 2;
+            futureCone.rotation.x = isMinkowskiInverted ? Math.PI : 0;
+
+            const pastCone = new THREE.Mesh(coneGeom, coneMat);
+            pastCone.position.y = isMinkowskiInverted ? coneHeight / 2 : -coneHeight / 2;
+            pastCone.rotation.x = isMinkowskiInverted ? 0 : Math.PI;
+
+            minkowskiCone.add(futureCone, pastCone);
+        }
+
+        function updateWorldLine(v, c) {
+            if (worldLineMesh) {
+                activeSceneObjects.remove(worldLineMesh);
+                worldLineMesh.geometry.dispose();
+                worldLineMesh.material.dispose();
+            }
+            if (v >= c) v = c - 0.01;
+
+            const slope = v / c;
+            const yDirection = isMinkowskiInverted ? -1 : 1;
+
+            const future_y = 5 * yDirection;
+            const past_y = -5 * yDirection;
+
+            const p_future = new THREE.Vector3(future_y * slope, future_y, 0);
+            const p_past = new THREE.Vector3(past_y * slope, past_y, 0);
+            
+            const curve = new THREE.LineCurve3(p_past, p_future);
+
+            const lineGeom = new THREE.TubeGeometry(curve, 20, 0.05, 8, false);
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0x00f5d4 });
+            worldLineMesh = new THREE.Mesh(lineGeom, lineMat);
+            worldLineMesh.visible = isMinkowski;
+            activeSceneObjects.add(worldLineMesh);
+        }
+        
+        function updateMetricsDisplay() {
+            document.getElementById('metric-arc-length').textContent = metrics.arc.toFixed(2);
+            document.getElementById('metric-chord-length').textContent = metrics.chord.toFixed(2);
+            document.getElementById('metric-sector-area').textContent = metrics.area.toFixed(2);
+
+            if(metricsChart) {
+                metricsChart.data.datasets[0].data = [metrics.arc, metrics.chord, metrics.area];
+                metricsChart.update('none');
+            }
+        }
+
+        function updateArc(arcLength) {
+            if (arcLength < 0.01) {
+                if(arcMesh) arcMesh.visible = false;
+                if(areaMesh) areaMesh.visible = false;
+                metrics = { arc: 0, chord: 0, area: 0 };
+                updateMetricsDisplay();
+                return;
+            }
+            if(arcMesh) arcMesh.visible = true;
+            if(areaMesh) areaMesh.visible = isAreaVisible;
+
+            const points = [];
+            const segments = 60; 
+            for (let i = 0; i <= segments; i++) {
+                const angle = (i / segments) * arcLength;
+                const x = SPHERE_RADIUS * Math.cos(angle);
+                const z = SPHERE_RADIUS * Math.sin(angle);
+                points.push(new THREE.Vector3(x, 0, z));
+            }
+            const curve = new THREE.CatmullRomCurve3(points);
+            
+            // Calculate Metrics
+            const chordLength = points[0].distanceTo(points[points.length-1]);
+            const sectorArea = 0.5 * SPHERE_RADIUS * SPHERE_RADIUS * arcLength;
+            metrics = { arc: SPHERE_RADIUS * arcLength, chord: chordLength, area: sectorArea };
+            updateMetricsDisplay();
+
+            const newTubeGeometry = new THREE.TubeGeometry(curve, 64, 0.08, 12, false);
+            if (arcMesh) {
+                arcMesh.geometry.dispose(); arcMesh.geometry = newTubeGeometry;
+            } else {
+                arcMesh = new THREE.Mesh(newTubeGeometry, arcMaterial); activeSceneObjects.add(arcMesh);
+            }
+            
+            const vertices = new Float32Array((segments + 1) * 3 * 3);
+            for (let i = 0; i < segments; i++) {
+                const p1 = points[i], p2 = points[i+1], idx = i * 9;
+                vertices[idx] = 0; vertices[idx+1] = 0; vertices[idx+2] = 0;
+                vertices[idx+3] = p1.x; vertices[idx+4] = p1.y; vertices[idx+5] = p1.z;
+                vertices[idx+6] = p2.x; vertices[idx+7] = p2.y; vertices[idx+8] = p2.z;
+            }
+            const newAreaGeometry = new THREE.BufferGeometry();
+            newAreaGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            newAreaGeometry.computeVertexNormals();
+            
+            if(areaMesh) {
+                areaMesh.geometry.dispose(); areaMesh.geometry = newAreaGeometry;
+            } else {
+                areaMesh = new THREE.Mesh(newAreaGeometry, arcMaterial);
+                areaMesh.visible = isAreaVisible; activeSceneObjects.add(areaMesh);
+            }
+        }
+        
+        // --- 3. Create UI Controls ---
+        const controlsDiv = document.getElementById('controls-panel');
+        controlsDiv.innerHTML = `
+            <div id="arc-controls-group" class="flex items-center gap-4 flex-wrap justify-center">
+                <div class="control-group w-64">
+                    <label for="arc-slider" class="text-sm font-medium flex justify-between w-full"><span>Arc Length</span><span id="arc-value"></span></label>
+                    <input id="arc-slider" type="range" min="0" max="${2 * Math.PI}" step="0.00000000001" value="${Math.PI}" class="w-full">
+                </div>
+                <button id="metric-toggle-btn" class="toggle-button">Mode: Degrees</button>
+                <button id="angle-45-btn" class="toggle-button">45°</button>
+                <button id="angle-90-btn" class="toggle-button">90°</button>
+            </div>
+            <div id="minkowski-controls-group" class="hidden items-center gap-4 flex-wrap justify-center">
+                 <div class="control-group w-52">
+                    <label for="c-slider" class="text-sm font-medium flex justify-between w-full"><span>Speed of Light (c)</span><span id="c-value">1.0</span></label>
+                    <input id="c-slider" type="range" min="0.1" max="5" step="0.1" value="1.0" class="w-full">
+                </div>
+                <div class="control-group w-52">
+                    <label for="v-slider" class="text-sm font-medium flex justify-between w-full"><span>Velocity (v)</span><span id="v-value">0.5</span></label>
+                    <input id="v-slider" type="range" min="0" max="1.0" step="0.01" value="0.5" class="w-full">
+                </div>
+                <button id="invert-minkowski-btn" class="toggle-button">View: Normal</button>
+            </div>
+            <div id="view-controls-group" class="flex items-center gap-4">
+                <button id="plane-toggle-btn" class="toggle-button">Show Plane</button>
+                <button id="area-toggle-btn" class="toggle-button">Show Arc Area</button>
+                <button id="minkowski-toggle-btn" class="toggle-button">Minkowski Space</button>
+            </div>
+        `;
+        const arcSlider = document.getElementById('arc-slider');
+        const arcValueSpan = document.getElementById('arc-value');
+        const metricToggleButton = document.getElementById('metric-toggle-btn');
+        const planeToggleButton = document.getElementById('plane-toggle-btn');
+        const areaToggleButton = document.getElementById('area-toggle-btn');
+        const minkowskiToggleButton = document.getElementById('minkowski-toggle-btn');
+        const arcControlsGroup = document.getElementById('arc-controls-group');
+        const minkowskiControlsGroup = document.getElementById('minkowski-controls-group');
+        const cSlider = document.getElementById('c-slider');
+        const cValueSpan = document.getElementById('c-value');
+        const vSlider = document.getElementById('v-slider');
+        const vValueSpan = document.getElementById('v-value');
+        const invertMinkowskiBtn = document.getElementById('invert-minkowski-btn');
+        const angle45Btn = document.getElementById('angle-45-btn');
+        const angle90Btn = document.getElementById('angle-90-btn');
+
+
+        function updateDisplayValue(radians) {
+            if (metric === 'deg') { arcValueSpan.textContent = `${THREE.MathUtils.radToDeg(radians).toFixed(0)}°`; }
+            else if (metric === 'pi_single' || metric === 'pi_double') { arcValueSpan.textContent = `${(radians / Math.PI).toFixed(2)}π`; }
+            else { arcValueSpan.textContent = `${radians.toFixed(2)} rad`; }
+        }
+        
+        metricToggleButton.addEventListener('click', () => {
+            const metrics = ['deg', 'pi_single', 'pi_double', 'rad'];
+            const currentIdx = metrics.indexOf(metric);
+            metric = metrics[(currentIdx + 1) % metrics.length];
+            switch(metric) {
+                case 'deg': metricToggleButton.textContent = 'Mode: Degrees'; arcSlider.max = 2 * Math.PI; break;
+                case 'pi_single': metricToggleButton.textContent = 'Mode: Pi (0-π)'; arcSlider.max = 3.14159265359; if(arcSlider.value > Math.PI) arcSlider.value = Math.PI; break;
+                case 'pi_double': metricToggleButton.textContent = 'Mode: Pi (0-2π)'; arcSlider.max = 2 * Math.PI; break;
+                case 'rad': metricToggleButton.textContent = 'Mode: Radians'; arcSlider.max = 2 * Math.PI; break;
+            }
+             arcSlider.dispatchEvent(new Event('input'));
+        });
+
+        arcSlider.addEventListener('input', (e) => {
+            const angleRad = parseFloat(e.target.value); updateDisplayValue(angleRad); updateArc(angleRad);
+        });
+        planeToggleButton.addEventListener('click', (e) => {
+            isPlaneVisible = !isPlaneVisible; planeMesh.visible = isPlaneVisible;
+            e.target.textContent = isPlaneVisible ? 'Hide Plane' : 'Show Plane'; e.target.classList.toggle('active', isPlaneVisible);
+        });
+        areaToggleButton.addEventListener('click', (e) => {
+            isAreaVisible = !isAreaVisible; if(areaMesh) areaMesh.visible = isAreaVisible && arcMesh.visible;
+            e.target.textContent = isAreaVisible ? 'Hide Arc Area' : 'Show Arc Area'; e.target.classList.toggle('active', isAreaVisible);
+        });
+        minkowskiToggleButton.addEventListener('click', (e) => {
+             isMinkowski = !isMinkowski;
+             minkowskiCone.visible = isMinkowski;
+             if (worldLineMesh) worldLineMesh.visible = isMinkowski;
+             sphereMesh.visible = !isMinkowski;
+             if(arcMesh) arcMesh.visible = !isMinkowski;
+             if(areaMesh) areaMesh.visible = !isMinkowski && isAreaVisible;
+             planeMesh.visible = !isMinkowski && isPlaneVisible;
+             
+             arcControlsGroup.classList.toggle('hidden', isMinkowski);
+             minkowskiControlsGroup.classList.toggle('hidden', !isMinkowski);
+             minkowskiControlsGroup.classList.toggle('flex', isMinkowski);
+             document.getElementById('metrics-display').classList.toggle('hidden', isMinkowski);
+
+             e.target.classList.toggle('active', isMinkowski);
+        });
+        cSlider.addEventListener('input', e => {
+            minkowskiParams.c = parseFloat(e.target.value);
+            cValueSpan.textContent = minkowskiParams.c.toFixed(2);
+            vSlider.max = minkowskiParams.c;
+            updateMinkowskiCone(minkowskiParams.c);
+            updateWorldLine(minkowskiParams.v, minkowskiParams.c);
+            vSlider.dispatchEvent(new Event('input'));
+        });
+        vSlider.addEventListener('input', e => {
+            minkowskiParams.v = parseFloat(e.target.value);
+            vValueSpan.textContent = `${minkowskiParams.v.toFixed(2)} (${(minkowskiParams.v/minkowskiParams.c * 100).toFixed(0)}% of c)`;
+            updateWorldLine(minkowskiParams.v, minkowskiParams.c);
+        });
+        
+        invertMinkowskiBtn.addEventListener('click', e => {
+            isMinkowskiInverted = !isMinkowskiInverted;
+            e.target.textContent = isMinkowskiInverted ? 'View: Inverted' : 'View: Normal';
+            e.target.classList.toggle('active', isMinkowskiInverted);
+            updateMinkowskiCone(minkowskiParams.c);
+            updateWorldLine(minkowskiParams.v, minkowskiParams.c);
+        });
+
+        function setAngle(radians) {
+            arcSlider.value = Math.min(radians, arcSlider.max);
+            arcSlider.dispatchEvent(new Event('input'));
+        }
+
+        angle45Btn.addEventListener('click', () => setAngle(Math.PI / 4));
+        angle90Btn.addEventListener('click', () => setAngle(Math.PI / 2));
+
+        updateArc(Math.PI);
+        updateDisplayValue(Math.PI);
+        updateMinkowskiCone(minkowskiParams.c);
+        updateWorldLine(minkowskiParams.v, minkowskiParams.c);
+
+        // --- 4. Define Animation Loop ---
+        function update(delta) {
+            if (isPaused) return;
+            const rotation = delta * animationSpeed * 0.2;
+            if (sphereMesh.visible) sphereMesh.rotation.y += rotation;
+            if (arcMesh && arcMesh.visible) arcMesh.rotation.y += rotation;
+            if (areaMesh && areaMesh.visible) areaMesh.rotation.y += rotation;
+            if (minkowskiCone.visible) minkowskiCone.rotation.y += rotation;
+        }
+        
+        // --- 5. Define Cleanup ---
+        function cleanup() {
+            [sphereMesh, arcMesh, planeMesh, areaMesh, minkowskiCone, worldLineMesh].forEach(obj => {
+                if(obj) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) obj.material.dispose();
+                }
+            });
+        }
+
+        return { update, cleanup, followTarget: sphereMesh };
+    }
+    
+    function initBekensteinHawking() {
+        let centralStar, universeParticles, equationPanel;
+        const PARTICLE_COUNT = 5000;
+
+        // --- 1. Create 3D Objects ---
+        const starGeom = new THREE.SphereGeometry(0.5, 32, 32);
+        const starMat = new THREE.MeshBasicMaterial({ color: 0xffffee });
+        centralStar = new THREE.Mesh(starGeom, starMat);
+        activeSceneObjects.add(centralStar);
+
+        const pointLight = new THREE.PointLight(0xffffff, 2, 100);
+        centralStar.add(pointLight);
+
+        const particlesGeom = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const velocities = []; 
+        const colors = new Float32Array(PARTICLE_COUNT * 3);
+        const hotColor = new THREE.Color(0xffffff);
+        const coolColor = new THREE.Color(0xff8888);
+
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+            positions[i * 3] = 0;
+            positions[i * 3 + 1] = 0;
+            positions[i * 3 + 2] = 0;
+            
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.random() * (Math.PI / 4);
+            const speed = Math.random() * 0.05 + 0.01;
+
+            const velocity = new THREE.Vector3();
+            velocity.setFromSphericalCoords(1, phi, theta);
+            velocity.multiplyScalar(speed);
+            velocities.push(velocity);
+
+            colors[i * 3] = 1.0;
+            colors[i * 3 + 1] = 1.0;
+            colors[i * 3 + 2] = 1.0;
+        }
+
+        particlesGeom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        particlesGeom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        const particlesMat = new THREE.PointsMaterial({
+            size: 0.05, vertexColors: true, blending: THREE.AdditiveBlending,
+            transparent: true, opacity: 0.7
+        });
+        universeParticles = new THREE.Points(particlesGeom, particlesMat);
+        activeSceneObjects.add(universeParticles);
+        
+        // --- 2. Create UI ---
+        equationPanel = document.createElement('div');
+        equationPanel.id = 'equation-panel';
+        equationPanel.className = 'ui-panel absolute top-20 right-5 w-auto text-lg';
+        equationPanel.innerHTML = `
+            <h3 class="font-bold text-indigo-400">Bekenstein-Hawking Entropy</h3>
+            <div class="text-white text-2xl mt-2 font-mono p-4 bg-gray-900 rounded text-center tracking-wider">
+                S<sub>BH</sub> = <frac><span class="numerator">A k<sub>B</sub></span><span class="denominator">4 &#x2113;<sub>P</sub><sup>2</sup></span></frac>
+            </div>
+            <p class="text-gray-400 text-sm mt-2">Where S is entropy, A is the event horizon area, and the rest are physical constants.</p>
+        `;
+        document.body.appendChild(equationPanel);
+
+        // --- 3. Animation Loop ---
+        function update(delta) {
+            const positions = universeParticles.geometry.attributes.position.array;
+            const colors = universeParticles.geometry.attributes.color.array;
+            const maxDistance = 15;
+
+            for (let i = 0; i < PARTICLE_COUNT; i++) {
+                const i3 = i * 3;
+                let pos = new THREE.Vector3(positions[i3], positions[i3+1], positions[i3+2]);
+                pos.add(velocities[i]);
+                const distance = pos.length();
+                if (distance > maxDistance) pos.set(0, 0, 0);
+                
+                positions[i3] = pos.x;
+                positions[i3+1] = pos.y;
+                positions[i3+2] = pos.z;
+
+                const newColor = hotColor.clone().lerp(coolColor, distance / maxDistance);
+                colors[i3] = newColor.r;
+                colors[i3+1] = newColor.g;
+                colors[i3+2] = newColor.b;
+            }
+            universeParticles.geometry.attributes.position.needsUpdate = true;
+            universeParticles.geometry.attributes.color.needsUpdate = true;
+
+            const pulse = Math.sin(clock.getElapsedTime() * 2) * 0.1 + 1.0;
+            centralStar.scale.set(pulse, pulse, pulse);
+        }
+
+        // --- 4. Cleanup ---
+        function cleanup() {
+            if(equationPanel) document.body.removeChild(equationPanel);
+        }
+
+        return { update, cleanup, followTarget: centralStar };
+    }
+
+
+    // --- UI & CORE SYSTEM SETUP (Boilerplate) ---
+
+    function setupMetricsChart() {
+         const ctx = document.getElementById('metrics-chart').getContext('2d');
+         metricsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Arc Length', 'Chord Length', 'Sector Area'],
+                datasets: [{
+                    label: 'Metric Values', data: [0, 0, 0],
+                    backgroundColor: ['rgba(230, 57, 70, 0.5)', 'rgba(69, 123, 157, 0.5)', 'rgba(29, 53, 87, 0.5)'], 
+                    borderColor: ['#e63946', '#457b9d', '#1d3557'],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                maintainAspectRatio: false, indexAxis: 'y',
+                scales: { x: { beginAtZero: true, ticks: { color: '#9ca3af' } }, y: { ticks: { color: '#9ca3af' } } },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    function setupCiteButton() {
+        const citeButton = document.getElementById('cite-button');
+        if (!citeButton) return;
+        const bibtexText = document.getElementById('bibtex-citation').value;
+        const toast = document.getElementById('toast-notification');
+
+        citeButton.addEventListener('click', () => {
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = bibtexText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            toast.classList.remove('hidden');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('hidden');
+            }, 2000);
+        });
+    }
+
+    function createMenu() {
+        const menuDiv = document.getElementById('menu');
+        const mobileMenuDropdown = document.getElementById('mobile-menu-dropdown');
+        menuDiv.innerHTML = '';
+        mobileMenuDropdown.innerHTML = '';
+        Object.keys(scenes).forEach(key => {
+            const sceneTitle = scenes[key].title;
+            const desktopButton = document.createElement('button');
+            desktopButton.id = `btn-${key}`;
+            desktopButton.className = 'menu-button';
+            desktopButton.textContent = sceneTitle;
+            desktopButton.onclick = () => switchScene(key);
+            menuDiv.appendChild(desktopButton);
+            const mobileButton = document.createElement('button');
+            mobileButton.id = `mobile-btn-${key}`;
+            mobileButton.className = 'mobile-menu-item text-white';
+            mobileButton.textContent = sceneTitle;
+            mobileButton.onclick = () => { switchScene(key); mobileMenuDropdown.classList.add('hidden'); };
+            mobileMenuDropdown.appendChild(mobileButton);
+        });
+    }
+
+    function setupMobileMenu() {
+        const menuButton = document.getElementById('mobile-menu-button');
+        const dropdown = document.getElementById('mobile-menu-dropdown');
+        menuButton.addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('hidden'); });
+        window.addEventListener('click', () => { if (!dropdown.classList.contains('hidden')) dropdown.classList.add('hidden'); });
+    }
+
+    function setupInfoPanel() {
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+             if (e.target.closest('canvas') || e.target.closest('a')) return;
+            e.currentTarget.classList.toggle('expanded');
+        });
+    }
+
+    function setupFullscreen() {
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; return; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        const handleFullscreenChange = () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+            document.body.classList.toggle('fullscreen-active', isFullscreen);
+            if (!isFullscreen) document.querySelectorAll('.show-on-hover').forEach(el => el.classList.remove('show-on-hover'));
+            setTimeout(onWindowResize, 100);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+    }
+
+    function setupVR() {
+        const vrButton = document.getElementById('vr-button');
+        renderer.xr.enabled = true;
+        if ('xr' in navigator) {
+            navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                vrButton.disabled = !supported;
+                if(supported) {
+                    vrButton.addEventListener('click', () => {
+                        const session = renderer.xr.getSession();
+                        if (session) session.end();
+                        else navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then((session) => renderer.xr.setSession(session));
+                    });
+                    renderer.xr.addEventListener('sessionstart', () => {
+                        playerDolly.position.copy(camera.position); playerDolly.quaternion.copy(camera.quaternion);
+                        camera.position.set(0, 0, 0); camera.quaternion.identity();
+                        controls.enabled = false;
+                        vrButton.querySelector('span').textContent = 'Exit VR'; vrButton.classList.add('active');
+                    });
+                    renderer.xr.addEventListener('sessionend', () => {
+                        camera.position.copy(playerDolly.position); camera.scale.copy(playerDolly.scale);
+                        playerDolly.position.set(0, 0, 0); playerDolly.quaternion.identity(); playerDolly.scale.set(1, 1, 1);
+                        controls.enabled = true;
+                        vrButton.querySelector('span').textContent = 'Enter VR'; vrButton.classList.remove('active');
+                    });
+                }
+            });
+        }
+        controller1 = renderer.xr.getController(0); playerDolly.add(controller1);
+        controller2 = renderer.xr.getController(1); playerDolly.add(controller2);
+        const controllerModelFactory = new XRControllerModelFactory();
+        const handModelFactory = new XRHandModelFactory();
+        controllerGrip1 = renderer.xr.getControllerGrip(0); controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1)); playerDolly.add(controllerGrip1);
+        controllerGrip2 = renderer.xr.getControllerGrip(1); controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2)); playerDolly.add(controllerGrip2);
+        hand1 = renderer.xr.getHand(0); hand1.add(handModelFactory.createHandModel(hand1)); playerDolly.add(hand1);
+        hand2 = renderer.xr.getHand(1); hand2.add(handModelFactory.createHandModel(hand2)); playerDolly.add(hand2);
+    }
+    
+    function setupSettingsPanel() {
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsButton = document.getElementById('settings-button');
+        const closeSettingsButton = document.getElementById('close-settings');
+        const graphicsSlider = document.getElementById('graphics-slider');
+        const graphicsQualityValue = document.getElementById('graphics-quality-value');
+        const energySlider = document.getElementById('energy-slider');
+        const energyValue = document.getElementById('energy-value');
+        const followToggle = document.getElementById('follow-toggle');
+
+        function toggleSettingsPanel() {
+            if (settingsPanel.classList.contains('open')) settingsPanel.classList.remove('open');
+            else { settingsPanel.classList.remove('hidden'); requestAnimationFrame(() => settingsPanel.classList.add('open')); }
+        }
+        settingsButton.addEventListener('click', toggleSettingsPanel);
+        closeSettingsButton.addEventListener('click', () => settingsPanel.classList.remove('open'));
+        settingsPanel.addEventListener('transitionend', (e) => {
+            if (e.propertyName === 'transform' && !settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+
+        followToggle.addEventListener('click', (e) => {
+            followMode = !followMode; e.target.textContent = followMode ? 'On' : 'Off'; e.target.classList.toggle('active', followMode);
+        });
+        energySlider.addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value); energyValue.textContent = `${animationSpeed.toFixed(2)}x`;
+        });
+        graphicsSlider.addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value); renderer.setPixelRatio(quality);
+            if (quality < 0.8) graphicsQualityValue.textContent = "Low";
+            else if (quality < 1.5) graphicsQualityValue.textContent = "Medium";
+            else graphicsQualityValue.textContent = "High";
+        });
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+
+    function updateCameraFollow() {
+        if(followMode && followObject) {
+            const distance = 10;
+            const offset = controls.target.clone().sub(camera.position).normalize().multiplyScalar(distance);
+            const targetPosition = followObject.position.clone().sub(offset);
+            const container = renderer.xr.isPresenting ? playerDolly : camera;
+            container.position.lerp(targetPosition, 0.1);
+            if (!renderer.xr.isPresenting) controls.target.lerp(followObject.position, 0.1);
+        }
+    }
+
+    function updateVRInputs() {
+        if (!renderer.xr.isPresenting) return;
+        const deadzone = 0.15;
+        const updateControllerState = (controller, state) => {
+            if (controller && controller.gamepad) {
+                const gp = controller.gamepad;
+                state.trigger.pressed = gp.buttons[0]?.pressed;
+                state.grip.pressed = gp.buttons[1]?.pressed;
+                state.thumbstick.x = Math.abs(gp.axes[2]) > deadzone ? gp.axes[2] : 0;
+                state.thumbstick.y = Math.abs(gp.axes[3]) > deadzone ? gp.axes[3] : 0;
+            }
+        };
+        updateControllerState(controller1, vrInputs.left);
+        updateControllerState(controller2, vrInputs.right);
+    }
+
+    function handleVRControllers(delta) {
+        if (renderer.xr.isPresenting) {
+            const speed = 3.0, turnSpeed = 1.5;
+            const camDir = camera.getWorldQuaternion(new THREE.Quaternion());
+            const moveDir = new THREE.Vector3(vrInputs.left.thumbstick.x, 0, vrInputs.left.thumbstick.y);
+            if (moveDir.length() > 0.1) {
+                const flatCamQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), new THREE.Euler().setFromQuaternion(camDir).y);
+                moveDir.applyQuaternion(flatCamQuat).normalize().multiplyScalar(speed * delta);
+                playerDolly.position.add(moveDir);
+            }
+            if (Math.abs(vrInputs.right.thumbstick.x) > 0.1) playerDolly.rotation.y -= vrInputs.right.thumbstick.x * turnSpeed * delta;
+            if (Math.abs(vrInputs.right.thumbstick.y) > 0.1) playerDolly.position.y -= vrInputs.right.thumbstick.y * speed * delta;
+            const bothGrips = vrInputs.left.grip.pressed && vrInputs.right.grip.pressed;
+            if (bothGrips && !vrInputs.isZooming) {
+                vrInputs.isZooming = true;
+                vrInputs.initialZoomDistance = controllerGrip1.position.distanceTo(controllerGrip2.position);
+                vrInputs.initialDollyScale.copy(playerDolly.scale);
+            } else if (bothGrips && vrInputs.isZooming) {
+                const currentDist = controllerGrip1.position.distanceTo(controllerGrip2.position);
+                if (vrInputs.initialZoomDistance > 0.01) {
+                    const scaleFactor = currentDist / vrInputs.initialZoomDistance;
+                    playerDolly.scale.copy(vrInputs.initialDollyScale.clone().multiplyScalar(scaleFactor)).clampScalar(0.1, 10.0);
+                }
+            } else if (!bothGrips && vrInputs.isZooming) {
+                vrInputs.isZooming = false;
+            }
+        }
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        updateVRInputs();
+        if (!renderer.xr.isPresenting) controls.update.call(controls); 
+        if(currentUpdate) currentUpdate(delta); 
+        handleVRControllers(delta);
+        updateCameraFollow();
+        renderer.render(scene, camera); 
+    }
+    
+    init();
+
+</script>
+</body>
+</html>
+

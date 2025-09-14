@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolutionary Algorithm 3D Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0a0a0a; color: #e5e7eb; overflow: hidden; }
+        #container, #labels { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+        #container { pointer-events: auto; }
+        #labels { pointer-events: none; z-index: 2; }
+        .panel { background-color: rgba(17, 24, 39, 0.85); backdrop-filter: blur(10px); border: 1px solid rgba(55, 65, 81, 0.5); z-index: 10; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; background: #3b82f6; cursor: pointer; border-radius: 50%; }
+        .toggle-btn { background-color: rgba(31, 41, 55, 0.8); border: 1px solid rgba(55, 65, 81, 0.5); }
+        .toggle-btn.active { background-color: #2563eb; border-color: rgba(59, 130, 246, 0.7); color: #ffffff; }
+        select { background-color: #374151; border: 1px solid #4b5563; }
+        #panel-content { transition: max-height 0.5s ease-in-out, opacity 0.3s ease-in-out, margin-top 0.5s ease-in-out, padding-bottom 0.5s ease-in-out; max-height: 500px; opacity: 1; overflow: hidden; margin-top: 1rem; padding-bottom: 0.5rem;}
+        #ui-panel.collapsed #panel-content { max-height: 0; opacity: 0; margin-top: 0; padding-bottom: 0; }
+        #collapse-btn svg { transition: transform 0.3s ease-in-out; }
+        #ui-panel.collapsed #collapse-btn svg { transform: rotate(180deg); }
+        .summary-btn { background-color: rgba(55, 65, 81, 0.7); border-radius: 50%; padding: 4px; }
+        .summary-btn:hover { background-color: rgba(75, 85, 99, 0.9); }
+        .settings-section-header { border-bottom: 1px solid rgba(55, 65, 81, 0.8); padding-bottom: 0.5rem; margin-bottom: 0.75rem; font-weight: 600; color: #9ca3af; }
+        input[type="color"] { -webkit-appearance: none; width: 28px; height: 28px; border: none; padding: 0; border-radius: 8px; cursor: pointer; }
+        input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+        input[type="color"]::-webkit-color-swatch { border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 8px; }
+        
+        /* Graph Styles */
+        #graph-container-wrapper { pointer-events: auto; width: 450px; }
+        #graph-header { cursor: move; }
+        #graph-svg-container { transition: max-height 0.3s ease-in-out; max-height: 400px; overflow: hidden; }
+        #graph-container-wrapper.collapsed #graph-svg-container { max-height: 0; }
+        #graph-collapse-btn svg { transition: transform 0.3s ease-in-out; }
+        #graph-container-wrapper.collapsed #graph-collapse-btn svg { transform: rotate(-90deg); }
+        .graph-line { fill: none; stroke-width: 2; }
+        .axis-line, .tick-line { stroke: #4b5563; stroke-width: 1; }
+        .axis-text, .axis-title { font-size: 11px; fill: #9ca3af; padding: 2px;}
+        .axis-title { font-weight: bold; }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="m-0 p-0">
+    <div id="container"></div>
+    <div id="labels">
+        <!-- Draggable Graph Container -->
+        <div id="graph-container-wrapper" class="panel rounded-lg shadow-2xl absolute top-20 left-4 hidden">
+            <div id="graph-header" class="flex justify-between items-center p-2 border-b border-gray-700">
+                 <div id="metric-selector" class="flex gap-1 bg-gray-900/50 rounded-md p-1">
+                    <button data-metric="fitness" class="toggle-btn text-xs px-2 py-0.5 rounded-md active">Fitness</button>
+                    <button data-metric="diversity" class="toggle-btn text-xs px-2 py-0.5 rounded-md">Diversity</button>
+                    <button data-metric="improvement" class="toggle-btn text-xs px-2 py-0.5 rounded-md">Improvement</button>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="graph-log-btn" class="toggle-btn text-xs px-2 py-0.5 rounded-md">X-Log</button>
+                    <button id="graph-collapse-btn" class="text-gray-400 hover:text-white">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="graph-svg-container" class="p-2 pt-0">
+                 <svg id="fitness-graph" width="100%" height="250"></svg>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Control Bar -->
+    <div id="top-bar" class="panel absolute top-4 left-1/2 -translate-x-1/2 p-2 rounded-lg shadow-2xl flex items-center gap-2 md:gap-4 flex-wrap justify-center">
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-400">Landscape:</span>
+            <select id="landscape-selector" class="rounded-md text-sm p-1">
+                <option value="sphere">🟢 Sphere</option>
+                <option value="booth">🟢 Booth's</option>
+                <option value="matyas">🟢 Matyas</option>
+                <option value="ackley">🟡 Ackley</option>
+                <option value="himmelblau">🟡 Himmelblau's</option>
+                <option value="beale">🟡 Beale</option>
+                <option value="goldstein">🟡 Goldstein-Price</option>
+                <option value="levi">🟡 Lévi No.13</option>
+                <option value="three_hump">🟡 Three-Hump Camel</option>
+                <option value="rastrigin">🔴 Rastrigin</option>
+                <option value="rosenbrock">🔴 Rosenbrock</option>
+                <option value="bukin">🔴 Bukin No.6</option>
+                <option value="easom">🔴 Easom</option>
+                <option value="cross_in_tray">🔴 Cross-in-Tray</option>
+                <option value="eggholder">🔴 Eggholder</option>
+            </select>
+        </div>
+         <div class="border-l border-gray-600 h-8 hidden md:block"></div>
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-400">Goal:</span>
+            <div id="goal-selector" class="flex gap-1 bg-gray-900/50 rounded-md p-1">
+                <button data-goal="minimize" class="toggle-btn px-3 py-1 text-sm font-medium rounded-md transition-colors">Minimize</button>
+                <button data-goal="maximize" class="toggle-btn px-3 py-1 text-sm font-medium rounded-md transition-colors">Maximize</button>
+            </div>
+        </div>
+        <div class="border-l border-gray-600 h-8 hidden md:block"></div>
+        <div class="flex items-center gap-2">
+            <div id="algo-category-selector" class="flex gap-1 bg-gray-900/50 rounded-md p-1">
+                <button data-category="GA" class="toggle-btn px-3 py-1 text-sm font-medium rounded-md transition-colors">GA</button>
+                <button data-category="ES" class="toggle-btn px-3 py-1 text-sm font-medium rounded-md transition-colors">ES</button>
+            </div>
+            <select id="ga-algo-selector" class="rounded-md text-sm p-1">
+                <option value="ga">Standard GA</option>
+                <option value="ssga">Steady-State GA</option>
+                <option value="mga">Microbial GA</option>
+                <option value="de">Differential Evolution</option>
+                <option value="pso">Particle Swarm (PSO)</option>
+            </select>
+            <select id="es-algo-selector" class="rounded-md text-sm p-1 hidden">
+                <option value="es">Standard ES</option>
+                <option value="mu_lambda_es">(μ, λ)-ES</option>
+                <option value="mu_plus_lambda_es">(μ + λ)-ES</option>
+                <option value="cma-es">CMA-ES</option>
+                <option value="sa">Simulated Annealing</option>
+            </select>
+        </div>
+        <div class="border-l border-gray-600 h-8 hidden md:block"></div>
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-medium text-gray-400">View:</span>
+            <div id="view-selector" class="flex gap-1 bg-gray-900/50 rounded-md p-1">
+                <button data-view="population" class="toggle-btn px-3 py-1 text-sm font-medium rounded-md transition-colors">Population</button>
+                <button data-view="io_space" class="toggle-btn px-3 py-1 text-sm font-medium rounded-md transition-colors">Input/Output</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right side icon buttons -->
+    <div class="absolute top-4 right-4 flex gap-2 z-20">
+        <button id="graph-btn" class="panel p-2 rounded-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
+        </button>
+        <button id="settings-btn" class="panel p-2 rounded-md">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button>
+    </div>
+    
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="panel absolute top-16 right-4 p-4 rounded-lg shadow-2xl w-80 max-h-[calc(100vh-5rem)] overflow-y-auto hidden z-20">
+        <h3 class="text-lg font-bold mb-4 text-gray-100">Settings</h3>
+        <div class="space-y-6">
+            <div>
+                <h4 class="settings-section-header text-sm">Graphics & Performance</h4>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300">Landscape Resolution: <span id="landscapeResValue" class="font-bold text-blue-400">150</span></label>
+                        <input id="landscapeRes" type="range" min="30" max="10000" step="10" value="150" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-300">Point Size: <span id="pointSizeValue" class="font-bold text-blue-400">1.0</span></label>
+                        <input id="pointSize" type="range" min="0.1" max="2.0" step="0.1" value="1.0" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                    </div>
+                     <div class="flex items-center justify-between">
+                         <label for="showContours" class="text-sm font-medium text-gray-300">Show Contour Lines</label>
+                         <input id="showContours" type="checkbox" class="h-4 w-4 rounded">
+                     </div>
+                </div>
+            </div>
+            <div>
+                <h4 class="settings-section-header text-sm">Landscape Parameters</h4>
+                 <div class="space-y-4">
+                     <div>
+                        <label class="block text-sm font-medium text-gray-300">Landscape Scale: <span id="landscapeScaleValue" class="font-bold text-blue-400">200</span></label>
+                        <input id="landscapeScale" type="range" min="50" max="400" step="10" value="200" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                    </div>
+                     <div>
+                        <label class="block text-sm font-medium text-gray-300">Initial Spawn Range (%): <span id="spawnRangeValue" class="font-bold text-blue-400">100</span></label>
+                        <input id="spawnRange" type="range" min="10" max="100" step="5" value="100" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                    </div>
+                    <div id="landscape-params-container" class="space-y-2">
+                        <p id="no-params" class="text-xs text-gray-400">This function has no tunable parameters.</p>
+                        <div id="ackley-params" class="hidden space-y-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-300">a (Amplitude): <span id="ackley_a_value">20</span></label>
+                                <input id="ackley_a" type="range" min="5" max="30" step="1" value="20" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-gray-300">b (Width): <span id="ackley_b_value">0.2</span></label>
+                                <input id="ackley_b" type="range" min="0.05" max="0.5" step="0.01" value="0.2" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                            </div>
+                        </div>
+                        <div id="rastrigin-params" class="hidden space-y-2">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-300">A (Frequency): <span id="rastrigin_a_value">10</span></label>
+                                <input id="rastrigin_a" type="range" min="1" max="20" step="1" value="10" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                            </div>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+             <div>
+                <h4 class="settings-section-header text-sm">Colors</h4>
+                <div class="grid grid-cols-2 gap-2">
+                    <div class="flex items-center justify-between"><label class="text-sm font-medium text-gray-300">Landscape (High)</label><input id="landscapeColorHigh" type="color" value="#22d3ee"></div>
+                    <div class="flex items-center justify-between"><label class="text-sm font-medium text-gray-300">Landscape (Low)</label><input id="landscapeColorLow" type="color" value="#4f46e5"></div>
+                    <div class="flex items-center justify-between"><label class="text-sm font-medium text-gray-300">Contours</label><input id="landscapeColorContour" type="color" value="#9ca3af"></div>
+                    <div class="flex items-center justify-between"><label class="text-sm font-medium text-gray-300">Vector (High)</label><input id="vectorColorHigh" type="color" value="#22c55e"></div>
+                    <div class="flex items-center justify-between"><label class="text-sm font-medium text-gray-300">Vector (Low)</label><input id="vectorColorLow" type="color" value="#ef4444"></div>
+                </div>
+            </div>
+        </div>
+        <button id="apply-settings-btn" class="mt-6 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">Apply & Reset</button>
+    </div>
+
+    <!-- Main UI Panel -->
+    <div id="ui-panel" class="panel absolute bottom-4 left-1/2 -translate-x-1/2 p-3 rounded-lg shadow-2xl max-w-7xl w-[95%]">
+        <div id="panel-summary" class="hidden text-xs md:text-sm text-gray-300 font-mono w-full justify-between items-center"></div>
+        <div id="panel-content">
+            <div class="flex items-center gap-4 mb-4">
+                <div class="flex items-center gap-3">
+                    <button id="start-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">Start</button>
+                    <button id="pause-btn" class="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded-lg transition hidden">Pause</button>
+                    <button id="reset-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition">Reset</button>
+                </div>
+                <div class="text-center">
+                    <div class="text-xs text-gray-400">Generation</div>
+                    <div id="generation-counter" class="text-xl font-bold">0</div>
+                </div>
+                 <div class="flex-grow">
+                    <label class="block text-sm font-medium text-gray-300">Speed (Gen/s): <span id="speedValue" class="font-bold text-blue-400">5</span></label>
+                    <input id="speed" type="range" min="1" max="60" step="1" value="5" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+            </div>
+
+            <div class="border-t border-gray-700 pt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-300">Population Size: <span id="populationSizeValue" class="font-bold text-blue-400">100</span></label>
+                    <input id="populationSize" type="range" min="10" max="500" step="10" value="100" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="mutationRateControl">
+                    <label class="block text-sm font-medium text-gray-300">Mutation Rate: <span id="mutationRateValue" class="font-bold text-blue-400">0.10</span></label>
+                    <input id="mutationRate" type="range" min="0.01" max="1" step="0.01" value="0.1" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="cmaSigmaControl" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300">Variance / &sigma;: <span id="cmaSigmaValue" class="font-bold text-blue-400">0.50</span></label>
+                    <input id="cmaSigma" type="range" min="0.01" max="2.0" step="0.01" value="0.5" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="psoParams" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300">Inertia (w): <span id="psoInertiaValue" class="font-bold text-blue-400">0.7</span></label>
+                    <input id="psoInertia" type="range" min="0.1" max="1.0" step="0.05" value="0.7" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="saParams" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Initial Temp: <span id="saTempValue" class="font-bold text-blue-400">1000</span></label>
+                    <input id="saTemp" type="range" min="10" max="5000" step="10" value="1000" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="boltzmannControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Boltzmann Temp: <span id="boltzmannTempValue" class="font-bold text-blue-400">0.1</span></label>
+                    <input id="boltzmannTemp" type="range" min="0.01" max="1" step="0.01" value="0.1" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="truncationControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Truncation %: <span id="truncationValue" class="font-bold text-blue-400">50</span></label>
+                    <input id="truncation" type="range" min="10" max="90" step="5" value="50" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="tournamentControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Tournament Size: <span id="tournamentValue" class="font-bold text-blue-400">5</span></label>
+                    <input id="tournament" type="range" min="2" max="20" step="1" value="5" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="deFControl" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300">Weight (F): <span id="deFValue" class="font-bold text-blue-400">0.8</span></label>
+                    <input id="deF" type="range" min="0.1" max="2.0" step="0.1" value="0.8" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="deCRControl" class="hidden">
+                    <label class="block text-sm font-medium text-gray-300">Crossover (CR): <span id="deCRValue" class="font-bold text-blue-400">0.9</span></label>
+                    <input id="deCR" type="range" min="0.0" max="1.0" step="0.05" value="0.9" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div>
+                     <label class="block text-sm font-medium text-gray-300">Elite Size (%): <span id="eliteSizeValue" class="font-bold text-blue-400">5</span></label>
+                     <input id="eliteSize" type="range" min="1" max="20" step="1" value="5" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="muLambdaControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Parents (μ): <span id="muLambdaValue" class="font-bold text-blue-400">50</span></label>
+                    <input id="muLambda" type="range" min="1" max="100" step="1" value="50" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="blxControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Blend Alpha (α): <span id="blxValue" class="font-bold text-blue-400">0.5</span></label>
+                    <input id="blx" type="range" min="0" max="1" step="0.1" value="0.5" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                 <div id="sbxControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">SBX Index (η): <span id="sbxValue" class="font-bold text-blue-400">15</span></label>
+                    <input id="sbx" type="range" min="1" max="50" step="1" value="15" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="selectionControl">
+                    <label for="selection-strategy" class="block text-sm font-medium text-gray-300">Selection</label>
+                    <select id="selection-strategy" class="rounded-md text-sm p-1 w-full mt-1">
+                        <option value="tournament">Tournament</option>
+                        <option value="roulette">Roulette Wheel</option>
+                        <option value="sus">Stochastic Universal</option>
+                        <option value="rank">Rank</option>
+                        <option value="boltzmann">Boltzmann</option>
+                        <option value="truncation">Truncation</option>
+                    </select>
+                </div>
+                 <div id="arithmeticControl" class="hidden">
+                     <label class="block text-sm font-medium text-gray-300">Arithmetic Alpha (α): <span id="arithmeticValue" class="font-bold text-blue-400">0.5</span></label>
+                    <input id="arithmetic" type="range" min="0" max="1" step="0.1" value="0.5" class="w-full h-2 bg-gray-700 rounded-lg slider">
+                </div>
+                <div id="crossoverControl">
+                    <label for="crossover-strategy" class="block text-sm font-medium text-gray-300">Crossover</label>
+                    <select id="crossover-strategy" class="rounded-md text-sm p-1 w-full mt-1">
+                        <option value="single_point">Single-Point</option>
+                        <option value="two_point">Two-Point</option>
+                        <option value="uniform">Uniform</option>
+                        <option value="arithmetic">Arithmetic</option>
+                        <option value="blx">Blend (BLX-α)</option>
+                        <option value="sbx">Simulated Binary (SBX)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <button id="collapse-btn" class="absolute -top-3 right-4 bg-gray-700 hover:bg-gray-600 p-1 rounded-full text-white">
+             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+        </button>
+    </div>
+
+    <script type="importmap">{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/" } }</script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        // --- SCENE & STATE ---
+        let scene, camera, renderer, controls, labelRenderer;
+        const clock = new THREE.Clock();
+
+        const populationView = new THREE.Group();
+        const ioSpaceView = new THREE.Group();
+        let populationPoints, cmaEsEllipsoid, landscapeMesh, optimumMarker, graphObject;
+        let inputSpacePoints, outputSpacePoints, ioConnectors, ioLegend;
+        let populationGrowthState = { isAnimating: false, currentCount: 0, startTime: 0, duration: 1.0 };
+        let lastGenerationTime = 0;
+
+        const state = {
+            algorithm: 'ga', algoCategory: 'GA', view: 'population', isRunning: false, landscape: 'sphere', optimizationGoal: 'minimize',
+            populationSize: 100, mutationRate: 0.1, eliteSize: 5,
+            de_F: 0.8, de_CR: 0.9, pso_w: 0.7, sa_temp: 1000, cma_sigma: 0.5, boltzmann_temp: 0.1,
+            truncation_percent: 0.5, blx_alpha: 0.5, sbx_eta: 15, mu_lambda_mu: 50, arithmetic_alpha: 0.5,
+            tournament_size: 5,
+            speed: 5, generation: 0,
+            population: [], fitnessHistory: [], selectionFn: tournamentSelection, crossoverFn: singlePointCrossover,
+            cma: { mean: new THREE.Vector3(), covarianceMatrix: new THREE.Matrix3().identity() },
+            landscapeRes: 150, pointSize: 1.0, showContours: false, landscapeScale: 200, spawnRange: 100,
+            landscapeColorHigh: '#22d3ee', landscapeColorLow: '#4f46e5', landscapeColorContour: '#9ca3af',
+            vectorColorHigh: '#22c55e', vectorColorLow: '#ef4444',
+            landscapeParams: { ackley_a: 20, ackley_b: 0.2, rastrigin_a: 10 },
+            graphLogScale: false, graphMetric: 'fitness'
+        };
+
+        const ui = {
+            generationCounter: document.getElementById('generation-counter'),
+            startBtn: document.getElementById('start-btn'),
+            pauseBtn: document.getElementById('pause-btn'),
+            resetBtn: document.getElementById('reset-btn'),
+            populationSizeSlider: document.getElementById('populationSize'),
+            populationSizeValue: document.getElementById('populationSizeValue'),
+            mutationRateSlider: document.getElementById('mutationRate'),
+            mutationRateValue: document.getElementById('mutationRateValue'),
+            eliteSizeSlider: document.getElementById('eliteSize'),
+            eliteSizeValue: document.getElementById('eliteSizeValue'),
+            speedSlider: document.getElementById('speed'),
+            speedValue: document.getElementById('speedValue'),
+            crossoverControl: document.getElementById('crossoverControl'),
+            selectionControl: document.getElementById('selectionControl'),
+            mutationRateControl: document.getElementById('mutationRateControl'),
+            cmaSigmaControl: document.getElementById('cmaSigmaControl'),
+            cmaSigmaSlider: document.getElementById('cmaSigma'),
+            cmaSigmaValue: document.getElementById('cmaSigmaValue'),
+            deFControl: document.getElementById('deFControl'),
+            deCRControl: document.getElementById('deCRControl'),
+            deFSlider: document.getElementById('deF'),
+            deFValue: document.getElementById('deFValue'),
+            deCRSlider: document.getElementById('deCR'),
+            deCRValue: document.getElementById('deCRValue'),
+            psoParams: document.getElementById('psoParams'),
+            psoInertiaSlider: document.getElementById('psoInertia'),
+            psoInertiaValue: document.getElementById('psoInertiaValue'),
+            saParams: document.getElementById('saParams'),
+            saTempSlider: document.getElementById('saTemp'),
+            saTempValue: document.getElementById('saTempValue'),
+            boltzmannControl: document.getElementById('boltzmannControl'),
+            boltzmannTempSlider: document.getElementById('boltzmannTemp'),
+            boltzmannTempValue: document.getElementById('boltzmannTempValue'),
+            truncationControl: document.getElementById('truncationControl'),
+            truncationSlider: document.getElementById('truncation'),
+            truncationValue: document.getElementById('truncationValue'),
+            muLambdaControl: document.getElementById('muLambdaControl'),
+            muLambdaSlider: document.getElementById('muLambda'),
+            muLambdaValue: document.getElementById('muLambdaValue'),
+            blxControl: document.getElementById('blxControl'),
+            blxSlider: document.getElementById('blx'),
+            blxValue: document.getElementById('blxValue'),
+            sbxControl: document.getElementById('sbxControl'),
+            sbxSlider: document.getElementById('sbx'),
+            sbxValue: document.getElementById('sbxValue'),
+            arithmeticControl: document.getElementById('arithmeticControl'),
+            arithmeticSlider: document.getElementById('arithmetic'),
+            arithmeticValue: document.getElementById('arithmeticValue'),
+            tournamentControl: document.getElementById('tournamentControl'),
+            tournamentSlider: document.getElementById('tournament'),
+            tournamentValue: document.getElementById('tournamentValue'),
+            collapseBtn: document.getElementById('collapse-btn'),
+            uiPanel: document.getElementById('ui-panel'),
+            panelSummary: document.getElementById('panel-summary'),
+            settingsBtn: document.getElementById('settings-btn'),
+            graphBtn: document.getElementById('graph-btn'),
+            graphContainer: document.getElementById('graph-container-wrapper'),
+            graphCollapseBtn: document.getElementById('graph-collapse-btn'),
+            graphLogBtn: document.getElementById('graph-log-btn'),
+            settingsPanel: document.getElementById('settings-panel'),
+            applySettingsBtn: document.getElementById('apply-settings-btn'),
+            landscapeResSlider: document.getElementById('landscapeRes'),
+            landscapeResValue: document.getElementById('landscapeResValue'),
+            pointSizeSlider: document.getElementById('pointSize'),
+            pointSizeValue: document.getElementById('pointSizeValue'),
+            landscapeScaleSlider: document.getElementById('landscapeScale'),
+            landscapeScaleValue: document.getElementById('landscapeScaleValue'),
+            spawnRangeSlider: document.getElementById('spawnRange'),
+            spawnRangeValue: document.getElementById('spawnRangeValue'),
+            gaAlgoSelector: document.getElementById('ga-algo-selector'),
+            esAlgoSelector: document.getElementById('es-algo-selector'),
+            landscapeParams: {
+                no_params: document.getElementById('no-params'),
+                ackley: document.getElementById('ackley-params'),
+                rastrigin: document.getElementById('rastrigin-params'),
+                ackley_a: document.getElementById('ackley_a'),
+                ackley_a_value: document.getElementById('ackley_a_value'),
+                ackley_b: document.getElementById('ackley_b'),
+                ackley_b_value: document.getElementById('ackley_b_value'),
+                rastrigin_a: document.getElementById('rastrigin_a'),
+                rastrigin_a_value: document.getElementById('rastrigin_a_value'),
+            }
+        };
+
+        const landscapes = {
+            sphere: { fn: (x, z, p) => (x*x + z*z) / 50, optimum: new THREE.Vector3(0, 0, 0), domain: 30 },
+            ackley: { fn: (x, z, p) => (-p.ackley_a * Math.exp(-p.ackley_b * Math.sqrt(0.5 * (x*x + z*z))) - Math.exp(0.5 * (Math.cos(2 * Math.PI * x) + Math.cos(2 * Math.PI * z))) + p.ackley_a + Math.E) / 2, optimum: new THREE.Vector3(0, 0, 0), domain: 32.768 },
+            rastrigin: { fn: (x, z, p) => (p.rastrigin_a * 2 + (x*x - p.rastrigin_a * Math.cos(2 * Math.PI * x)) + (z*z - p.rastrigin_a * Math.cos(2 * Math.PI * z))) / 10, optimum: new THREE.Vector3(0, 0, 0), domain: 5.12 },
+            himmelblau: { fn: (x, z, p) => ((x*x + z - 11)**2 + (x + z*z - 7)**2) / 100, optimum: new THREE.Vector3(3, 2, 0), domain: 6 },
+            rosenbrock: { fn: (x, z, p) => ((1-x)**2 + 100 * (z - x*x)**2) / 100, optimum: new THREE.Vector3(1, 1, 0), domain: 2.048},
+            beale: { fn: (x, z, p) => ((1.5 - x + x*z)**2 + (2.25 - x + x*z*z)**2 + (2.625 - x + x*z**3)**2) / 100, optimum: new THREE.Vector3(3, 0.5, 0), domain: 4.5},
+            goldstein: { fn: (x, z, p) => ( (1 + (x+z+1)**2 * (19 - 14*x + 3*x**2 - 14*z + 6*x*z + 3*z**2)) * (30 + (2*x-3*z)**2 * (18 - 32*x + 12*x**2 + 48*z - 36*x*z + 27*z**2)) ) / 100000, optimum: new THREE.Vector3(0, -1, 0), domain: 2},
+            booth: { fn: (x, z, p) => ((x + 2*z - 7)**2 + (2*x + z - 5)**2) / 100, optimum: new THREE.Vector3(1, 3, 0), domain: 10},
+            bukin: { fn: (x, z, p) => 100 * Math.sqrt(Math.abs(z - 0.01*x**2)) + 0.01 * Math.abs(x + 10), optimum: new THREE.Vector3(-10, 1, 0), domain: 15},
+            matyas: { fn: (x, z, p) => 0.26 * (x**2 + z**2) - 0.48 * x * z, optimum: new THREE.Vector3(0,0,0), domain: 10},
+            levi: { fn: (x, z, p) => Math.sin(3*Math.PI*x)**2 + (x-1)**2 * (1+Math.sin(3*Math.PI*z)**2) + (z-1)**2 * (1+Math.sin(2*Math.PI*z)**2), optimum: new THREE.Vector3(1,1,0), domain: 10},
+            three_hump: { fn: (x, z, p) => 2*x**2 - 1.05*x**4 + x**6/6 + x*z + z**2, optimum: new THREE.Vector3(0,0,0), domain: 5},
+            easom: { fn: (x, z, p) => -Math.cos(x)*Math.cos(z)*Math.exp(-((x-Math.PI)**2 + (z-Math.PI)**2)) + 2, optimum: new THREE.Vector3(Math.PI, Math.PI, 0), domain: 10},
+            cross_in_tray: { fn: (x, z, p) => -0.0001 * (Math.abs(Math.sin(x)*Math.sin(z)*Math.exp(Math.abs(100 - Math.sqrt(x**2+z**2)/Math.PI))) + 1)**0.1 + 2, optimum: new THREE.Vector3(1.34941, 1.34941, 0), domain: 10},
+            eggholder: { fn: (x, z, p) => -(z+47)*Math.sin(Math.sqrt(Math.abs(x/2 + (z+47)))) - x*Math.sin(Math.sqrt(Math.abs(x-(z+47)))) / 100 + 5, optimum: new THREE.Vector3(512, 404.2319, 0), domain: 512}
+        };
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            labelRenderer = new CSS2DRenderer();
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('labels').appendChild(labelRenderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.maxDistance = 1000;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(50, 100, 75);
+            scene.add(directionalLight);
+            
+            scene.add(populationView, ioSpaceView);
+
+            setupEventListeners();
+            resetSimulation();
+            setupCameraForView(state.view);
+        }
+        
+        // --- EVENT LISTENERS & UI ---
+        function setupEventListeners() {
+            document.getElementById('landscape-selector').addEventListener('change', e => { state.landscape = e.target.value; updateLandscapeParamUI(); resetSimulation(); });
+            document.querySelectorAll('#algo-category-selector button').forEach(btn => btn.addEventListener('click', () => switchAlgoCategory(btn.dataset.category)));
+            ui.gaAlgoSelector.addEventListener('change', e => switchAlgorithm(e.target.value));
+            ui.esAlgoSelector.addEventListener('change', e => switchAlgorithm(e.target.value));
+            document.querySelectorAll('#view-selector button').forEach(btn => btn.addEventListener('click', () => switchView(btn.dataset.view)));
+            document.querySelectorAll('#goal-selector button').forEach(btn => btn.addEventListener('click', (e) => {
+                state.optimizationGoal = e.target.dataset.goal;
+                document.querySelectorAll('#goal-selector button').forEach(b => b.classList.toggle('active', b === e.target));
+                resetSimulation();
+            }));
+
+            ui.settingsBtn.addEventListener('click', () => ui.settingsPanel.classList.toggle('hidden'));
+            ui.graphBtn.addEventListener('click', () => { 
+                ui.graphContainer.classList.toggle('hidden');
+                if(!ui.graphContainer.classList.contains('hidden')) {
+                    generateFitnessPlot();
+                }
+            });
+            ui.graphCollapseBtn.addEventListener('click', () => ui.graphContainer.classList.toggle('collapsed'));
+            ui.graphLogBtn.addEventListener('click', (e) => {
+                state.graphLogScale = !state.graphLogScale;
+                e.target.classList.toggle('active', state.graphLogScale);
+                generateFitnessPlot();
+            });
+            document.querySelectorAll('#metric-selector button').forEach(btn => btn.addEventListener('click', e => {
+                state.graphMetric = e.target.dataset.metric;
+                document.querySelectorAll('#metric-selector button').forEach(b => b.classList.toggle('active', b === e.target));
+                generateFitnessPlot();
+            }));
+            makeDraggable(ui.graphContainer, document.getElementById('graph-header'));
+
+
+            // Settings Panel
+            ui.landscapeResSlider.addEventListener('input', e => ui.landscapeResValue.textContent = e.target.value);
+            ui.pointSizeSlider.addEventListener('input', e => ui.pointSizeValue.textContent = parseFloat(e.target.value).toFixed(1));
+            ui.landscapeScaleSlider.addEventListener('input', e => ui.landscapeScaleValue.textContent = e.target.value);
+            ui.spawnRangeSlider.addEventListener('input', e => ui.spawnRangeValue.textContent = e.target.value);
+            ui.landscapeParams.ackley_a.addEventListener('input', e => ui.landscapeParams.ackley_a_value.textContent = e.target.value);
+            ui.landscapeParams.ackley_b.addEventListener('input', e => ui.landscapeParams.ackley_b_value.textContent = parseFloat(e.target.value).toFixed(2));
+            ui.landscapeParams.rastrigin_a.addEventListener('input', e => ui.landscapeParams.rastrigin_a_value.textContent = e.target.value);
+
+            ui.applySettingsBtn.addEventListener('click', () => {
+                state.landscapeRes = parseInt(ui.landscapeResSlider.value);
+                state.pointSize = parseFloat(ui.pointSizeSlider.value);
+                state.showContours = document.getElementById('showContours').checked;
+                state.landscapeScale = parseInt(ui.landscapeScaleSlider.value);
+                state.spawnRange = parseInt(ui.spawnRangeSlider.value);
+                state.landscapeParams.ackley_a = parseFloat(ui.landscapeParams.ackley_a.value);
+                state.landscapeParams.ackley_b = parseFloat(ui.landscapeParams.ackley_b.value);
+                state.landscapeParams.rastrigin_a = parseFloat(ui.landscapeParams.rastrigin_a.value);
+                state.landscapeColorHigh = document.getElementById('landscapeColorHigh').value;
+                state.landscapeColorLow = document.getElementById('landscapeColorLow').value;
+                state.landscapeColorContour = document.getElementById('landscapeColorContour').value;
+                state.vectorColorHigh = document.getElementById('vectorColorHigh').value;
+                state.vectorColorLow = document.getElementById('vectorColorLow').value;
+                ui.settingsPanel.classList.add('hidden');
+                resetSimulation();
+            });
+
+            // Main UI Panel (Live updates)
+            ui.startBtn.addEventListener('click', startSimulation);
+            ui.pauseBtn.addEventListener('click', pauseSimulation);
+            ui.resetBtn.addEventListener('click', resetSimulation);
+            ui.collapseBtn.addEventListener('click', togglePanelCollapse);
+            ui.speedSlider.addEventListener('input', e => { state.speed = parseInt(e.target.value); ui.speedValue.textContent = state.speed; });
+            ui.populationSizeSlider.addEventListener('input', e => { ui.populationSizeValue.textContent = e.target.value; ui.muLambdaSlider.max = e.target.value; });
+            ui.populationSizeSlider.addEventListener('change', e => { state.populationSize = parseInt(e.target.value); resetSimulation(); });
+            ui.mutationRateSlider.addEventListener('input', e => { state.mutationRate = parseFloat(e.target.value); ui.mutationRateValue.textContent = state.mutationRate.toFixed(2); });
+            ui.cmaSigmaSlider.addEventListener('input', e => { state.cma_sigma = parseFloat(e.target.value); ui.cmaSigmaValue.textContent = state.cma_sigma.toFixed(2); });
+            ui.eliteSizeSlider.addEventListener('input', e => { state.eliteSize = parseInt(e.target.value); ui.eliteSizeValue.textContent = state.eliteSize; });
+            ui.deFSlider.addEventListener('input', e => { state.de_F = parseFloat(e.target.value); ui.deFValue.textContent = state.de_F.toFixed(2); });
+            ui.deCRSlider.addEventListener('input', e => { state.de_CR = parseFloat(e.target.value); ui.deCRValue.textContent = state.de_CR.toFixed(2); });
+            ui.psoInertiaSlider.addEventListener('input', e => { state.pso_w = parseFloat(e.target.value); ui.psoInertiaValue.textContent = state.pso_w.toFixed(2); });
+            ui.saTempSlider.addEventListener('input', e => { state.sa_temp = parseFloat(e.target.value); ui.saTempValue.textContent = state.sa_temp; });
+            ui.boltzmannTempSlider.addEventListener('input', e => { state.boltzmann_temp = parseFloat(e.target.value); ui.boltzmannTempValue.textContent = state.boltzmann_temp.toFixed(2); });
+            ui.truncationSlider.addEventListener('input', e => { state.truncation_percent = parseFloat(e.target.value) / 100; ui.truncationValue.textContent = e.target.value; });
+            ui.muLambdaSlider.addEventListener('input', e => { state.mu_lambda_mu = parseInt(e.target.value); ui.muLambdaValue.textContent = e.target.value; });
+            ui.blxSlider.addEventListener('input', e => { state.blx_alpha = parseFloat(e.target.value); ui.blxValue.textContent = state.blx_alpha.toFixed(1); });
+            ui.sbxSlider.addEventListener('input', e => { state.sbx_eta = parseInt(e.target.value); ui.sbxValue.textContent = state.sbx_eta; });
+            ui.arithmeticSlider.addEventListener('input', e => { state.arithmetic_alpha = parseFloat(e.target.value); ui.arithmeticValue.textContent = state.arithmetic_alpha.toFixed(1); });
+            ui.tournamentSlider.addEventListener('input', e => { state.tournament_size = parseInt(e.target.value); ui.tournamentValue.textContent = state.tournament_size; });
+            
+            document.getElementById('selection-strategy').addEventListener('change', e => { 
+                const selection = e.target.value;
+                const strategies = { tournament: tournamentSelection, roulette: rouletteWheelSelection, rank: rankSelection, boltzmann: boltzmannSelection, sus: stochasticUniversalSampling, truncation: truncationSelection };
+                state.selectionFn = strategies[selection]; 
+                ui.boltzmannControl.style.display = selection === 'boltzmann' ? 'block' : 'none';
+                ui.truncationControl.style.display = selection === 'truncation' ? 'block' : 'none';
+                ui.tournamentControl.style.display = selection === 'tournament' ? 'block' : 'none';
+            });
+            document.getElementById('crossover-strategy').addEventListener('change', e => {
+                const crossover = e.target.value;
+                const strategies = { single_point: singlePointCrossover, two_point: twoPointCrossover, uniform: uniformCrossover, arithmetic: arithmeticCrossover, blx: blendCrossover, sbx: simulatedBinaryCrossover };
+                state.crossoverFn = strategies[crossover];
+                ui.blxControl.style.display = crossover === 'blx' ? 'block' : 'none';
+                ui.sbxControl.style.display = crossover === 'sbx' ? 'block' : 'none';
+                ui.arithmeticControl.style.display = crossover === 'arithmetic' ? 'block' : 'none';
+            });
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        // --- CONTROL & UI FUNCTIONS ---
+        function startSimulation() { state.isRunning = true; ui.startBtn.classList.add('hidden'); ui.pauseBtn.classList.remove('hidden'); updateSummaryBar(); }
+        function pauseSimulation() { state.isRunning = false; ui.startBtn.classList.remove('hidden'); ui.pauseBtn.classList.add('hidden'); updateSummaryBar(); }
+        function resetSimulation() { pauseSimulation(); state.generation = 0; state.fitnessHistory = []; ui.generationCounter.textContent = '0'; setupViews(); initializePopulation(); updateVisualization(); startPopulationGrowthAnimation(); }
+        function switchAlgoCategory(category) { if (state.algoCategory === category) return; state.algoCategory = category; document.querySelectorAll('#algo-category-selector button').forEach(btn => btn.classList.toggle('active', btn.dataset.category === category)); if (category === 'GA') { ui.gaAlgoSelector.classList.remove('hidden'); ui.esAlgoSelector.classList.add('hidden'); switchAlgorithm(ui.gaAlgoSelector.value); } else { ui.gaAlgoSelector.classList.add('hidden'); ui.esAlgoSelector.classList.remove('hidden'); switchAlgorithm(ui.esAlgoSelector.value); } }
+        function switchAlgorithm(algo) {
+            state.algorithm = algo;
+            const controls = {sel:false, cross:false, mut:false, cma: false, de:false, pso:false, sa:false, mu:false};
+            if (['ga', 'de', 'ssga', 'mga'].includes(algo)) { controls.sel = true; controls.cross = true; }
+            if (['ga', 'es', 'ssga', 'mga'].includes(algo)) { controls.mut = true; }
+            if (algo==='cma-es') { controls.cma = true; }
+            if (algo==='de') { controls.de = true; }
+            if (algo==='pso') { controls.pso = true; }
+            if (algo==='sa') { controls.sa = true; }
+            if (algo==='mu_lambda_es' || algo==='mu_plus_lambda_es') { controls.mu = true; }
+
+            ui.selectionControl.style.display = controls.sel ? 'block':'none';
+            ui.crossoverControl.style.display = controls.cross ? 'block':'none';
+            ui.mutationRateControl.style.display = controls.mut ? 'block':'none';
+            ui.cmaSigmaControl.style.display = controls.cma ? 'block':'none';
+            ui.deFControl.style.display = ui.deCRControl.style.display = controls.de ? 'block':'none';
+            ui.psoParams.style.display = controls.pso ? 'block':'none';
+            ui.saParams.style.display = controls.sa ? 'block':'none';
+            ui.muLambdaControl.style.display = controls.mu ? 'block':'none';
+            
+            const sel = document.getElementById('selection-strategy').value;
+            ui.boltzmannControl.style.display = sel === 'boltzmann' && controls.sel ? 'block' : 'none';
+            ui.truncationControl.style.display = sel === 'truncation' && controls.sel ? 'block' : 'none';
+            ui.tournamentControl.style.display = sel === 'tournament' && controls.sel ? 'block' : 'none';
+            
+            const cross = document.getElementById('crossover-strategy').value;
+            ui.blxControl.style.display = cross === 'blx' && controls.cross ? 'block' : 'none';
+            ui.sbxControl.style.display = cross === 'sbx' && controls.cross ? 'block' : 'none';
+            ui.arithmeticControl.style.display = cross === 'arithmetic' && controls.cross ? 'block' : 'none';
+
+
+            if (!state.isRunning) { resetSimulation(); }
+        }
+        function switchView(view) { if (state.view === view) return; state.view = view; document.querySelectorAll('#view-selector button').forEach(btn => btn.classList.toggle('active', btn.dataset.view === view)); populationView.visible = view === 'population'; ioSpaceView.visible = view === 'io_space'; setupViews(); setupCameraForView(view); }
+        function togglePanelCollapse() { const isCollapsed = ui.uiPanel.classList.toggle('collapsed'); ui.panelSummary.classList.toggle('hidden', !isCollapsed); if (isCollapsed) updateSummaryBar(); }
+        function updateSummaryBar() { if (!ui.uiPanel.classList.contains('collapsed')) return; const playIcon = `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"></path></svg>`; const pauseIcon = `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M5.75 4.5a.75.75 0 00-.75.75v10.5a.75.75 0 001.5 0V5.25a.75.75 0 00-.75-.75zM14.25 4.5a.75.75 0 00-.75.75v10.5a.75.75 0 001.5 0V5.25a.75.75 0 00-.75-.75z"></path></svg>`; const resetIcon = `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M15.312 11.342a5.986 5.986 0 01-4.654 4.654c.643.21 1.316.335 2.023.372a.75.75 0 01.028 1.498 7.483 7.483 0 00-2.53-.464c-4.142 0-7.5-3.358-7.5-7.5s3.358-7.5 7.5-7.5a7.487 7.487 0 016.112 3.626.75.75 0 11-1.299.75A5.987 5.987 0 0010.318 4.5a6 6 0 00-6 6c0 2.668 1.74 4.943 4.158 5.688a.75.75 0 01.658-1.374 5.986 5.986 0 014.178-4.178.75.75 0 111.374-.658z" clip-rule="evenodd"></path><path d="M16.5 6.75a.75.75 0 01.75-.75h1.5a.75.75 0 010 1.5h-1.5a.75.75 0 01-.75-.75z"></path><path fill-rule="evenodd" d="M16 1.5a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V2.25A.75.75 0 0116 1.5z" clip-rule="evenodd"></path></svg>`; const summaryHTML = `<div class="flex items-center gap-3"><button id="summary-play-btn" class="summary-btn text-green-400 ${state.isRunning?'hidden':''}">${playIcon}</button><button id="summary-pause-btn" class="summary-btn text-yellow-400 ${!state.isRunning?'hidden':''}">${pauseIcon}</button><button id="summary-reset-btn" class="summary-btn text-red-400">${resetIcon}</button></div><div class="flex items-center gap-2 md:gap-4 flex-wrap justify-end"><span>Algo: <strong class="text-blue-400">${state.algorithm.toUpperCase()}</strong></span><span>Gen: <strong class="text-blue-400">${state.generation}</strong></span><span class="hidden sm:inline">Pop: <strong class="text-blue-400">${state.populationSize}</strong></span><span class="hidden md:inline">Landscape: <strong class="text-blue-400">${state.landscape}</strong></span></div>`; ui.panelSummary.innerHTML = summaryHTML; document.getElementById('summary-play-btn')?.addEventListener('click', startSimulation); document.getElementById('summary-pause-btn')?.addEventListener('click', pauseSimulation); document.getElementById('summary-reset-btn')?.addEventListener('click', resetSimulation); }
+        function updateLandscapeParamUI() {
+            Object.values(ui.landscapeParams).forEach(el => { if (el.tagName === 'DIV' || el.tagName === 'P') el.classList.add('hidden'); });
+            const activeParams = ui.landscapeParams[state.landscape];
+            if (activeParams) { activeParams.classList.remove('hidden'); }
+            else { ui.landscapeParams.no_params.classList.remove('hidden'); }
+        }
+
+        // --- ALGORITHMS ---
+        function runNextGeneration(){
+            let newPop;
+            const sortOrder = state.optimizationGoal === 'minimize' ? (a,b) => a.fitness - b.fitness : (a,b) => b.fitness - a.fitness;
+            state.population.forEach(p=>p.rawFitness = landscapes[state.landscape].fn(p.genes[0], p.genes[2], state.landscapeParams));
+            
+            const rawFitnesses = state.population.map(p => p.rawFitness).filter(f => isFinite(f));
+            const minFit = Math.min(...rawFitnesses);
+            const maxFit = Math.max(...rawFitnesses);
+
+            state.population.forEach(p => {
+                if (state.optimizationGoal === 'minimize') {
+                    p.fitness = p.rawFitness;
+                    p.selectionFitness = maxFit - p.rawFitness;
+                } else {
+                    p.fitness = -p.rawFitness; // for sorting, lower is better
+                    p.selectionFitness = p.rawFitness - minFit;
+                }
+            });
+
+            state.population.sort((a,b) => a.fitness - b.fitness);
+
+            const bestFitness = state.optimizationGoal === 'minimize' ? state.population[0].fitness : -state.population[0].fitness;
+            const avgFitness = state.population.reduce((sum, p) => sum + (state.optimizationGoal === 'minimize' ? p.fitness : -p.fitness), 0) / state.populationSize;
+            const diversity = calculateDiversity(state.population);
+            const improvement = state.generation > 0 ? state.fitnessHistory[state.generation-1].best - bestFitness : 0;
+            state.fitnessHistory.push({generation: state.generation, best: bestFitness, average: avgFitness, diversity, improvement});
+            
+            if (state.algorithm === 'pso') { newPop = runPSOGeneration(); } 
+            else if (state.algorithm === 'sa') { newPop = runSAGeneration(); } 
+            else if (state.algorithm === 'mga') { newPop = runMGAGeneration(); } 
+            else if (state.algorithm === 'ssga') { newPop = runSSGAGeneration(); }
+            else if (state.algorithm === 'mu_lambda_es') { newPop = runMuLambdaESGeneration(true); }
+            else if (state.algorithm === 'mu_plus_lambda_es') { newPop = runMuLambdaESGeneration(false); }
+            else if (state.algorithm === 'cma-es') { newPop = runCMAESGeneration(); }
+            else { newPop = runGenerational(); }
+
+            state.population = newPop;
+            state.generation++;
+        }
+        function runGenerational() {
+            const newPop = [];
+            const eliteCount = Math.floor(state.populationSize * (state.eliteSize / 100));
+            for(let i = 0; i < eliteCount; i++) {
+                newPop.push(JSON.parse(JSON.stringify(state.population[i])));
+            }
+            while(newPop.length < state.populationSize) {
+                 const p1 = state.selectionFn(state.population);
+                 const p2 = state.selectionFn(state.population);
+                 const children = state.crossoverFn(p1, p2);
+                 children.forEach(c => {
+                     mutate(c);
+                     if(newPop.length < state.populationSize) newPop.push(c);
+                 });
+            }
+            return newPop;
+        }
+
+        function runSSGAGeneration() { const newPop = [...state.population]; for(let i=0; i < 2; i++){ const p1 = state.selectionFn(state.population); const p2 = state.selectionFn(state.population); const children = state.crossoverFn(p1, p2); children.forEach(c => mutate(c)); newPop.splice(newPop.length-2, 2, ...children); } return newPop; }
+        function runMGAGeneration() { const newPop = [...state.population]; const i = Math.floor(Math.random() * state.populationSize); let j; do { j = Math.floor(Math.random() * state.populationSize); } while(i === j); const p1 = state.population[i], p2 = state.population[j]; const [winner, loser] = p1.fitness < p2.fitness ? [p1, p2] : [p2, p1]; const child = state.crossoverFn(winner, loser)[0]; mutate(child); const loserIndex = state.population.findIndex(p => p === loser); newPop[loserIndex] = child; return newPop; }
+        function runESGeneration(){ const newPop=[]; const parents=state.population.slice(0,Math.floor(state.populationSize/2)); newPop.push(...parents); while(newPop.length<state.populationSize){const p=parents[Math.floor(Math.random()*parents.length)]; const child=JSON.parse(JSON.stringify(p)); mutate(child); newPop.push(child); } return newPop; }
+        function runMuLambdaESGeneration(comma) { const mu = state.mu_lambda_mu; const parents = state.population.slice(0, mu); const offspring = []; while(offspring.length < state.populationSize) { const p = parents[Math.floor(Math.random() * parents.length)]; const child = JSON.parse(JSON.stringify(p)); mutate(child); offspring.push(child); } if (comma) { return offspring; } else { return [...state.population, ...offspring]; } }
+        function runDEGeneration(){const newPop=[];for(let i=0;i<state.populationSize;i++){const target=state.population[i];let a,b,c;do{a=state.population[Math.floor(Math.random()*state.populationSize)];}while(a===target);do{b=state.population[Math.floor(Math.random()*state.populationSize)];}while(b===target||b===a);do{c=state.population[Math.floor(Math.random()*state.populationSize)];}while(c===target||c===a||c===b);const mutant={genes:[],fitness:0};const R=Math.floor(Math.random()*target.genes.length);for(let j=0;j<target.genes.length;j++){if(Math.random()<state.de_CR||j===R){mutant.genes[j]=a.genes[j]+state.de_F*(b.genes[j]-c.genes[j]);}else{mutant.genes[j]=target.genes[j];}}mutant.rawFitness=evaluateFitness(mutant.genes);mutant.fitness = state.optimizationGoal === 'minimize' ? mutant.rawFitness : -mutant.rawFitness;const comparison = mutant.fitness < target.fitness; newPop.push(comparison ? mutant : target);} return newPop;}
+        function runCMAESGeneration(){const best=state.population.slice(0,Math.floor(state.populationSize*0.25));const newMean=new THREE.Vector3(0,0,0);best.forEach(ind=>newMean.add(new THREE.Vector3().fromArray(ind.genes)));newMean.divideScalar(best.length);state.cma.mean.lerp(newMean,0.1);const bestVec=new THREE.Vector3().fromArray(best[0].genes).normalize();const randVec=new THREE.Vector3(Math.random(),Math.random(),Math.random()).normalize();const axis2=new THREE.Vector3().crossVectors(bestVec,randVec).normalize();const axis3=new THREE.Vector3().crossVectors(bestVec,axis2).normalize();state.cma.covarianceMatrix.set(bestVec.x,axis2.x,axis3.x,bestVec.y,axis2.y,axis3.y,bestVec.z,axis2.z,axis3.z);const newPop=[];for(let i=0;i<state.populationSize;i++){const s=new THREE.Vector3((Math.random()-0.5)*2,(Math.random()-0.5)*2,(Math.random()-0.5)*2);s.multiplyScalar(state.cma_sigma * 5); s.applyMatrix3(state.cma.covarianceMatrix); s.add(state.cma.mean); newPop.push({genes:s.toArray()});} return newPop;}
+        function runPSOGeneration() { const c1 = 1.5, c2 = 1.5; const gBest = state.population[0]; state.population.forEach(p => { for(let i=0; i < p.genes.length; i++) { const r1 = Math.random(), r2 = Math.random(); p.velocity[i] = state.pso_w * p.velocity[i] + c1 * r1 * (p.pBest.genes[i] - p.genes[i]) + c2 * r2 * (gBest.genes[i] - p.genes[i]); p.genes[i] += p.velocity[i]; } p.rawFitness = evaluateFitness(p.genes); p.fitness = state.optimizationGoal === 'minimize' ? p.rawFitness : -p.rawFitness; const comparison = state.optimizationGoal === 'minimize' ? p.fitness < p.pBest.fitness : p.fitness > p.pBest.fitness; if (comparison) { p.pBest = {genes: [...p.genes], fitness: p.fitness, rawFitness: p.rawFitness}; } }); return state.population; }
+        function runSAGeneration() { const current = state.population[0]; const neighbor = {genes: [...current.genes]}; for (let i = 0; i < neighbor.genes.length; i++) { neighbor.genes[i] += (Math.random() - 0.5) * (state.sa_temp / 1000) * state.landscapeScale; } neighbor.rawFitness = evaluateFitness(neighbor.genes); neighbor.fitness = state.optimizationGoal === 'minimize' ? neighbor.rawFitness : -neighbor.rawFitness; const delta = neighbor.fitness - current.fitness; if (delta < 0 || Math.exp(-delta / state.sa_temp) > Math.random()) { return [neighbor]; } else { return [current]; } }
+        function initializePopulation(){state.population=[]; const spawnSize = state.landscapeScale * (state.spawnRange / 100); const halfSpawn = spawnSize / 2; state.cma.mean=new THREE.Vector3((Math.random()-0.5)*halfSpawn,(Math.random()-0.5)*halfSpawn,(Math.random()-0.5)*halfSpawn);state.cma.covarianceMatrix.identity();for(let i=0;i<state.populationSize;i++){ const ind = {genes:[(Math.random()-0.5)*spawnSize,(Math.random()-0.5)*20,(Math.random()-0.5)*spawnSize], fitness:Infinity}; if (state.algorithm === 'pso') { ind.velocity = [0,0,0]; ind.pBest = {genes:[...ind.genes], fitness: state.optimizationGoal === 'minimize' ? Infinity : -Infinity}; } state.population.push(ind); } state.sa_temp = parseFloat(ui.saTempSlider.value); }
+        function evaluateFitness(genes){return landscapes[state.landscape].fn(genes[0], genes[2], state.landscapeParams);}
+        function tournamentSelection(pop){const size=state.tournament_size;let best=pop[Math.floor(Math.random()*pop.length)];for(let i=1;i<size;i++){const cont=pop[Math.floor(Math.random()*pop.length)];if(cont.fitness<best.fitness)best=cont;}return best;}
+        function rouletteWheelSelection(pop){ const total=pop.reduce((s,i)=>s+i.selectionFitness,0); if(total<=0)return tournamentSelection(pop); let pick=Math.random()*total; for(const i of pop){pick-=i.selectionFitness;if(pick<=0)return i;} return pop[pop.length-1];}
+        function rankSelection(pop){const ranks=pop.map((_,i)=>pop.length-i);const total=ranks.reduce((s,r)=>s+r,0);let pick=Math.random()*total;for(let i=0;i<pop.length;i++){pick-=ranks[i];if(pick<=0)return pop[i];}return pop[pop.length-1];}
+        function boltzmannSelection(pop) { const T = state.boltzmann_temp; const values = pop.map(p => Math.exp(p.selectionFitness / T)); const total = values.reduce((s, v) => s + v, 0); if (total <= 0 || !isFinite(total)) return tournamentSelection(pop); let pick = Math.random() * total; for (let i=0; i < pop.length; i++) { pick -= values[i]; if (pick <= 0) return pop[i]; } return pop[pop.length - 1]; }
+        function stochasticUniversalSampling(pop) { const totalFitness = pop.reduce((sum, ind) => sum + ind.selectionFitness, 0); const pointerDist = totalFitness / 2; const start = Math.random() * pointerDist; const pointers = [start, start + pointerDist]; const selected = []; pop.forEach(ind => { pointers.forEach((p, i) => { if (p < ind.selectionFitness) { selected.push(ind); pointers[i] += totalFitness; } }); }); return selected[Math.floor(Math.random() * selected.length)] || pop[0]; }
+        function truncationSelection(pop) { const count = Math.floor(pop.length * state.truncation_percent); return pop[Math.floor(Math.random() * count)]; }
+        function singlePointCrossover(p1,p2){const cp=1+Math.floor(Math.random()*(p1.genes.length-2));return[{genes:p1.genes.slice(0,cp).concat(p2.genes.slice(cp))},{genes:p2.genes.slice(0,cp).concat(p1.genes.slice(cp))}];}
+        function twoPointCrossover(p1,p2){let cp1=Math.floor(Math.random()*p1.genes.length),cp2=Math.floor(Math.random()*p1.genes.length);if(cp1>cp2)[cp1,cp2]=[cp2,cp1];return[{genes:p1.genes.slice(0,cp1).concat(p2.genes.slice(cp1,cp2)).concat(p1.genes.slice(cp2))},{genes:p2.genes.slice(0,cp1).concat(p1.genes.slice(cp1,cp2)).concat(p2.genes.slice(cp2))}];}
+        function uniformCrossover(p1,p2){const c1g=[],c2g=[];for(let i=0;i<p1.genes.length;i++){if(Math.random()<0.5){c1g.push(p1.genes[i]);c2g.push(p2.genes[i]);}else{c1g.push(p2.genes[i]);c2g.push(p1.genes[i]);}}return[{genes:c1g},{genes:c2g}];}
+        function arithmeticCrossover(p1,p2){const a=state.arithmetic_alpha,c1g=[],c2g=[];for(let i=0;i<p1.genes.length;i++){c1g.push(a*p1.genes[i]+(1-a)*p2.genes[i]);c2g.push((1-a)*p1.genes[i]+a*p2.genes[i]);}return[{genes:c1g},{genes:c2g}];}
+        function blendCrossover(p1, p2) { const alpha = state.blx_alpha; const c1g = [], c2g = []; for (let i = 0; i < p1.genes.length; i++) { const d = Math.abs(p1.genes[i] - p2.genes[i]); const min = Math.min(p1.genes[i], p2.genes[i]) - alpha * d; const max = Math.max(p1.genes[i], p2.genes[i]) + alpha * d; c1g.push(min + Math.random() * (max - min)); c2g.push(min + Math.random() * (max - min)); } return [{genes:c1g}, {genes:c2g}]; }
+        function simulatedBinaryCrossover(p1, p2) { const eta = state.sbx_eta; const c1g = [], c2g = []; for (let i = 0; i < p1.genes.length; i++) { const u = Math.random(); let beta; if (u <= 0.5) { beta = (2 * u)**(1 / (eta + 1)); } else { beta = (1 / (2 * (1 - u)))**(1 / (eta + 1)); } c1g.push(0.5 * (((1 + beta) * p1.genes[i]) + (1 - beta) * p2.genes[i])); c2g.push(0.5 * (((1 - beta) * p1.genes[i]) + (1 + beta) * p2.genes[i])); } return [{genes:c1g}, {genes:c2g}];}
+        function clamp(value, min, max) { return Math.max(min, Math.min(value, max)); }
+        function mutate(ind){ const halfScale = state.landscapeScale / 2; for(let i=0;i<ind.genes.length;i++){if(i === 1) continue; if(Math.random()<state.mutationRate){ind.genes[i]+=(Math.random()-0.5)*state.mutationRate*5;} ind.genes[i] = clamp(ind.genes[i], -halfScale, halfScale);}}
+        function calculateDiversity(pop) { if (pop.length < 2) return 0; const centroid = [0,0,0]; pop.forEach(p => { centroid[0]+=p.genes[0]; centroid[1]+=p.genes[1]; centroid[2]+=p.genes[2]; }); centroid[0]/=pop.length; centroid[1]/=pop.length; centroid[2]/=pop.length; let avgDist = 0; pop.forEach(p => { const dist = Math.sqrt((p.genes[0]-centroid[0])**2 + (p.genes[1]-centroid[1])**2 + (p.genes[2]-centroid[2])**2); avgDist += dist; }); return avgDist / pop.length; }
+
+        // --- 3D VISUALIZATION ---
+        function setupViews() {
+            populationView.clear();
+            ioSpaceView.clear();
+
+            if (state.view === 'population') {
+                landscapeMesh = createLandscapeMesh();
+                populationView.add(landscapeMesh);
+                const pointsGeom = new THREE.BufferGeometry();
+                pointsGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(state.populationSize * 3), 3));
+                pointsGeom.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(state.populationSize * 3), 3));
+                populationPoints = new THREE.Points(pointsGeom, new THREE.PointsMaterial({ size: state.pointSize, vertexColors: true, transparent: true, opacity: 0.9 }));
+                populationView.add(populationPoints);
+                const optimumGeom = new THREE.SphereGeometry(state.landscapeScale * 0.005, 16, 16);
+                optimumMarker = new THREE.Mesh(optimumGeom, new THREE.MeshBasicMaterial({ color: 0xffff00 }));
+                populationView.add(optimumMarker);
+                const ellipsoidGeom = new THREE.SphereGeometry(1, 32, 16);
+                cmaEsEllipsoid = new THREE.Mesh(ellipsoidGeom, new THREE.MeshBasicMaterial({color: 0xfde047, wireframe: true, transparent: true, opacity: 0.5}));
+                populationView.add(cmaEsEllipsoid);
+            } else { // io_space
+                const spaceSize = state.landscapeScale * 0.4;
+                const separation = spaceSize + 40;
+                const inputAxes = create3DAxes(spaceSize);
+                inputAxes.position.x = -separation / 2;
+                ioSpaceView.add(inputAxes);
+                const outputAxes = create3DAxes(spaceSize);
+                outputAxes.position.x = separation / 2;
+                ioSpaceView.add(outputAxes);
+
+                const inputPointsGeom = new THREE.BufferGeometry();
+                inputPointsGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(state.populationSize * 3), 3));
+                inputSpacePoints = new THREE.Points(inputPointsGeom, new THREE.PointsMaterial({ color: 0xf87171, size: 0.8 }));
+                ioSpaceView.add(inputSpacePoints);
+                const outputPointsGeom = new THREE.BufferGeometry();
+                outputPointsGeom.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(state.populationSize * 3), 3));
+                outputSpacePoints = new THREE.Points(outputPointsGeom, new THREE.PointsMaterial({ color: 0x60a5fa, size: 0.8 }));
+                ioSpaceView.add(outputSpacePoints);
+                const lineGeom = new THREE.BufferGeometry();
+                lineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(state.populationSize * 6), 3));
+                ioConnectors = new THREE.LineSegments(lineGeom, new THREE.LineBasicMaterial({color: 0x6b7280, transparent: true, opacity: 0.3}));
+                ioSpaceView.add(ioConnectors);
+
+                const legendDiv = document.createElement('div');
+                legendDiv.className = "absolute top-20 left-1/2 -translate-x-1/2 text-center text-sm text-gray-300 bg-gray-900/50 p-2 rounded-md";
+                legendDiv.innerHTML = `<span class="text-red-400">■</span> Decision Space (Genes) &nbsp;&nbsp;&nbsp; <span class="text-blue-400">■</span> Objective Space (Fitness)`;
+                ioLegend = new CSS2DObject(legendDiv);
+                ioSpaceView.add(ioLegend);
+
+            }
+            switchAlgoCategory(state.algoCategory);
+            switchView(state.view);
+        }
+        
+        function create3DAxes(size) {
+            const axes = new THREE.Group();
+            const half = size / 2;
+            axes.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-half,0,0), new THREE.Vector3(half,0,0)]), new THREE.LineBasicMaterial({color: 0xef4444})));
+            axes.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,-half,0), new THREE.Vector3(0,half,0)]), new THREE.LineBasicMaterial({color: 0x22c55e})));
+            axes.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,-half), new THREE.Vector3(0,0,half)]), new THREE.LineBasicMaterial({color: 0x3b82f6})));
+            axes.add(new THREE.GridHelper(size, 10, 0x444444, 0x222222));
+            return axes;
+        }
+
+        function createLandscapeMesh() {
+            const landscape = landscapes[state.landscape];
+            const domain = landscape.domain;
+            const res = state.landscapeRes;
+            const scale = state.landscapeScale;
+            const geom = new THREE.BufferGeometry();
+            const vertices = new Float32Array((res + 1) * (res + 1) * 3);
+            const colors = new Float32Array((res + 1) * (res + 1) * 3);
+            const indices = [];
+            
+            const step = scale / res;
+            const halfSize = scale / 2;
+            const colorHigh = new THREE.Color(state.landscapeColorHigh);
+            const colorLow = new THREE.Color(state.landscapeColorLow);
+            const colorContour = new THREE.Color(state.landscapeColorContour);
+            
+            for (let i = 0, z = -halfSize; i <= res; i++, z += step) {
+                for (let j = 0, x = -halfSize; j <= res; j++, x += step) {
+                    const idx = (i * (res + 1) + j) * 3;
+                    const domainX = x * (domain / halfSize);
+                    const domainZ = z * (domain / halfSize);
+                    const y = landscape.fn(domainX, domainZ, state.landscapeParams);
+                    
+                    vertices[idx] = x;
+                    vertices[idx + 1] = y;
+                    vertices[idx + 2] = z;
+                    
+                    const isContour = state.showContours && Math.abs((y * 10) % 2) < 0.2;
+                    const baseColor = new THREE.Color().lerpColors(colorHigh, colorLow, y / 30);
+                    const finalColor = isContour ? colorContour : baseColor;
+                    colors[idx] = finalColor.r;
+                    colors[idx + 1] = finalColor.g;
+                    colors[idx + 2] = finalColor.b;
+                }
+            }
+
+            for (let i = 0; i < res; i++) {
+                for (let j = 0; j < res; j++) {
+                    const a = i * (res + 1) + j;
+                    const b = a + 1;
+                    const c = (i + 1) * (res + 1) + j;
+                    const d = c + 1;
+                    indices.push(a, c, b);
+                    indices.push(b, c, d);
+                }
+            }
+            
+            geom.setIndex(indices);
+            geom.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geom.computeVertexNormals();
+            
+            const mat = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.2, roughness: 0.8 });
+            return new THREE.Mesh(geom, mat);
+        }
+
+        function getLandscapeHeight(x, z) {
+            const landscape = landscapes[state.landscape];
+            const domain = landscape.domain;
+            const halfSize = state.landscapeScale / 2;
+            const res = state.landscapeRes;
+            const step = state.landscapeScale / res;
+
+            if (x < -halfSize || x > halfSize || z < -halfSize || z > halfSize) return 0;
+
+            const gridX = Math.floor((x + halfSize) / step);
+            const gridZ = Math.floor((z + halfSize) / step);
+
+            const x1 = -halfSize + gridX * step;
+            const z1 = -halfSize + gridZ * step;
+            
+            const domainX1 = x1 * (domain / halfSize);
+            const domainZ1 = z1 * (domain / halfSize);
+            const domainX2 = (x1 + step) * (domain / halfSize);
+            const domainZ2 = (z1 + step) * (domain / halfSize);
+
+            const y11 = landscape.fn(domainX1, domainZ1, state.landscapeParams);
+            const y12 = landscape.fn(domainX1, domainZ2, state.landscapeParams);
+            const y21 = landscape.fn(domainX2, domainZ1, state.landscapeParams);
+            const y22 = landscape.fn(domainX2, domainZ2, state.landscapeParams);
+            
+            const tx = (x - x1) / step;
+            const tz = (z - z1) / step;
+
+            const y1 = y11 * (1 - tx) + y21 * tx;
+            const y2 = y12 * (1 - tx) + y22 * tx;
+
+            return y1 * (1 - tz) + y2 * tz;
+        }
+
+        function updateVisualization() {
+            if (!state.population || state.population.length === 0) return;
+            
+            const landscape = landscapes[state.landscape];
+            optimumMarker.position.copy(landscape.optimum);
+            optimumMarker.position.y = landscape.fn(landscape.optimum.x, landscape.optimum.z, state.landscapeParams) + 0.5;
+            optimumMarker.material.color.set(state.optimizationGoal === 'minimize' ? 0xffff00 : 0xf472b6);
+
+
+            cmaEsEllipsoid.visible = state.algorithm === 'cma-es';
+            if(cmaEsEllipsoid.visible) {
+                const transformMatrix = new THREE.Matrix4().setFromMatrix3(state.cma.covarianceMatrix);
+                const scaleMatrix = new THREE.Matrix4().makeScale(state.cma_sigma * 20, state.cma_sigma * 10, state.cma_sigma * 10);
+                transformMatrix.multiply(scaleMatrix);
+                cmaEsEllipsoid.matrix.makeTranslation(state.cma.mean.x, getLandscapeHeight(state.cma.mean.x, state.cma.mean.z) + 0.2 , state.cma.mean.z).multiply(transformMatrix);
+                cmaEsEllipsoid.matrixAutoUpdate = false;
+            }
+
+            if (state.view === 'population') {
+                const popPos = populationPoints.geometry.attributes.position.array;
+                const popColors = populationPoints.geometry.attributes.color.array;
+                const eliteCount = Math.floor(state.populationSize * (state.eliteSize / 100));
+                const eliteColor = new THREE.Color(0xf472b6);
+                const hotColor = new THREE.Color(state.vectorColorLow);
+                const coolColor = new THREE.Color(state.vectorColorHigh);
+                const nonElitePop = state.population.slice(eliteCount);
+                
+                const fitnesses = nonElitePop.map(p => p.fitness);
+                const minFitness = Math.min(...fitnesses);
+                const maxFitness = Math.max(...fitnesses);
+                const fitnessRange = maxFitness - minFitness;
+
+                for (let i = 0; i < state.populationSize; i++) {
+                    const ind = state.population[i];
+                    if (!ind) continue;
+                    let color;
+                    if (i < eliteCount) { color = eliteColor; } 
+                    else { color = new THREE.Color(); const normFit = fitnessRange > 0.001 ? (ind.fitness - minFitness) / fitnessRange : 0; color.lerpColors(coolColor, hotColor, Math.min(1, Math.max(0, normFit))); }
+                    popColors[i*3] = color.r; popColors[i*3+1] = color.g; popColors[i*3+2] = color.b;
+                    popPos[i*3]=ind.genes[0]; popPos[i*3+2]=ind.genes[2];
+                    popPos[i*3+1] = getLandscapeHeight(ind.genes[0], ind.genes[2]) + 0.2;
+                }
+                populationPoints.geometry.attributes.position.needsUpdate = true;
+                populationPoints.geometry.attributes.color.needsUpdate = true;
+
+            } else { // io_space
+                const inputPos = inputSpacePoints.geometry.attributes.position.array;
+                const outputPos = outputSpacePoints.geometry.attributes.position.array;
+                const linePos = ioConnectors.geometry.attributes.position.array;
+                const domain = landscape.domain;
+                const axisHalfSize = (state.landscapeScale * 0.4) / 2;
+                const separation = axisHalfSize*2 + 40;
+
+                 for (let i = 0; i < state.populationSize; i++) {
+                    const ind = state.population[i];
+                    if (!ind) continue;
+                    const ix = clamp(ind.genes[0], -state.landscapeScale/2, state.landscapeScale/2) / (state.landscapeScale/2) * axisHalfSize;
+                    const iy = clamp(ind.genes[1], -state.landscapeScale/2, state.landscapeScale/2) / (state.landscapeScale/2) * axisHalfSize;
+                    const iz = clamp(ind.genes[2], -state.landscapeScale/2, state.landscapeScale/2) / (state.landscapeScale/2) * axisHalfSize;
+                    inputPos[i*3]=ix - separation/2; inputPos[i*3+1]=iy; inputPos[i*3+2]=iz;
+                    const normFit = isFinite(ind.rawFitness) ? Math.min(ind.rawFitness / 50, 1.0) : 0.5;
+                    outputPos[i*3] = separation/2; outputPos[i*3+1]=(normFit - 0.5) * (axisHalfSize*2); outputPos[i*3+2]=0;
+                    linePos[i*6]=inputPos[i*3]; linePos[i*6+1]=inputPos[i*3+1]; linePos[i*6+2]=inputPos[i*3+2];
+                    linePos[i*6+3]=outputPos[i*3]; linePos[i*6+4]=outputPos[i*3+1]; linePos[i*6+5]=outputPos[i*3+2];
+                }
+                inputSpacePoints.geometry.attributes.position.needsUpdate = true;
+                outputSpacePoints.geometry.attributes.position.needsUpdate = true;
+                ioConnectors.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+        
+        function setupCameraForView(view) { 
+            const scale = state.landscapeScale;
+            if (view === 'population') { 
+                camera.position.set(scale * 0.4, scale * 0.5, scale * 0.6); 
+                controls.target.set(0, 0, 0); 
+            } else { 
+                camera.position.set(0, 0, scale * 0.75); 
+                controls.target.set(0, 0, 0); 
+            } 
+        }
+        function startPopulationGrowthAnimation() { populationGrowthState.isAnimating = true; populationGrowthState.startTime = clock.getElapsedTime(); if(populationPoints) populationPoints.geometry.setDrawRange(0, 0); }
+
+        function generateFitnessPlot() {
+            const svg = document.getElementById('fitness-graph');
+            svg.innerHTML = ''; // Clear previous graph
+
+            if (state.fitnessHistory.length < 2) {
+                svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" class="axis-text">Run simulation for 2+ generations to see plot.</text>`;
+                return;
+            }
+
+            const width = svg.clientWidth;
+            const height = svg.clientHeight;
+            const margin = { top: 30, right: 20, bottom: 40, left: 60 };
+            const innerWidth = width - margin.left - margin.right;
+            const innerHeight = height - margin.top - margin.bottom;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('transform', `translate(${margin.left},${margin.top})`);
+            svg.appendChild(g);
+            
+            let data, yLabel, bestAccessor, avgAccessor;
+            switch(state.graphMetric) {
+                case 'diversity':
+                    data = state.fitnessHistory;
+                    yLabel = 'Avg. Diversity';
+                    bestAccessor = d => d.diversity;
+                    avgAccessor = d => d.diversity; // Only one line for diversity
+                    break;
+                case 'improvement':
+                    data = state.fitnessHistory;
+                    yLabel = 'Best Fitness Improvement';
+                    bestAccessor = d => d.improvement;
+                    avgAccessor = d => 0; 
+                    break;
+                case 'fitness':
+                default:
+                    data = state.fitnessHistory;
+                    yLabel = 'Fitness';
+                    bestAccessor = d => d.best;
+                    avgAccessor = d => d.average;
+            }
+
+            const xMax = data[data.length - 1].generation;
+            const allValues = data.flatMap(d => state.graphMetric === 'fitness' ? [d.best, d.average] : [bestAccessor(d)]);
+            let yMin = Math.min(...allValues.filter(isFinite));
+            let yMax = Math.max(...allValues.filter(isFinite));
+            
+            if (yMin === yMax) { yMin -= 0.5; yMax += 0.5; }
+            if(yMax - yMin === 0) yMax +=1;
+
+            const xScale = gen => state.graphLogScale ? (Math.log1p(gen) / Math.log1p(xMax)) * innerWidth : (gen / xMax) * innerWidth;
+            const yScale = val => innerHeight - ((val - yMin) / (yMax - yMin)) * innerHeight;
+
+            // Axes and Ticks
+            g.innerHTML = `<rect width="${innerWidth}" height="${innerHeight}" fill="#1f2937" />
+                           <line class="axis-line" x1="0" y1="${innerHeight}" x2="${innerWidth}" y2="${innerHeight}"></line>
+                           <line class="axis-line" x1="0" y1="0" x2="0" y2="${innerHeight}"></line>
+                           <text class="axis-title" x="${innerWidth/2}" y="${innerHeight + 35}" text-anchor="middle">Generation</text>
+                           <text class="axis-title" transform="translate(-45, ${innerHeight/2}) rotate(-90)" text-anchor="middle">${yLabel}</text>`;
+            
+            const createTicks = (min, max, count) => { const ticks = []; const range = max-min; if (range <= 0) return [min]; const step = Math.pow(10, Math.floor(Math.log10(range) / Math.log10(10))); const niceStep = [1,2,5,10].map(s => s * step).find(s => range/s < count*1.5 && s > 0) || step; if (niceStep <=0) return [min]; for(let i = Math.floor(min/niceStep)*niceStep; i <= max; i+= niceStep) { ticks.push(i); } return ticks.length ? ticks : [min]; };
+            
+            const xTickValues = state.graphLogScale ? Array.from({length: Math.floor(Math.log10(xMax)) + 1}, (_, i) => 10**i) : createTicks(0, xMax, 5);
+            xTickValues.forEach(gen => { if(gen <= xMax && gen >= 0) g.innerHTML += `<text class="axis-text" x="${xScale(gen)}" y="${innerHeight + 15}" text-anchor="middle">${gen}</text>`});
+            createTicks(yMin, yMax, 5).forEach(fit => g.innerHTML += `<text class="axis-text" x="-5" y="${yScale(fit)}" text-anchor="end" alignment-baseline="middle">${fit.toFixed(1)}</text>`);
+
+            // Data Lines
+            const createPath = (d, accessor) => d.map((p, i) => `${i === 0 ? 'M' : 'L'}${xScale(p.generation)},${yScale(accessor(p))}`).join(' ');
+            g.innerHTML += `<path class="graph-line" style="stroke: #3b82f6;" d="${createPath(data, bestAccessor)}"></path>`;
+            if (state.graphMetric === 'fitness') {
+                g.innerHTML += `<path class="graph-line" style="stroke: #6b7280;" d="${createPath(data, avgAccessor)}"></path>`;
+            }
+
+            // Legend
+            svg.innerHTML += `<g transform="translate(${width-110}, 10)"><rect x="0" y="0" width="10" height="10" fill="#3b82f6"></rect><text class="axis-text" x="15" y="9">${state.graphMetric === 'diversity' ? 'Avg. Diversity' : 'Best'}</text></g>`;
+            if (state.graphMetric === 'fitness') {
+                svg.innerHTML += `<g transform="translate(${width-110}, 25)"><rect x="0" y="0" width="10" height="10" fill="#6b7280"></rect><text class="axis-text" x="15" y="9">Average</text></g>`;
+            }
+        }
+        
+        function makeDraggable(elmnt, header) {
+          let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+          header.onmousedown = dragMouseDown;
+          header.addEventListener('touchstart', dragMouseDown, {passive: false});
+
+
+          function dragMouseDown(e) {
+            e.preventDefault();
+            if (e.type === 'touchstart') {
+                pos3 = e.touches[0].clientX;
+                pos4 = e.touches[0].clientY;
+            } else {
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+            }
+            document.onmouseup = closeDragElement;
+            document.onmousemove = elementDrag;
+            document.addEventListener('touchend', closeDragElement, {passive: false});
+            document.addEventListener('touchmove', elementDrag, {passive: false});
+          }
+
+          function elementDrag(e) {
+            e.preventDefault();
+            let clientX, clientY;
+             if (e.type === 'touchmove') {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+            pos1 = pos3 - clientX;
+            pos2 = pos4 - clientY;
+            pos3 = clientX;
+            pos4 = clientY;
+            elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+            elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+          }
+
+          function closeDragElement() {
+            document.onmouseup = null;
+            document.onmousemove = null;
+            document.removeEventListener('touchend', closeDragElement);
+            document.removeEventListener('touchmove', elementDrag);
+          }
+        }
+
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const now = clock.getElapsedTime();
+            if (populationGrowthState.isAnimating) { const progress = Math.min((now - populationGrowthState.startTime) / populationGrowthState.duration, 1.0); if(populationPoints) populationPoints.geometry.setDrawRange(0, Math.floor(progress * state.populationSize)); if (progress >= 1.0) populationGrowthState.isAnimating = false; }
+            if (state.isRunning && (now - lastGenerationTime) > (1 / state.speed)) { runNextGeneration(); updateVisualization(); ui.generationCounter.textContent = state.generation; updateSummaryBar(); if(!ui.graphContainer.classList.contains('hidden') && !ui.graphContainer.classList.contains('collapsed')) { generateFitnessPlot(); } }
+            controls.update();
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(window.devicePixelRatio); labelRenderer.setSize(window.innerWidth, window.innerHeight); }
+    </script>
+</body>
+</html>
+

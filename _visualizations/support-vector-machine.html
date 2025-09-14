@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Support Vector Machine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU0KOVEMVIARBECHERiPhvsEtH_Sgp2tpmBGHhNmA3QfsTRi52IeP6d" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/Pass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #111827; }
+        .control-panel { background: rgba(17, 24, 39, 0.8); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .btn { 
+            @apply px-3 py-2 text-white font-semibold rounded-lg shadow-md transition-all duration-200 ease-in-out transform hover:scale-105 focus:outline-none focus:ring-2;
+            background-image: linear-gradient(to right top, rgba(255,255,255,0.05), rgba(255,255,255,0));
+        }
+        .icon-btn.active { @apply ring-2 ring-indigo-400 bg-indigo-700; }
+        input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: #4a5568; border-radius: 5px; outline: none; opacity: 0.7; transition: opacity .2s; }
+        input[type="range"]:hover { opacity: 1; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: #a0aec0; cursor: pointer; border-radius: 50%; }
+        .support-vector-label { position: absolute; background: rgba(255, 255, 0, 0.8); color: black; padding: 2px 8px; border-radius: 5px; font-size: 12px; font-weight: bold; pointer-events: none; transform: translate(-50%, -150%); user-select: none; }
+        .perf-btn.active { @apply ring-2 ring-indigo-400 bg-indigo-700; }
+        #plane-info { transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out; }
+        .collapsible-menu { transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out; overflow: hidden; }
+    </style>
+</head>
+<body class="text-gray-200">
+    <div id="container"></div>
+    <h1 class="absolute top-4 left-1/2 -translate-x-1/2 text-2xl md:text-4xl font-bold text-white pointer-events-none" style="text-shadow: 0 0 25px rgba(0,0,0,0.9);">Support Vector Machine</h1>
+    <div id="plane-info" class="hidden absolute top-20 left-1/2 -translate-x-1/2 p-3 rounded-lg text-white control-panel text-base md:text-lg flex flex-col gap-2 text-center">
+        <span id="plane-equation"></span>
+        <span id="margin-metric" class="text-sm md:text-base font-semibold text-yellow-300"></span>
+    </div>
+
+    <!-- UI Container -->
+    <div class="absolute bottom-0 left-0 right-0">
+        <!-- Collapsible Menus -->
+        <div id="settings-menu" class="collapsible-menu max-h-0 p-0 control-panel">
+             <div class="max-w-7xl mx-auto p-3">
+                 <div class="text-center text-sm font-semibold mb-3">Visual Settings</div>
+                 <div class="flex items-center gap-4 text-sm mb-3"><span id="resolution-label" class="w-28">Resolution: 100%</span>
+                     <div class="grid grid-cols-3 gap-2 flex-grow">
+                        <button id="perf-low" class="btn perf-btn text-xs py-1 bg-gray-700/80 hover:bg-gray-600/80">Low</button>
+                        <button id="perf-med" class="btn perf-btn text-xs py-1 bg-gray-700/80 hover:bg-gray-600/80 active">Med</button>
+                        <button id="perf-high" class="btn perf-btn text-xs py-1 bg-gray-700/80 hover:bg-gray-600/80">High</button>
+                    </div>
+                 </div>
+                  <div class="flex items-center gap-4 text-sm"><span>Plane Size: <strong id="plane-size-label">60</strong></span> <input type="range" id="plane-size" min="10" max="120" step="5" value="60" class="w-full"></div>
+             </div>
+        </div>
+
+        <div id="scaling-menu" class="collapsible-menu max-h-0 p-0 control-panel">
+            <div class="max-w-7xl mx-auto p-3">
+                <div class="text-center text-sm font-semibold mb-3">Data Scaling</div>
+                <div class="grid grid-cols-3 gap-2 mb-3">
+                    <button id="scale-linear" class="btn text-xs py-1 bg-gray-600/80 hover:bg-gray-500/80">Linear</button>
+                    <button id="scale-log" class="btn text-xs py-1 bg-gray-600/80 hover:bg-gray-500/80">Logarithmic</button>
+                    <button id="scale-exp" class="btn text-xs py-1 bg-gray-600/80 hover:bg-gray-500/80">Exponential</button>
+                </div>
+                <div class="flex items-center gap-4 text-sm mb-2"><span>X</span> <input type="range" id="x-scale" min="0" max="2" step="0.1" value="1" class="w-full scaler"></div>
+                <div class="flex items-center gap-4 text-sm mb-2"><span>Y</span> <input type="range" id="y-scale" min="0" max="2" step="0.1" value="1" class="w-full scaler"></div>
+                <div class="flex items-center gap-4 text-sm"><span>Z</span> <input type="range" id="z-scale" min="0" max="2" step="0.1" value="1" class="w-full scaler"></div>
+            </div>
+        </div>
+        
+        <!-- Main Control Panel -->
+        <div class="control-panel p-3">
+            <div class="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4">
+                 <div class="flex flex-col gap-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="add-class-a" class="btn bg-red-600/80 hover:bg-red-700/80 focus:ring-red-400 text-sm">Add A</button>
+                        <button id="add-class-b" class="btn bg-blue-600/80 hover:bg-blue-700/80 focus:ring-blue-400 text-sm">Add B</button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button id="load-preset-1" class="btn text-xs px-2 py-1.5 bg-gray-700/80 hover:bg-gray-600/80">Set 1</button>
+                        <button id="load-preset-2" class="btn text-xs px-2 py-1.5 bg-gray-700/80 hover:bg-gray-600/80">Set 2</button>
+                        <button id="load-preset-3" class="btn text-xs px-2 py-1.5 bg-gray-700/80 hover:bg-gray-600/80">Set 3</button>
+                    </div>
+                </div>
+                <div class="flex flex-col justify-center gap-2">
+                     <button id="calculate-btn" class="btn bg-green-600/80 hover:bg-green-700/80 focus:ring-green-400">Calculate SVM</button>
+                     <button id="classify-btn" class="btn bg-purple-600/80 hover:bg-purple-700/80 focus:ring-purple-400" disabled>Classify New Data</button>
+                </div>
+                <div id="metrics-container" class="flex-col gap-1 justify-center hidden md:flex">
+                    <div class="text-center text-sm font-semibold">Model Performance</div>
+                    <div class="text-center">
+                        <span class="text-xs">Training Accuracy</span>
+                        <div id="accuracy-display" class="text-2xl font-bold text-green-300">-</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2 text-center text-xs mt-1">
+                        <div>
+                            <span>Precision</span>
+                            <div id="precision-display" class="font-semibold text-blue-300">-</div>
+                        </div>
+                        <div>
+                            <span>Recall</span>
+                            <div id="recall-display" class="font-semibold text-purple-300">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col justify-center items-center gap-2">
+                    <button id="scaling-btn" class="btn text-sm w-full bg-gray-600/80 hover:bg-gray-700/80 focus:ring-gray-400 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6h9m-9 6h9m-9 6h9M4 6h1v1H4zm0 6h1v1H4zm0 6h1v1H4z"></path></svg>
+                        Data Scaling
+                    </button>
+                    <button id="settings-btn" class="btn text-sm w-full bg-gray-600/80 hover:bg-gray-700/80 focus:ring-gray-400 flex items-center justify-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        Settings
+                    </button>
+                    <button id="reset-btn" class="btn text-sm w-full bg-gray-600/80 hover:bg-gray-700/80 focus:ring-gray-400">Reset</button>
+                    <button id="formulas-btn" class="btn text-sm w-full bg-indigo-600/80 hover:bg-indigo-700/80 focus:ring-indigo-400">Formulas</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="formula-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+        <div class="bg-gray-800 text-gray-200 p-6 rounded-lg max-w-2xl w-full relative max-h-full overflow-y-auto">
+            <button id="close-modal-btn-x" class="absolute top-2 right-3 text-3xl font-bold text-gray-400 hover:text-white">&times;</button>
+            <h2 class="text-2xl font-bold mb-4 text-white">Support Vector Machine Formulas</h2>
+            <div class="space-y-6 text-lg">
+                 <div><h3 class="font-semibold text-indigo-300">1. The Hyperplane</h3><p>The separating plane is defined by the set of points $\mathbf{x}$ that satisfy:</p><div id="formula-hyperplane" class="mt-2 text-center"></div><p class="text-sm mt-1">Where $\mathbf{w}$ is the normal vector and $b$ is a bias term.</p></div>
+                 <div><h3 class="font-semibold text-indigo-300">2. The Margin</h3><p>An SVM maximizes the margin between classes. The width is:</p><div id="formula-margin" class="mt-2 text-center"></div></div>
+                 <div><h3 class="font-semibold text-indigo-300">3. The Optimization Problem</h3><p>This is expressed as a constrained optimization problem: Find $\mathbf{w}$ and $b$ that...</p><p class="font-mono text-center my-2 text-xl text-green-300">Minimize: $\frac{1}{2} ||\mathbf{w}||^2$</p><p>...subject to the constraint that all points are correctly classified:</p><div id="formula-constraint" class="mt-2 text-center"></div><p class="text-sm mt-1">Where $y_i$ is the class label (+1 or -1) for each data point $\mathbf{x}_i$.</p></div>
+            </div>
+            <div class="mt-6 text-center"><button id="close-modal-btn-return" class="btn bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-400 px-6">Return to Explorer</button></div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, controls, composer, raycaster;
+        let pointsGroup, planeGroup, labelGroup;
+        let currentClass = 0, svmPlane = null;
+        const classAPoints = [], classBPoints = [], animatingPoints = [];
+        let supportVectors = [];
+        const POINT_RADIUS = 0.2;
+        let WORLD_SIZE = 120;
+
+        function init() {
+            setupScene();
+            setupPostProcessing();
+            setupDOM();
+            addEventListeners();
+            animate();
+        }
+
+        function setupScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+            camera.position.set(15, 18, 30);
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            raycaster = new THREE.Raycaster();
+            scene.add(new THREE.HemisphereLight(0xffffbb, 0x080820, 1.2));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(10, 20, 5);
+            scene.add(dirLight);
+            scene.add(new THREE.GridHelper(WORLD_SIZE, 50, 0x444444, 0x333333));
+            pointsGroup = new THREE.Group(); scene.add(pointsGroup);
+            planeGroup = new THREE.Group(); scene.add(planeGroup);
+            labelGroup = new THREE.Group(); scene.add(labelGroup);
+        }
+        
+        function setupPostProcessing() {
+            composer = new THREE.EffectComposer(renderer);
+            composer.addPass(new THREE.RenderPass(scene, camera));
+            const bloomPass = new THREE.UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+            bloomPass.threshold = 0.8; bloomPass.strength = 1.0; bloomPass.radius = 0.5;
+            composer.addPass(bloomPass);
+            setPerformanceMode('med');
+        }
+        
+        function setupDOM() { setCurrentClass(0); renderFormulas(); }
+        
+        function addEventListeners() {
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointerdown', onPointerDown);
+            ['a', 'b'].forEach(c => document.getElementById(`add-class-${c}`).addEventListener('click', () => setCurrentClass(currentClass === (c === 'a' ? 1 : -1) ? 0 : (c === 'a' ? 1 : -1))));
+            document.getElementById('calculate-btn').addEventListener('click', calculateAndDrawSVM);
+            document.getElementById('reset-btn').addEventListener('click', resetScene);
+            document.getElementById('classify-btn').addEventListener('click', classifyNewData);
+            document.getElementById('formulas-btn').addEventListener('click', () => document.getElementById('formula-modal').classList.remove('hidden'));
+            document.getElementById('settings-btn').addEventListener('click', () => toggleMenu('settings'));
+            document.getElementById('scaling-btn').addEventListener('click', () => toggleMenu('scaling'));
+            const closeModal = () => document.getElementById('formula-modal').classList.add('hidden');
+            document.getElementById('close-modal-btn-x').addEventListener('click', closeModal);
+            document.getElementById('close-modal-btn-return').addEventListener('click', closeModal);
+            document.querySelectorAll('.scaler').forEach(s => s.addEventListener('input', applyDataScaling));
+            document.getElementById('load-preset-1').addEventListener('click', () => loadPreset(presets.separable));
+            document.getElementById('load-preset-2').addEventListener('click', () => loadPreset(presets.nonlinear));
+            document.getElementById('load-preset-3').addEventListener('click', () => loadPreset(presets.noisy));
+            ['low', 'med', 'high'].forEach(p => document.getElementById(`perf-${p}`).addEventListener('click', () => setPerformanceMode(p)));
+            document.getElementById('plane-size').addEventListener('input', (e) => {
+                document.getElementById('plane-size-label').textContent = e.target.value;
+                if(svmPlane) calculateAndDrawSVM();
+            });
+            document.getElementById('scale-linear').addEventListener('click', () => setScalingPreset(1.0));
+            document.getElementById('scale-log').addEventListener('click', () => setScalingPreset(0.5));
+            document.getElementById('scale-exp').addEventListener('click', () => setScalingPreset(2.0));
+        }
+        
+        function onPointerDown(event) {
+            const mouse = new THREE.Vector2((event.clientX / window.innerWidth) * 2 - 1, -(event.clientY / window.innerHeight) * 2 + 1);
+            raycaster.setFromCamera(mouse, camera);
+
+            const planeIntersects = raycaster.intersectObjects(planeGroup.children);
+            if (planeIntersects.length > 0 && svmPlane) {
+                 document.getElementById('plane-info').classList.remove('hidden');
+                 return;
+            }
+
+            const pointIntersects = raycaster.intersectObjects(pointsGroup.children);
+            if (pointIntersects.length > 0) {
+                if (supportVectors.includes(pointIntersects[0].object)) showSupportVectorLabel(pointIntersects[0].object);
+                return;
+            }
+            
+            document.getElementById('plane-info').classList.add('hidden');
+
+            if (currentClass !== 0 && !event.target.closest('.control-panel')) {
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const p = new THREE.Vector3();
+                if (raycaster.ray.intersectPlane(groundPlane, p)) addPoint(p, currentClass);
+            }
+        }
+
+        function addPoint(position, classId, isNew = false) {
+            const color = classId === 1 ? 0xff4136 : (classId === -1 ? 0x0074d9 : 0xffffff);
+            const material = new THREE.MeshPhysicalMaterial({ color, emissive: 0x0, roughness: 0.2, clearcoat: 1.0, transmission: 0.5, metalness: 0.1 });
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(POINT_RADIUS, 24, 24), material);
+            sphere.position.copy(position);
+            if (!isNew) {
+                sphere.userData = { class: classId, originalPosition: position.clone() };
+                pointsGroup.add(sphere);
+                (classId === 1 ? classAPoints : classBPoints).push(sphere);
+                applyDataScaling();
+            }
+            return sphere;
+        }
+
+        async function calculateAndDrawSVM() {
+            const btn = document.getElementById('calculate-btn');
+            btn.textContent = 'Calculating...'; await new Promise(res => setTimeout(res, 50));
+            clearPlanesAndHighlights();
+            if (classAPoints.length < 1 || classBPoints.length < 1) { btn.textContent = 'Calculate SVM'; return; }
+            let minDistance = Infinity, closestPair = [];
+            classAPoints.forEach(pA => classBPoints.forEach(pB => {
+                const dist = pA.position.distanceTo(pB.position);
+                if (dist < minDistance) { minDistance = dist; closestPair = [pA, pB]; }
+            }));
+            if (closestPair.length < 2) { btn.textContent = 'Calculate SVM'; return; }
+            supportVectors = closestPair;
+            highlightSupportVectors(true);
+            const [p1, p2] = [closestPair[0].position, closestPair[1].position];
+            const midpoint = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
+            const normal = new THREE.Vector3().subVectors(p2, p1).normalize();
+            svmPlane = new THREE.Plane().setFromNormalAndCoplanarPoint(normal, midpoint);
+            const planeSize = parseFloat(document.getElementById('plane-size').value);
+            const planeGeom = new THREE.PlaneGeometry(planeSize, planeSize);
+            const mainPlaneGeom = new THREE.PlaneGeometry(planeSize, planeSize, 10, 10);
+            const planeMat = new THREE.MeshStandardMaterial({ color: 0x2ecc40, side: THREE.DoubleSide, transparent: true, opacity: 0.2, metalness: 0.1, roughness: 0.8 });
+            const mainPlane = new THREE.Mesh(mainPlaneGeom, planeMat);
+            mainPlane.position.copy(midpoint); mainPlane.lookAt(midpoint.clone().add(normal));
+            planeGroup.add(mainPlane);
+            const wireframe = new THREE.LineSegments(new THREE.WireframeGeometry(mainPlane.geometry), { color: 0x2ecc40, opacity: 0.25, transparent: true });
+            mainPlane.add(wireframe);
+            const marginMat = new THREE.MeshStandardMaterial({ color: 0x888888, side: THREE.DoubleSide, transparent: true, opacity: 0.1, metalness: 0.1, roughness: 0.8 });
+            [p1, p2].forEach(pos => {
+                const marginPlane = new THREE.Mesh(planeGeom, marginMat.clone());
+                marginPlane.position.copy(pos); marginPlane.quaternion.copy(mainPlane.quaternion);
+                planeGroup.add(marginPlane);
+                const edges = new THREE.LineSegments(new THREE.EdgesGeometry(planeGeom), new THREE.LineBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.3 }));
+                edges.position.copy(pos); edges.quaternion.copy(mainPlane.quaternion);
+                planeGroup.add(edges);
+            });
+            const lineMat = new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.2, gapSize: 0.1, linewidth: 2 });
+            supportVectors.forEach(sv => {
+                const projectedPoint = new THREE.Vector3();
+                svmPlane.projectPoint(sv.position, projectedPoint);
+                const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([sv.position, projectedPoint]), lineMat);
+                line.computeLineDistances(); planeGroup.add(line);
+            });
+            updatePlaneInfo(normal, midpoint, minDistance);
+            calculateTrainingAccuracy();
+            btn.textContent = 'Calculate SVM'; document.getElementById('classify-btn').disabled = false;
+        }
+
+        function classifyNewData() {
+            if (!svmPlane) return;
+            const spawnArea = WORLD_SIZE * 0.8;
+            for(let i = 0; i < 50; i++) {
+                const x = THREE.MathUtils.randFloatSpread(spawnArea);
+                const z = THREE.MathUtils.randFloatSpread(spawnArea);
+                const y = Math.random() * 10 - 5;
+                const finalPos = new THREE.Vector3(x, y, z);
+                const startPos = new THREE.Vector3(x, y + 20, z);
+                const point = addPoint(startPos, 0, true);
+                pointsGroup.add(point);
+                animatingPoints.push({ point, finalPos, lerp: 0 });
+            }
+        }
+
+        function calculateTrainingAccuracy() {
+            if (!svmPlane) return;
+            let tp = 0, tn = 0, fp = 0, fn = 0;
+            const allPoints = [...classAPoints, ...classBPoints];
+            allPoints.forEach(p => { const dist = svmPlane.distanceToPoint(p.position); const predictedClass = dist < 0 ? 1 : -1; const trueClass = p.userData.class; if(predictedClass === 1 && trueClass === 1) tp++; else if(predictedClass === -1 && trueClass === -1) tn++; else if(predictedClass === 1 && trueClass === -1) fp++; else if(predictedClass === -1 && trueClass === 1) fn++; });
+            
+            const accuracy = (tp + tn) / allPoints.length;
+            const precision = tp / (tp + fp);
+            const recall = tp / (tp + fn);
+
+            document.getElementById('accuracy-display').textContent = `${(accuracy * 100).toFixed(1)}%`;
+            document.getElementById('precision-display').textContent = isNaN(precision) ? 'N/A' : precision.toFixed(2);
+            document.getElementById('recall-display').textContent = isNaN(recall) ? 'N/A' : recall.toFixed(2);
+            document.getElementById('metrics-container').classList.remove('hidden');
+        }
+        
+        function setScalingPreset(value) {
+            document.querySelectorAll('.scaler').forEach(s => s.value = value);
+            applyDataScaling();
+        }
+
+        function applyDataScaling() {
+            const [x, y, z] = ['x', 'y', 'z'].map(id => parseFloat(document.getElementById(`${id}-scale`).value));
+            pointsGroup.children.forEach(sphere => { if(sphere.userData.originalPosition) { const op = sphere.userData.originalPosition; sphere.position.set( Math.sign(op.x) * Math.pow(Math.abs(op.x), x), Math.sign(op.y) * Math.pow(Math.abs(op.y), y), Math.sign(op.z) * Math.pow(Math.abs(op.z), z) ); } });
+            if (svmPlane) calculateAndDrawSVM();
+        }
+        function highlightSupportVectors(enable) { supportVectors.forEach(sv => sv.material.emissive.set(enable ? 0xffff00 : 0x0)); }
+        function showSupportVectorLabel(vector) { clearLabels(); const labelDiv = document.createElement('div'); labelDiv.className = 'support-vector-label'; labelDiv.textContent = 'Support Vector'; document.body.appendChild(labelDiv); const placeholder = new THREE.Object3D(); placeholder.userData = { element: labelDiv, object: vector }; labelGroup.add(placeholder); setTimeout(clearLabels, 2000); }
+        function clearLabels() { labelGroup.children.forEach(l => l.userData.element.remove()); while(labelGroup.children.length > 0) labelGroup.remove(labelGroup.children[0]); }
+        function updateLabels() { labelGroup.children.forEach(l => { const {element, object} = l.userData; const screenPos = object.position.clone().project(camera); element.style.left = `${(screenPos.x + 1) / 2 * window.innerWidth}px`; element.style.top = `${(-screenPos.y + 1) / 2 * window.innerHeight}px`; }); }
+        function updatePlaneInfo(n, m, margin) { const b = -n.dot(m); katex.render(`\\mathbf{w} \\cdot \\mathbf{x} ${b>=0?'+':''} ${b.toFixed(2)} = 0`, document.getElementById('plane-equation')); document.getElementById('margin-metric').textContent = `Margin Width: ${margin.toFixed(3)}`; }
+        function setCurrentClass(classId) { currentClass = classId; ['a', 'b'].forEach(c => document.getElementById(`add-class-${c}`).classList.toggle('ring-4', classId === (c === 'a' ? 1 : -1))); }
+        
+        function setPerformanceMode(mode) {
+            let scale;
+            if (mode === 'low') scale = 0.5;
+            else if (mode === 'high') scale = 2.0;
+            else scale = 1.0;
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            renderer.setSize(width * scale, height * scale, false); 
+            composer.setSize(width * scale, height * scale);
+            
+            document.querySelectorAll('.perf-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(`perf-${mode}`).classList.add('active');
+            document.getElementById('resolution-label').textContent = `Resolution: ${scale*100}%`;
+        }
+
+        function toggleMenu(menuNameToToggle) {
+            const allMenus = ['settings', 'scaling'];
+            allMenus.forEach(menuName => {
+                const menuEl = document.getElementById(`${menuName}-menu`);
+                const btnEl = document.getElementById(`${menuName}-btn`);
+
+                if (menuName === menuNameToToggle) {
+                    const isOpening = menuEl.style.maxHeight === '0px' || !menuEl.style.maxHeight;
+                    if (isOpening) {
+                        menuEl.style.maxHeight = menuEl.scrollHeight + "px";
+                        menuEl.style.padding = '0.75rem';
+                        btnEl.classList.add('active');
+                    } else {
+                        menuEl.style.maxHeight = '0px';
+                        menuEl.style.padding = '0';
+                        btnEl.classList.remove('active');
+                    }
+                } else {
+                    menuEl.style.maxHeight = '0px';
+                    menuEl.style.padding = '0';
+                    btnEl.classList.remove('active');
+                }
+            });
+        }
+        
+        function toggleSettingsMenu() {
+            const menu = document.getElementById('settings-menu');
+            const btn = document.getElementById('settings-btn');
+            btn.classList.toggle('active');
+            if (menu.style.maxHeight && menu.style.maxHeight !== '0px') {
+                menu.style.maxHeight = '0px';
+                menu.style.paddingTop = '0';
+                menu.style.paddingBottom = '0';
+            } else {
+                menu.style.maxHeight = menu.scrollHeight + "px";
+                menu.style.paddingTop = '0.75rem';
+                menu.style.paddingBottom = '0.75rem';
+            }
+        }
+
+        function resetScene() { classAPoints.length = 0; classBPoints.length = 0; while (pointsGroup.children.length > 0) pointsGroup.remove(pointsGroup.children[0]); document.querySelectorAll('.scaler').forEach(s => s.value = 1.0); applyDataScaling(); clearPlanesAndHighlights(); document.getElementById('classify-btn').disabled = true; document.getElementById('metrics-container').classList.add('hidden');}
+        function clearPlanesAndHighlights() { svmPlane = null; highlightSupportVectors(false); supportVectors = []; while (planeGroup.children.length > 0) planeGroup.remove(planeGroup.children[0]); document.getElementById('plane-info').classList.add('hidden'); clearLabels(); }
+        function loadPreset(dataset) { resetScene(); dataset.points.forEach(item => addPoint(new THREE.Vector3(...item.p), item.c)); calculateAndDrawSVM(); }
+        
+        function renderFormulas() {
+            katex.render('\\mathbf{w} \\cdot \\mathbf{x} + b = 0', document.getElementById('formula-hyperplane'), { displayMode: true, throwOnError: false });
+            katex.render('\\frac{2}{\\|\\mathbf{w}\\|}', document.getElementById('formula-margin'), { displayMode: true, throwOnError: false });
+            katex.render('y_i(\\mathbf{w} \\cdot \\mathbf{x}_i + b) \\ge 1', document.getElementById('formula-constraint'), { displayMode: true, throwOnError: false });
+        }
+        
+        function onWindowResize() {
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.domElement.style.width = '100%';
+            renderer.domElement.style.height = '100%';
+            const activePerf = document.querySelector('.perf-btn.active').id.split('-')[1];
+            setPerformanceMode(activePerf);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            for(let i = animatingPoints.length - 1; i >= 0; i--) {
+                const item = animatingPoints[i];
+                item.lerp += 0.05;
+                item.point.position.lerp(item.finalPos, item.lerp);
+                if(item.lerp >= 1) {
+                    const dist = svmPlane.distanceToPoint(item.point.position);
+                    const newClass = dist < 0 ? 1 : -1;
+                    item.point.material.color.set(newClass === 1 ? 0xff4136 : 0x0074d9);
+                    animatingPoints.splice(i, 1);
+                }
+            }
+            controls.update();
+            updateLabels();
+            composer.render();
+        }
+        const presets = { separable: { points: [...Array(60)].map(() => ({p: [-8 - Math.random()*8, Math.random()*8-4, -5 - Math.random()*8], c: 1})).concat([...Array(60)].map(() => ({p: [8 + Math.random()*8, Math.random()*8-4, 5 + Math.random()*8], c: -1}))) }, nonlinear: { points: [...Array(80)].map(() => { const a = Math.random()*Math.PI*2; const r = 6 + Math.random()*4; return { p: [Math.cos(a)*r, Math.random()*10-5, Math.sin(a)*r], c: 1 }; }).concat([...Array(40)].map(() => ({ p: [Math.random()*6-3, Math.random()*10-5, Math.random()*6-3], c: -1 }))) }, noisy: { points: [...Array(60)].map(() => ({ p: [-7 - Math.random() * 8, Math.random() * 10 - 5, Math.random() * 12 - 6], c: 1 })).concat([...Array(60)].map(() => ({ p: [7 + Math.random() * 8, Math.random() * 10 - 5, Math.random() * 12 - 6], c: -1 }))).concat([{ p: [4, 0, 0], c: 1 }, { p: [-4, 0, 0], c: -1 }]) } };
+        init();
+    </script>
+</body>
+</html>
+

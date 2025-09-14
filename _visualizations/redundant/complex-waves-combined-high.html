@@ -1,0 +1,334 @@
+---
+date: 2025-08-27
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Interactive Complex Plane</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000000;
+            color: #e5e7eb;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #title-container {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #title-container h1 {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+        #title-container p {
+            margin: 0.25rem;
+            color: #9ca3af;
+        }
+        #controls-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(17, 24, 39, 0.8);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            z-index: 101;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(5px);
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .control-group label {
+            font-weight: 600;
+            white-space: nowrap;
+            color: #9ca3af;
+        }
+        .control-group input[type="range"] {
+            width: 120px;
+            cursor: pointer;
+        }
+        .control-group .value-display {
+            font-weight: bold;
+            min-width: 90px;
+            text-align: center;
+            background-color: #111827;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            color: #e5e7eb;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="title-container">
+        <h1>Interactive Complex Plane</h1>
+        <!-- UPDATED: Description with color key -->
+        <p>The blue wave is sine, the red wave is cosine, and the green wave is their sum.</p>
+    </div>
+
+    <div id="controls-container">
+        <div class="control-group">
+            <label for="angle-slider">Angle (θ):</label>
+            <input type="range" id="angle-slider" min="-180" max="180" value="45" step="1">
+            <span id="angle-value" class="value-display">45°</span>
+        </div>
+        <div class="control-group">
+            <label for="frequency-slider">Frequency:</label>
+            <input type="range" id="frequency-slider" min="0" max="100" value="0" step="1">
+            <span id="frequency-value" class="value-display">1.0 Hz</span>
+        </div>
+        <div class="control-group">
+            <label for="zoom-slider">Zoom:</label>
+            <input type="range" id="zoom-slider" min="0" max="100" value="0" step="1">
+            <span id="zoom-value" class="value-display">1.0x</span>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // === Scene Setup ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(4, 4, 7);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 0, 0);
+        
+        // === Lighting & Static Objects ===
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const pointLight = new THREE.PointLight(0xffffff, 1);
+        pointLight.position.set(5, 5, 5);
+        scene.add(pointLight);
+
+        const axisLength = 2.5;
+        const xAxis = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)]), new THREE.LineBasicMaterial({ color: 0xff0000 }));
+        const yAxis = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)]), new THREE.LineBasicMaterial({ color: 0x00ff00 }));
+        scene.add(xAxis, yAxis);
+
+        const unitCircle = new THREE.Mesh(new THREE.RingGeometry(1.49, 1.51, 128), new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide }));
+        scene.add(unitCircle);
+
+        // === Dynamic Objects (Markers and Vector) ===
+        const vectorGroup = new THREE.Group();
+        scene.add(vectorGroup);
+        const arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1.5, 0xf59e0b, 0.2, 0.1);
+        vectorGroup.add(arrow);
+        const pointGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+        const vectorPoint = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 2 }));
+        vectorPoint.position.x = 1.5;
+        vectorGroup.add(vectorPoint);
+        
+        const sinMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 2 }));
+        const cosMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2 }));
+        const resultMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 2 }));
+        scene.add(sinMarker, cosMarker, resultMarker);
+
+        // === UI Elements ===
+        const angleSlider = document.getElementById('angle-slider');
+        const angleValueSpan = document.getElementById('angle-value');
+        const frequencySlider = document.getElementById('frequency-slider');
+        const frequencyValueSpan = document.getElementById('frequency-value');
+        const zoomSlider = document.getElementById('zoom-slider');
+        const zoomValueSpan = document.getElementById('zoom-value');
+        
+        // === Shader-based Waves ===
+        const waveZ = 4;
+        const waveWidth = 10;
+        const waveHeight = 5;
+
+        const vertexShader = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `;
+
+        const fragmentShader = `
+            uniform float frequency;
+            uniform float domainWidth;
+            uniform vec3 waveColor;
+            uniform float waveType;
+            varying vec2 vUv;
+
+            void main() {
+                float x = (vUv.x - 0.5) * domainWidth;
+                float y_wave;
+                if (waveType == 0.0) { y_wave = sin(x * frequency); }
+                else if (waveType == 1.0) { y_wave = cos(x * frequency); }
+                else { y_wave = sin(x * frequency) + cos(x * frequency); }
+                
+                float v_wave = (y_wave + 2.5) / 5.0;
+                float thickness = 0.01;
+                float line = smoothstep(thickness, 0.0, abs(vUv.y - v_wave));
+
+                if (line < 0.1) discard;
+                gl_FragColor = vec4(waveColor * line, line);
+            }
+        `;
+
+        const uniforms = {
+            frequency: { value: 1.0 },
+            domainWidth: { value: 2.0 * Math.PI },
+            waveColor: { value: new THREE.Color(0x3b82f6) },
+            waveType: { value: 0.0 }
+        };
+
+        const sinMaterial = new THREE.ShaderMaterial({ vertexShader, fragmentShader, transparent: true, side: THREE.DoubleSide, uniforms: THREE.UniformsUtils.clone(uniforms) });
+        sinMaterial.uniforms.waveColor.value = new THREE.Color(0x3b82f6);
+        sinMaterial.uniforms.waveType.value = 0.0;
+
+        const cosMaterial = new THREE.ShaderMaterial({ vertexShader, fragmentShader, transparent: true, side: THREE.DoubleSide, uniforms: THREE.UniformsUtils.clone(uniforms) });
+        cosMaterial.uniforms.waveColor.value = new THREE.Color(0xef4444);
+        cosMaterial.uniforms.waveType.value = 1.0;
+
+        const resultMaterial = new THREE.ShaderMaterial({ vertexShader, fragmentShader, transparent: true, side: THREE.DoubleSide, uniforms: THREE.UniformsUtils.clone(uniforms) });
+        resultMaterial.uniforms.waveColor.value = new THREE.Color(0x22c55e);
+        resultMaterial.uniforms.waveType.value = 2.0;
+
+        const waveGeometry = new THREE.PlaneGeometry(waveWidth, waveHeight);
+        const sinWave = new THREE.Mesh(waveGeometry, sinMaterial);
+        sinWave.position.z = -waveZ;
+        const cosWave = new THREE.Mesh(waveGeometry, cosMaterial);
+        cosWave.position.z = -waveZ;
+        const resultWave = new THREE.Mesh(waveGeometry, resultMaterial);
+        resultWave.position.z = waveZ;
+        scene.add(sinWave, cosWave, resultWave);
+
+        // === Functions ===
+        const MIN_FREQ = 1;
+        const MAX_FREQ = 1.855e43;
+        const MIN_ZOOM = 1.0;
+        const MAX_ZOOM = 1.855e43;
+        
+        function getLogValue(slider, min, max) {
+            const sliderValue = parseFloat(slider.value);
+            const maxSliderValue = parseFloat(slider.max);
+            return min * Math.pow(max / min, sliderValue / maxSliderValue);
+        }
+
+        function createAxisLabel(text, position, size = 30) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = `Bold ${size}px Inter, sans-serif`;
+            const textMetrics = context.measureText(text);
+            canvas.width = textMetrics.width; canvas.height = size * 1.5;
+            context.font = `Bold ${size}px Inter, sans-serif`; context.fillStyle = '#e5e7eb';
+            context.textAlign = 'center'; context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(canvas.width / 100, canvas.height / 100, 1.0);
+            sprite.position.copy(position);
+            return sprite;
+        }
+
+        const xLabel = createAxisLabel('x', new THREE.Vector3(axisLength + 0.3, 0, 0), 30);
+        scene.add(xLabel);
+        const iLabel = createAxisLabel('i', new THREE.Vector3(0, axisLength + 0.3, 0), 30);
+        scene.add(iLabel);
+
+        function updateUniforms() {
+            const frequency = getLogValue(frequencySlider, MIN_FREQ, MAX_FREQ);
+            const zoom = getLogValue(zoomSlider, MIN_ZOOM, MAX_ZOOM);
+            const domainWidth = (2.0 * Math.PI) / zoom;
+
+            sinMaterial.uniforms.frequency.value = frequency;
+            cosMaterial.uniforms.frequency.value = frequency;
+            resultMaterial.uniforms.frequency.value = frequency;
+            sinMaterial.uniforms.domainWidth.value = domainWidth;
+            cosMaterial.uniforms.domainWidth.value = domainWidth;
+            resultMaterial.uniforms.domainWidth.value = domainWidth;
+            
+            frequencyValueSpan.textContent = `${frequency.toExponential(1)} Hz`;
+            zoomValueSpan.textContent = `${zoom.toExponential(1)}x`;
+            updateVisualization();
+        }
+
+        function updateVisualization() {
+            const angleDegrees = parseInt(angleSlider.value);
+            const angleRadians = angleDegrees * (Math.PI / 180);
+            const frequency = getLogValue(frequencySlider, MIN_FREQ, MAX_FREQ);
+            const zoom = getLogValue(zoomSlider, MIN_ZOOM, MAX_ZOOM);
+            
+            vectorGroup.rotation.z = angleRadians;
+
+            // CORRECTED: This is the definitive, correct formula for the marker's X position.
+            // It maps the vector's angle to the corresponding spatial position on the wave plane.
+            const domainWidth = (2.0 * Math.PI) / zoom;
+            const spatialAngle = angleRadians / frequency;
+            const waveX = (spatialAngle / domainWidth) * waveWidth;
+            
+            const markerAngle = angleRadians;
+
+            sinMarker.position.set(waveX, Math.sin(markerAngle), -waveZ);
+            cosMarker.position.set(waveX, Math.cos(markerAngle), -waveZ);
+            resultMarker.position.set(waveX, Math.sin(markerAngle) + Math.cos(markerAngle), waveZ);
+
+            angleValueSpan.textContent = `${angleDegrees}°`;
+        }
+
+        // === Event Listeners ===
+        angleSlider.addEventListener('input', updateVisualization);
+        frequencySlider.addEventListener('input', updateUniforms);
+        zoomSlider.addEventListener('input', updateUniforms);
+
+        // === Animation Loop & Initial State ===
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        updateUniforms();
+        animate();
+    </script>
+</body>
+</html>

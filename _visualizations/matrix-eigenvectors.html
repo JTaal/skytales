@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Linear Algebra Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- KaTeX for LaTeX Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU0KOVEMVIARBEKsPDc1Cwo9zTRGmhQaeRTLlAD02cNlsaJytLXxtcm" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmFAILfpeV" crossorigin="anonymous"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px;
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu { display: flex; gap: 10px; }
+        .menu-button, .toggle-button, .info-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        .menu-button:hover, .toggle-button:hover, .info-button:hover {
+            transform: translateY(-2px);
+        }
+        .menu-button:hover, .toggle-button:hover { background-color: #4338ca; }
+        .info-button { background-color: #059669; border-color: #047857; }
+        .info-button:hover { background-color: #047857; }
+        .menu-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #4b5563; border-radius: 2px; outline: none;
+            opacity: 0.7; transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; background: #818cf8;
+            cursor: pointer; border-radius: 50%;
+        }
+        .control-group {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; cursor: grab; }
+        canvas.grabbing { cursor: grabbing; }
+        #settings-button, #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%;
+            cursor: pointer; transition: all 0.3s;
+        }
+        #settings-button { top: 80px; right: 20px; z-index: 11; }
+        #fullscreen-button { bottom: 120px; right: 20px; z-index: 11; }
+        #settings-button:hover { background-color: #4338ca; transform: translateY(-2px) rotate(45deg); }
+        #fullscreen-button:hover { background-color: #4338ca; transform: translateY(-2px) scale(1.1); }
+        #settings-panel, #data-panel {
+            top: 80px; width: 300px;
+            max-width: 90vw; 
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            max-height: calc(100vh - 100px); overflow-y: auto; z-index: 12;
+        }
+        #settings-panel { right: 0; border-radius: 12px 0 0 12px; transform: translateX(100%); }
+        #settings-panel.open { transform: translateX(0); }
+        #data-panel { right: 0; border-radius: 12px 0 0 12px; transform: translateX(100%); }
+        #data-panel.open { transform: translateX(0); }
+        #close-settings, #close-data { font-size: 2.5rem; line-height: 1; background: none; border: none; cursor: pointer; }
+        .katex { font-size: 1.1em; }
+
+        /* Mobile adjustments */
+        #mobile-menu-container { display: none; }
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            #menu, #show-data-btn { display: none !important; }
+            #mobile-menu-container { display: block; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold">3D Linear Algebra Explorer</h1>
+        <div class="flex items-center gap-4">
+             <div id="menu"></div>
+             <button id="show-data-btn" class="info-button">Show Side Data</button>
+        </div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-56 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+        </div>
+    </header>
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400"></h2>
+            <div id="toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="info-content" class="pt-4"><p id="info-description"></p></div>
+    </div>
+    <div id="controls-panel" class="ui-panel"></div>
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Toggle Grid</label>
+                <button id="grid-toggle" class="toggle-button active">On</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Toggle Points</label>
+                <button id="points-toggle" class="toggle-button active">On</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Toggle Mesh</label>
+                <button id="mesh-toggle" class="toggle-button">Off</button>
+            </div>
+             <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Toggle Lines</label>
+                <button id="lines-toggle" class="toggle-button">Off</button>
+            </div>
+             <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Graphics Quality: <span id="graphics-quality-value">High</span></label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+            </div>
+        </div>
+    </div>
+    <div id="data-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-bold">Live Data</h3>
+            <button id="close-data" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <!-- Matrix Explorer Data -->
+        <div id="data-matrix-explorer" class="hidden space-y-2">
+            <p class="text-indigo-400">Transformation Matrix:</p>
+            <div id="latex-matrix-display" class="bg-gray-900 p-2 rounded-md flex justify-center items-center"></div>
+        </div>
+        <!-- Eigen Explorer Data -->
+        <div id="data-eigen-explorer" class="hidden space-y-4">
+            <div>
+                 <p class="text-indigo-400">Transformation Matrix:</p>
+                <div id="latex-eigen-matrix-display" class="bg-gray-900 p-2 rounded-md flex justify-center items-center"></div>
+            </div>
+            <div>
+                <p class="text-indigo-400">Eigenvectors & Eigenvalues:</p>
+                <div id="latex-eigen-vectors-display" class="space-y-1 text-sm bg-gray-900 p-2 rounded-md"></div>
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+    import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+    // =================================================================================================
+    // ||                                     SCENE DEFINITIONS                                       ||
+    // =================================================================================================
+    const scenes = {
+        matrix_explorer: {
+            title: 'Interactive Matrix Transformation',
+            description: 'Adjust the values of a 3x3 matrix to see how it transforms space. The red, green, and blue arrows are the basis vectors. Toggle between points, lines, and a solid mesh in the settings menu.',
+            init: initMatrixExplorer,
+        },
+        eigen_explorer: {
+            title: 'Eigenvector Visualizer',
+            description: 'Select a transformation to see its effect on a sphere of vectors. The highlighted lines are eigenvectors—they only scale, not change direction. The scaling factor is the eigenvalue.',
+            init: initEigenExplorer,
+        },
+    };
+
+    /**
+     * Scene 1: Interactive Matrix Transformation
+     */
+    function initMatrixExplorer() {
+        const disposables = [];
+        const CUBE_SIZE = 1.5;
+        
+        const geometry = new THREE.BoxGeometry(CUBE_SIZE, CUBE_SIZE, CUBE_SIZE, 5, 5, 5);
+        const transformableGroup = new THREE.Group();
+
+        const pointsMaterial = new THREE.PointsMaterial({ color: 0x818cf8, size: 0.08 });
+        const points = new THREE.Points(geometry, pointsMaterial);
+        currentPointsObject = points;
+
+        const meshMaterial = new THREE.MeshStandardMaterial({ color: 0x818cf8, transparent: true, opacity: 0.8, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geometry, meshMaterial);
+        mesh.visible = false;
+        currentMeshObject = mesh;
+
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+        const lines = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), lineMaterial);
+        lines.visible = false;
+        currentLinesObject = lines;
+        
+        transformableGroup.add(points, mesh, lines);
+        activeSceneObjects.add(transformableGroup);
+        disposables.push(geometry, pointsMaterial, meshMaterial, lineMaterial);
+
+        const iHat = new THREE.ArrowHelper(new THREE.Vector3(1,0,0), new THREE.Vector3(0,0,0), CUBE_SIZE, 0xff0000, 0.2, 0.1);
+        const jHat = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), CUBE_SIZE, 0x00ff00, 0.2, 0.1);
+        const kHat = new THREE.ArrowHelper(new THREE.Vector3(0,0,1), new THREE.Vector3(0,0,0), CUBE_SIZE, 0x0000ff, 0.2, 0.1);
+        activeSceneObjects.add(iHat, jHat, kHat);
+
+        const controlsPanel = document.getElementById('controls-panel');
+        controlsPanel.innerHTML = `
+            <div class="grid grid-cols-3 gap-x-6 gap-y-2 text-center text-sm">
+                ${[...Array(9)].map((_, i) => `
+                    <div class="flex flex-col">
+                        <label>m${Math.floor(i/3)+1}${i%3+1}</label>
+                        <input type="range" class="matrix-slider" min="-2" max="2" step="0.1" value="${i%4 === 0 ? 1 : 0}" data-index="${i}">
+                    </div>
+                `).join('')}
+            </div>
+            <button id="reset-matrix-btn" class="menu-button">Reset</button>
+            <button id="toggle-3d-matrix-btn" class="toggle-button" title="Show Matrix in 3D">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H3v16h18V4zM3 10h18M9 4v16"/></svg>
+            </button>
+        `;
+        
+        const sliders = controlsPanel.querySelectorAll('.matrix-slider');
+        const transformationMatrix = new THREE.Matrix4();
+
+        function updateTransformation() {
+            const values = Array.from(sliders).map(s => parseFloat(s.value));
+            transformationMatrix.set( ...values.slice(0,3), 0, ...values.slice(3,6), 0, ...values.slice(6,9), 0, 0,0,0,1 );
+            
+            update3DMatrixDisplay(values);
+            
+            transformableGroup.matrix.copy(transformationMatrix);
+            transformableGroup.matrixAutoUpdate = false;
+            
+            transformGrid(transformationMatrix);
+
+            const iDir = new THREE.Vector3(1,0,0).applyMatrix4(transformationMatrix).normalize();
+            const jDir = new THREE.Vector3(0,1,0).applyMatrix4(transformationMatrix).normalize();
+            const kDir = new THREE.Vector3(0,0,1).applyMatrix4(transformationMatrix).normalize();
+            const iLen = new THREE.Vector3(values[0], values[3], values[6]).length();
+            const jLen = new THREE.Vector3(values[1], values[4], values[7]).length();
+            const kLen = new THREE.Vector3(values[2], values[5], values[8]).length();
+
+            iHat.setDirection(iDir); iHat.setLength(iLen * CUBE_SIZE, 0.2, 0.1);
+            jHat.setDirection(jDir); jHat.setLength(jLen * CUBE_SIZE, 0.2, 0.1);
+            kHat.setDirection(kDir); kHat.setLength(kLen * CUBE_SIZE, 0.2, 0.1);
+        }
+
+        sliders.forEach(slider => slider.addEventListener('input', updateTransformation));
+        document.getElementById('reset-matrix-btn').addEventListener('click', () => {
+            sliders.forEach((s, i) => s.value = (i%4 === 0 ? 1 : 0));
+            updateTransformation();
+        });
+        document.getElementById('toggle-3d-matrix-btn').addEventListener('click', (e) => {
+            matrixDisplay3D.visible = !matrixDisplay3D.visible;
+            e.currentTarget.classList.toggle('active', matrixDisplay3D.visible);
+        });
+
+        updateTransformation();
+
+        function cleanup() {
+            disposables.forEach(d => { if (d.dispose) d.dispose() });
+            currentPointsObject = null;
+            currentMeshObject = null;
+            currentLinesObject = null;
+            resetGrid();
+        }
+
+        return { update: () => {}, cleanup };
+    }
+
+    /**
+     * Scene 2: Eigenvector/Eigenvalue Visualizer
+     */
+    function initEigenExplorer() {
+        const disposables = [];
+        
+        const presets = {
+            'Scale': { matrix: [2,0,0, 0,0.5,0, 0,0,1.5], eigenvectors: [[1,0,0], [0,1,0], [0,0,1]], eigenvalues: [2, 0.5, 1.5] },
+            'Shear': { matrix: [1,1,0, 0,1,0, 0,0,1], eigenvectors: [[1,0,0], [0,0,1]], eigenvalues: [1, 1] },
+            'Rotation & Scale': { matrix: [1.5,-0.5,0, 0.5,1.0,0, 0,0,0.8], eigenvectors: [[-0.894, 0.447, 0], [0,0,1]], eigenvalues: [1.25, 0.8] }
+        };
+
+        let activeEigenvectors = [];
+        let transformProgress = 0;
+        const identityMatrix = new THREE.Matrix4();
+        const targetMatrix = new THREE.Matrix4();
+        const currentMatrix = new THREE.Matrix4();
+        
+        const geometry = new THREE.SphereGeometry(1.5, 32, 32);
+        const transformableGroup = new THREE.Group();
+
+        const pointsMaterial = new THREE.PointsMaterial({ color: 0x818cf8, size: 0.05, transparent: true, opacity: 0.5 });
+        const points = new THREE.Points(geometry, pointsMaterial);
+        currentPointsObject = points;
+
+        const meshMaterial = new THREE.MeshStandardMaterial({ color: 0x818cf8, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
+        const mesh = new THREE.Mesh(geometry, meshMaterial);
+        mesh.visible = false;
+        currentMeshObject = mesh;
+        
+        const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+        const lines = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), lineMaterial);
+        lines.visible = false;
+        currentLinesObject = lines;
+
+        transformableGroup.add(points, mesh, lines);
+        activeSceneObjects.add(transformableGroup);
+        disposables.push(geometry, pointsMaterial, meshMaterial, lineMaterial);
+
+        const controlsPanel = document.getElementById('controls-panel');
+        controlsPanel.innerHTML = `
+            <div class="flex flex-col sm:flex-row gap-4 items-center">
+                <div class="control-group">
+                    <label class="text-sm font-medium">Select Transformation</label>
+                    <div id="preset-buttons" class="flex gap-2">
+                        ${Object.keys(presets).map(name => `<button class="menu-button preset-btn" data-name="${name}">${name}</button>`).join('')}
+                    </div>
+                </div>
+                <div class="control-group w-48">
+                    <label class="text-sm font-medium">Transform Progress: <span id="progress-value">0%</span></label>
+                    <input id="transform-slider" type="range" min="0" max="1" step="0.01" value="0">
+                </div>
+                <button id="toggle-3d-matrix-btn" class="toggle-button" title="Show Matrix in 3D">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H3v16h18V4zM3 10h18M9 4v16"/></svg>
+                </button>
+            </div>
+        `;
+        
+        function setPreset(name) {
+            const preset = presets[name];
+            targetMatrix.set(...preset.matrix.slice(0,3), 0, ...preset.matrix.slice(3,6), 0, ...preset.matrix.slice(6,9), 0, 0,0,0,1);
+            
+            update3DMatrixDisplay(preset.matrix);
+            
+            activeEigenvectors.forEach(ev => activeSceneObjects.remove(ev.arrow));
+            activeEigenvectors = [];
+            
+            preset.eigenvectors.forEach((vec, i) => {
+                const dir = new THREE.Vector3(...vec).normalize();
+                const arrow = new THREE.ArrowHelper(dir, new THREE.Vector3(), 2, 0xff5555, 0.2, 0.1);
+                activeSceneObjects.add(arrow);
+                activeEigenvectors.push({ arrow, originalDir: dir.clone(), eigenvalue: preset.eigenvalues[i] });
+            });
+
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector(`.preset-btn[data-name="${name}"]`)?.classList.add('active');
+            updateScene();
+        }
+
+        function updateScene() {
+            const idElements = identityMatrix.elements;
+            const targetElements = targetMatrix.elements;
+            const currentElements = currentMatrix.elements;
+            for (let i = 0; i < 16; i++) {
+                currentElements[i] = idElements[i] + (targetElements[i] - idElements[i]) * transformProgress;
+            }
+            
+            transformableGroup.matrix.copy(currentMatrix);
+            transformableGroup.matrixAutoUpdate = false;
+            
+            transformGrid(currentMatrix);
+            
+            activeEigenvectors.forEach(ev => {
+                const newLength = 2 * (1 + (ev.eigenvalue - 1) * transformProgress);
+                ev.arrow.setLength(newLength, 0.2, 0.1);
+            });
+        }
+        
+        document.querySelectorAll('.preset-btn').forEach(btn => btn.addEventListener('click', () => setPreset(btn.dataset.name)));
+        document.getElementById('transform-slider').addEventListener('input', (e) => {
+            transformProgress = parseFloat(e.target.value);
+            document.getElementById('progress-value').textContent = `${Math.round(transformProgress * 100)}%`;
+            updateScene();
+        });
+        document.getElementById('toggle-3d-matrix-btn').addEventListener('click', (e) => {
+            matrixDisplay3D.visible = !matrixDisplay3D.visible;
+            e.currentTarget.classList.toggle('active', matrixDisplay3D.visible);
+        });
+
+        setPreset('Scale');
+
+        function cleanup() {
+            disposables.forEach(d => { if (d.dispose) d.dispose() });
+            currentPointsObject = null;
+            currentMeshObject = null;
+            currentLinesObject = null;
+            resetGrid();
+        }
+
+        return { update: () => {}, cleanup };
+    }
+
+
+    // =================================================================================================
+    // ||                                      TEMPLATE ENGINE                                        ||
+    // =================================================================================================
+    let scene, camera, renderer, controls, clock, font;
+    let activeSceneObjects = new THREE.Group();
+    let currentPointsObject = null, currentMeshObject = null, currentLinesObject = null;
+    let currentUpdate = () => {}, currentCleanup = () => {}, currentSceneKey = null;
+
+    let grid, staticGrid, originalGridPositions;
+    let matrixDisplay3D = new THREE.Group();
+    let matrixNumberMeshes = [];
+
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x030712);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(3, 4, 5);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 0, 0);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(5, 10, 7.5);
+        scene.add(dirLight);
+
+        grid = new THREE.GridHelper(10, 10, 0x888888, 0x888888);
+        originalGridPositions = grid.geometry.attributes.position.clone();
+        scene.add(grid);
+        staticGrid = new THREE.GridHelper(10, 10, 0x444444, 0x444444);
+        staticGrid.position.y = -0.01;
+        scene.add(staticGrid);
+
+        scene.add(activeSceneObjects);
+        camera.add(matrixDisplay3D);
+        scene.add(camera);
+        
+        const fontLoader = new FontLoader();
+        fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', (loadedFont) => {
+            font = loadedFont;
+            create3DMatrixDisplay();
+            setupUI();
+            const firstSceneKey = Object.keys(scenes)[0];
+            if (firstSceneKey) switchScene(firstSceneKey);
+        });
+
+        window.addEventListener('resize', onWindowResize);
+        renderer.setAnimationLoop(animate);
+    }
+
+    function switchScene(key) {
+        if (key === currentSceneKey) return;
+        if (currentCleanup) currentCleanup();
+        while(activeSceneObjects.children.length > 0) { 
+            activeSceneObjects.remove(activeSceneObjects.children[0]); 
+        }
+        document.getElementById('controls-panel').innerHTML = '';
+        const sceneData = scenes[key];
+        document.getElementById('info-title').textContent = sceneData.title;
+        document.getElementById('info-description').textContent = sceneData.description;
+        document.querySelectorAll('#menu .menu-button').forEach(b => b.classList.remove('active'));
+        document.querySelector(`#menu .menu-button[data-key="${key}"]`)?.classList.add('active');
+        document.getElementById('data-matrix-explorer').classList.toggle('hidden', key !== 'matrix_explorer');
+        document.getElementById('data-eigen-explorer').classList.toggle('hidden', key !== 'eigen_explorer');
+        currentSceneKey = key;
+        const result = sceneData.init();
+        currentUpdate = result.update || (() => {});
+        currentCleanup = result.cleanup || (() => {});
+    }
+
+    function animate() { 
+        controls.update();
+        currentUpdate(clock.getDelta());
+        renderer.render(scene, camera); 
+    }
+    
+    function transformGrid(matrix) {
+        const positions = grid.geometry.attributes.position;
+        for(let i = 0; i < positions.count; i++) {
+            const vec = new THREE.Vector3().fromBufferAttribute(originalGridPositions, i);
+            vec.applyMatrix4(matrix);
+            positions.setXYZ(i, vec.x, vec.y, vec.z);
+        }
+        positions.needsUpdate = true;
+    }
+
+    function resetGrid() {
+        grid.geometry.attributes.position.copy(originalGridPositions);
+        grid.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function create3DMatrixDisplay() {
+        const material = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+        const textParams = { font, size: 0.1, height: 0.001 };
+        const bracketGeo = new TextGeometry('[', { ...textParams, size: 0.35 });
+        bracketGeo.center();
+        const bracketLeft = new THREE.Mesh(bracketGeo, material);
+        const bracketRight = new THREE.Mesh(bracketGeo.clone().rotateY(Math.PI), material);
+        
+        bracketLeft.position.x = -0.55;
+        bracketRight.position.x = 0.55;
+        
+        matrixDisplay3D.add(bracketLeft, bracketRight);
+
+        for (let i = 0; i < 9; i++) {
+            const mesh = new THREE.Mesh(new TextGeometry('0.00', textParams), material);
+            mesh.geometry.center();
+            mesh.position.set( (i % 3 - 1) * 0.4, (1 - Math.floor(i / 3)) * 0.25, 0 );
+            matrixNumberMeshes.push(mesh);
+            matrixDisplay3D.add(mesh);
+        }
+        matrixDisplay3D.position.set(-1.8, 1, -3); 
+        matrixDisplay3D.visible = false;
+    }
+
+    function update3DMatrixDisplay(values) {
+        if (!font) return;
+        const dataPanelMatrix = document.getElementById(`latex-${currentSceneKey === 'matrix_explorer' ? 'matrix' : 'eigen-matrix'}-display`);
+        
+        values.forEach((val, i) => {
+            const mesh = matrixNumberMeshes[i];
+            const newText = val.toFixed(2);
+            if (mesh.userData.currentText !== newText) {
+                mesh.geometry.dispose();
+                mesh.geometry = new TextGeometry(newText, { font, size: 0.1, height: 0.001 });
+                mesh.geometry.center();
+                mesh.userData.currentText = newText;
+            }
+        });
+
+        if (window.katex) {
+            const f = (n) => n.toFixed(2);
+            const latexString = `\\begin{bmatrix} ${f(values[0])} & ${f(values[1])} & ${f(values[2])} \\\\ ${f(values[3])} & ${f(values[4])} & ${f(values[5])} \\\\ ${f(values[6])} & ${f(values[7])} & ${f(values[8])} \\end{bmatrix}`;
+            if(dataPanelMatrix) katex.render(latexString, dataPanelMatrix, { throwOnError: false, displayMode: true });
+        }
+    }
+
+    function setupUI() {
+        const menuDiv = document.getElementById('menu');
+        const mobileMenu = document.getElementById('mobile-menu-dropdown');
+
+        Object.keys(scenes).forEach(key => {
+            const sceneInfo = scenes[key];
+            const shortTitle = sceneInfo.title.split(':')[0];
+            const button = document.createElement('button');
+            button.className = 'menu-button';
+            button.textContent = shortTitle;
+            button.dataset.key = key;
+            button.onclick = () => switchScene(key);
+            menuDiv.appendChild(button);
+            const mobileLink = document.createElement('a');
+            mobileLink.href = '#';
+            mobileLink.className = 'block px-4 py-2 text-sm text-gray-200 hover:bg-gray-700';
+            mobileLink.textContent = sceneInfo.title;
+            mobileLink.onclick = (e) => {
+                e.preventDefault();
+                switchScene(key);
+                document.getElementById('mobile-menu-label').textContent = shortTitle;
+                mobileMenu.classList.add('hidden');
+            };
+            mobileMenu.appendChild(mobileLink);
+        });
+        
+        document.getElementById('mobile-menu-label').textContent = scenes[Object.keys(scenes)[0]].title.split(':')[0];
+        document.getElementById('mobile-menu-button').addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
+        document.addEventListener('click', (e) => {
+            if (!document.getElementById('mobile-menu-container').contains(e.target)) {
+                 mobileMenu.classList.add('hidden');
+            }
+        });
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (!e.target.closest('button, a, input')) e.currentTarget.classList.toggle('expanded');
+        });
+
+        const settingsPanel = document.getElementById('settings-panel');
+        document.getElementById('settings-button').addEventListener('click', () => {
+            settingsPanel.classList.remove('hidden');
+            requestAnimationFrame(() => settingsPanel.classList.add('open'));
+        });
+        document.getElementById('close-settings').addEventListener('click', () => settingsPanel.classList.remove('open'));
+        settingsPanel.addEventListener('transitionend', () => {
+            if (!settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+        
+        const dataPanel = document.getElementById('data-panel');
+        document.getElementById('show-data-btn').addEventListener('click', (e) => {
+             dataPanel.classList.remove('hidden');
+             requestAnimationFrame(() => dataPanel.classList.add('open'));
+        });
+        document.getElementById('close-data').addEventListener('click', () => dataPanel.classList.remove('open'));
+        dataPanel.addEventListener('transitionend', () => {
+            if (!dataPanel.classList.contains('open')) dataPanel.classList.add('hidden');
+        });
+
+        document.getElementById('grid-toggle').addEventListener('click', (e) => {
+            grid.visible = !grid.visible;
+            staticGrid.visible = grid.visible;
+            e.target.textContent = grid.visible ? 'On' : 'Off';
+            e.target.classList.toggle('active', grid.visible);
+        });
+         document.getElementById('points-toggle').addEventListener('click', (e) => {
+            if (currentPointsObject) {
+                currentPointsObject.visible = !currentPointsObject.visible;
+                e.target.textContent = currentPointsObject.visible ? 'On' : 'Off';
+                e.target.classList.toggle('active', currentPointsObject.visible);
+            }
+        });
+        document.getElementById('mesh-toggle').addEventListener('click', (e) => {
+            if (currentMeshObject) {
+                currentMeshObject.visible = !currentMeshObject.visible;
+                e.target.textContent = currentMeshObject.visible ? 'On' : 'Off';
+                e.target.classList.toggle('active', currentMeshObject.visible);
+            }
+        });
+        document.getElementById('lines-toggle').addEventListener('click', (e) => {
+            if (currentLinesObject) {
+                currentLinesObject.visible = !currentLinesObject.visible;
+                e.target.textContent = currentLinesObject.visible ? 'On' : 'Off';
+                e.target.classList.toggle('active', currentLinesObject.visible);
+            }
+        });
+
+        document.getElementById('graphics-slider').addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value);
+            renderer.setPixelRatio(window.devicePixelRatio * quality);
+            document.getElementById('graphics-quality-value').textContent = quality < 0.8 ? "Low" : quality < 1.5 ? "Medium" : "High";
+        });
+
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        document.addEventListener('fullscreenchange', () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+        });
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+    
+    init();
+</script>
+</body>
+</html>
+

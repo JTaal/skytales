@@ -1,0 +1,1552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Procedural Universe & Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712; /* bg-gray-950 */
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px; /* Collapsed */
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        .formula-placeholder {
+            font-family: 'Georgia', serif;
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-size: 1.2rem;
+            margin-top: 1rem;
+            color: #d1d5db;
+            border: 1px solid #374151;
+        }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu {
+            display: flex;
+            gap: 10px;
+        }
+        .menu-button, .preset-button, .toggle-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .menu-button:hover, .preset-button:hover, .toggle-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .preset-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #818cf8;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="text"], input[type="number"] {
+            -moz-appearance: textfield;
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: white;
+            text-align: center;
+            padding: 0.25rem 0.5rem;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .chart-container {
+            background-color: #111827;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+
+        #settings-button, #fullscreen-button {
+            position: absolute;
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #settings-button {
+            top: 80px;
+            right: 20px;
+            z-index: 11;
+        }
+        #fullscreen-button {
+            bottom: 120px;
+            right: 20px;
+            z-index: 11;
+        }
+        #settings-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px) rotate(45deg);
+        }
+        #fullscreen-button:hover {
+             background-color: #4338ca;
+            transform: translateY(-2px) scale(1.1);
+        }
+        #settings-panel {
+            top: 80px;
+            right: 0;
+            width: 300px;
+            max-width: 90vw;
+            border-radius: 12px 0 0 12px;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            padding-right: 2rem; 
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            z-index: 12;
+        }
+        #settings-panel::-webkit-scrollbar {
+            width: 12px;
+        }
+        #settings-panel::-webkit-scrollbar-track {
+            background: rgba(17, 24, 39, 0.1);
+        }
+        #settings-panel::-webkit-scrollbar-thumb {
+            background-color: #4f46e5;
+            border-radius: 10px;
+            border: 3px solid rgba(17, 24, 39, 0.85); 
+            background-clip: padding-box;
+        }
+        #settings-panel::-webkit-scrollbar-thumb:hover {
+            background-color: #6366f1;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+        }
+        #close-settings {
+            font-size: 2.5rem;
+            line-height: 1;
+            padding: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 40px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        body.fullscreen-active header,
+        body.fullscreen-active #info-panel {
+            display: none !important;
+        }
+        body.fullscreen-active #controls-panel,
+        body.fullscreen-active #settings-button,
+        body.fullscreen-active #fullscreen-button {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        body.fullscreen-active #controls-panel.show-on-hover,
+        body.fullscreen-active #settings-button.show-on-hover,
+        body.fullscreen-active #fullscreen-button.show-on-hover {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+        .mobile-menu-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 16px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .mobile-menu-item:hover {
+            background-color: #4338ca;
+        }
+        .mobile-menu-item.active {
+            background-color: #4f46e5;
+            font-weight: bold;
+        }
+        #mobile-menu-container { display: none; }
+
+        /* Styles for Complex Visualizer */
+        #complex-view-container {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            background-color: #000;
+        }
+        .view-container {
+            flex-grow: 1;
+            position: relative;
+            display: none;
+        }
+        .view-container.active {
+            display: block;
+        }
+        .view-container canvas {
+            width: 100%;
+            height: 100%;
+        }
+        .overlay-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .title-container {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+        }
+        .title-container h1 {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: 600;
+            color: #e5e7eb;
+        }
+        .title-container p {
+            margin: 0.25rem;
+            color: #9ca3af;
+        }
+        .controls-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(17, 24, 39, 0.8);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1rem;
+            z-index: 101;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(5px);
+            pointer-events: auto;
+        }
+        .controls-container .control-group {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 0.75rem;
+            color: #e5e7eb;
+        }
+        .controls-container .control-group label {
+            font-weight: 600;
+            white-space: nowrap;
+            color: #9ca3af;
+        }
+        .controls-container .control-group input[type="range"] {
+            width: 120px;
+            cursor: pointer;
+        }
+        .controls-container .control-group .value-display {
+            font-weight: bold;
+            min-width: 90px;
+            text-align: center;
+            background-color: #111827;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+        }
+        .cv-footer {
+            flex-shrink: 0;
+            background-color: #111827;
+            border-top: 1px solid #374151;
+            z-index: 200;
+            pointer-events: auto;
+        }
+        .tab-button.active {
+            background-color: #4f46e5;
+            color: #ffffff;
+            font-weight: 600;
+        }
+
+        /* Loading Overlay Styles */
+        #loading-overlay {
+            transition: opacity 0.3s ease-in-out;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loader {
+            border: 8px solid #374151; /* Muted border */
+            border-top-color: #4f46e5; /* Accent color for spinner part */
+            animation: spin 1.5s linear infinite;
+        }
+
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            header h1 { font-size: 1.125rem; }
+            #menu { display: none !important; }
+            #mobile-menu-container { display: block; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; width: auto; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #settings-panel { top: 70px; width: 280px; max-height: calc(100vh - 80px);}
+            #controls-panel { padding: 0.75rem; gap: 0.75rem; justify-content: space-around; flex-direction: column; }
+            #preset-controls, #generation-controls { flex-direction: row; flex-wrap: wrap; justify-content: center; gap: 0.5rem; }
+            .control-group { gap: 0.25rem; }
+            #controls-panel .text-3xl { font-size: 1.5rem; }
+            #controls-panel label, #controls-panel .text-sm, #controls-panel .text-xs { font-size: 0.75rem; }
+            input[type="range"]::-webkit-slider-thumb { width: 24px; height: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-gray-950 bg-opacity-80 flex flex-col items-center justify-center z-50 transition-opacity duration-300 ease-in-out">
+        <div class="loader rounded-full h-32 w-32 mb-4"></div>
+        <p id="loading-text" class="text-xl text-gray-300 font-medium">Generating Universe...</p>
+    </div>
+
+    <header>
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider opacity-90">Procedural Universe</h1>
+        <div id="menu"></div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+        </div>
+    </header>
+
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400">Welcome!</h2>
+            <div id="toggle-icon" class="text-indigo-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+        </div>
+        <div id="info-content" class="pt-4 space-y-3">
+             <p id="info-description" class="text-gray-300"></p>
+             <div id="info-placeholder" class="formula-placeholder">Current Seed: <span id="seed-display">none</span></div>
+             <div id="charts-placeholder" class="space-y-4">
+                  <h3 class="font-bold text-lg text-indigo-400 mt-4">Planet Elevation Distribution</h3>
+                  <p class="text-sm text-gray-300">This chart shows the distribution of elevations across the generated planet's surface.</p>
+                  <div class="chart-container">
+                       <canvas id="placeholder-chart"></canvas>
+                  </div>
+             </div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+    
+    <!-- Container for the new Complex Visualizer -->
+    <div id="complex-view-container" class="hidden"></div>
+
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+   
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+   
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6 sticky top-0 bg-inherit z-10 py-2">
+            <h3 class="text-xl font-bold text-gray-200">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white transition-colors">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">VR Mode</label>
+                <button id="vr-button" title="Enter VR Mode" class="toggle-button w-full flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12.3C2 7.8 5.8 4 10.3 4s8.3 3.8 8.3 8.3-3.5 8.3-8.3 8.3S2 16.8 2 12.3z"/><path d="M12.3 4a8.3 8.3 0 0 1 8.3 8.3 8.3 8.3 0 0 1-8.3 8.3"/></svg>
+                    <span>Enter VR</span>
+                </button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium self-start w-full">Follow Planet</label>
+                <button id="follow-toggle" class="toggle-button">Off</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="planet-resolution-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Planet Resolution:</span>
+                    <span id="planet-resolution-value">64</span>
+                </label>
+                <input id="planet-resolution-slider" type="range" min="8" max="256" step="8" value="64" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="energy-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Rotation Speed:</span>
+                    <span id="energy-value">0.1x</span>
+                </label>
+                <input id="energy-slider" type="range" min="0" max="2" step="0.05" value="0.1" class="w-full">
+            </div>
+             <hr class="border-gray-600">
+             <h4 class="text-lg font-bold text-gray-300 text-left w-full">Background Settings</h4>
+             <div class="control-group text-left w-full">
+                <label for="grid-color-input" class="text-sm font-medium self-start w-full">Grid Color</label>
+                <input id="grid-color-input" type="color" value="#4b5563">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="grid-lines-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Grid Line Count:</span>
+                    <span id="grid-lines-value">15</span>
+                </label>
+                <input id="grid-lines-slider" type="range" min="5" max="50" step="1" value="15" class="w-full">
+            </div>
+            <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label for="graphics-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Graphics Quality:</span>
+                    <span id="graphics-quality-value">High</span>
+                </label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+                 <div class="text-xs text-gray-500 w-full flex justify-between mt-1">
+                      <span>Low</span>
+                      <span>Native</span>
+                      <span>High</span>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+    import { XRHandModelFactory } from 'three/addons/webxr/XRHandModelFactory.js';
+
+    // --- Core Three.js Components ---
+    let scene, camera, renderer, controls, clock;
+   
+    // --- VR Components ---
+    let playerDolly; 
+    let controller1, controller2, controllerGrip1, controllerGrip2;
+    let hand1, hand2;
+   
+    // --- App State & Scene Management ---
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {};
+    let currentCleanup = () => {};
+    let currentSceneKey = null;
+
+    // --- VR Input State ---
+    const vrInputs = {
+        left: { grip: { pressed: false }, trigger: { pressed: false }, thumbstick: { x: 0, y: 0 } },
+        right: { grip: { pressed: false }, trigger: { pressed: false }, thumbstick: { x: 0, y: 0 } },
+        isZooming: false,
+        initialZoomDistance: 0,
+        initialDollyScale: new THREE.Vector3()
+    };
+
+    // --- Global Settings ---
+    let animationSpeed = 0.1;
+    let followMode = false;
+    let isPaused = false;
+    let planetSeed = 'hello world';
+    let planetResolution = 64;
+    let followObject = null;
+    let elevationChart;
+
+    const scenes = {
+        procedural_planet: {
+            title: 'Procedural Planet',
+            description: 'A unique planet with atmosphere and clouds, generated using procedural noise. The terrain, mountains, and oceans are all created based on a "seed" and a preset. Change them and click Generate to explore a new world.',
+            init: initProceduralPlanet,
+        },
+        starfield: {
+            title: 'Starfield',
+            description: 'A simple, dynamic starfield to demonstrate a second scene.',
+            init: initStarfield,
+        },
+        complex_visualizer: {
+            title: 'Complex Visualizer',
+            description: 'Explore waves in the complex domain using two different rendering techniques: a high-performance shader view and a classic 3D geometry view.',
+            init: initComplexVisualizer,
+        }
+    };
+
+    // --- Loading Screen Logic ---
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingText = document.getElementById('loading-text');
+    function showLoader(message = 'Loading...') {
+        loadingText.textContent = message;
+        loadingOverlay.classList.remove('hidden');
+    }
+    function hideLoader() {
+        loadingOverlay.classList.add('hidden');
+    }
+
+    // --- Main Initialization ---
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 0, 10);
+       
+        playerDolly = new THREE.Group();
+        playerDolly.add(camera);
+        scene.add(playerDolly);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 5, 5);
+        scene.add(dirLight);
+
+        scene.add(activeSceneObjects);
+
+        createMenu();
+        setupMobileMenu();
+        setupInfoPanel();
+        setupSettingsPanel();
+        setupFullscreen();
+        setupVR();
+       
+        switchScene('procedural_planet');
+
+        window.addEventListener('resize', onWindowResize, false);
+        renderer.setAnimationLoop(animate);
+    }
+
+    // --- Scene Management ---
+    function switchScene(key, forceReload = false) {
+        if (key === currentSceneKey && !forceReload) return;
+        
+        showLoader('Switching View...');
+
+        // Use a timeout to allow the loader to render before starting heavy work
+        setTimeout(() => {
+            isPaused = false;
+            if(currentCleanup) currentCleanup();
+            followObject = null;
+
+            const mainCanvas = renderer.domElement;
+            const complexContainer = document.getElementById('complex-view-container');
+            const mainUi = [document.getElementById('info-panel'), document.getElementById('controls-panel'), document.getElementById('settings-button'), document.getElementById('fullscreen-button')];
+
+            if (key === 'complex_visualizer') {
+                mainCanvas.style.display = 'none';
+                complexContainer.classList.remove('hidden');
+                mainUi.forEach(el => el.classList.add('hidden'));
+            } else {
+                mainCanvas.style.display = 'block';
+                complexContainer.classList.add('hidden');
+                mainUi.forEach(el => el.classList.remove('hidden'));
+            }
+
+            while(activeSceneObjects.children.length > 0) { 
+                const obj = activeSceneObjects.children[0];
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                    if (Array.isArray(obj.material)) {
+                        obj.material.forEach(m => m.dispose());
+                    } else {
+                        obj.material.dispose();
+                    }
+                }
+                activeSceneObjects.remove(obj); 
+            }
+            document.getElementById('controls-panel').innerHTML = '';
+
+            const sceneData = scenes[key];
+            document.getElementById('info-title').textContent = sceneData.title;
+            document.getElementById('info-description').textContent = sceneData.description;
+            document.getElementById('charts-placeholder').style.display = (key === 'procedural_planet') ? 'block' : 'none';
+
+            if (currentSceneKey) {
+                document.getElementById(`btn-${currentSceneKey}`)?.classList.remove('active');
+                document.getElementById(`mobile-btn-${currentSceneKey}`)?.classList.remove('active');
+            }
+            document.getElementById(`btn-${key}`).classList.add('active');
+            document.getElementById(`mobile-btn-${key}`)?.classList.add('active');
+            document.getElementById('mobile-menu-label').textContent = sceneData.title;
+
+            currentSceneKey = key;
+            const result = sceneData.init();
+            currentUpdate = result.update || (() => {});
+            currentCleanup = result.cleanup || (() => {});
+            if (result.followTarget) followObject = result.followTarget;
+
+            hideLoader();
+        }, 50);
+    }
+
+    // --- Noise Generator ---
+    class NoiseGenerator {
+        constructor(seed) {
+            let h = 1779033703 ^ seed.length;
+            for(let i = 0; i < seed.length; i++) {
+                h = Math.imul(h ^ seed.charCodeAt(i), 3432918353);
+                h = h << 13 | h >>> 19;
+            }
+            const random = () => {
+                h = Math.imul(h ^ h >>> 16, 2246822507);
+                h = Math.imul(h ^ h >>> 13, 3266489909);
+                return (h ^= h >>> 16) >>> 0;
+            };
+
+            this.p = new Uint8Array(512);
+            const p = new Uint8Array(256);
+            for (let i = 0; i < 256; i++) p[i] = i;
+            for (let i = 255; i > 0; i--) {
+                const n = random() % (i + 1);
+                [p[i], p[n]] = [p[n], p[i]];
+            }
+            for (let i = 0; i < 512; i++) this.p[i] = p[i & 255];
+        }
+
+        fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+        lerp(t, a, b) { return a + t * (b - a); }
+        grad(hash, x, y, z) {
+            const h = hash & 15;
+            const u = h < 8 ? x : y;
+            const v = h < 4 ? y : h === 12 || h === 14 ? x : z;
+            return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
+        }
+
+        noise(x, y, z) {
+            const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
+            x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
+            const u = this.fade(x), v = this.fade(y), w = this.fade(z);
+            const p = this.p;
+            const A = p[X] + Y, AA = p[A] + Z, AB = p[A + 1] + Z,
+                  B = p[X + 1] + Y, BA = p[B] + Z, BB = p[B + 1] + Z;
+            return this.lerp(w, this.lerp(v, this.lerp(u, this.grad(p[AA], x, y, z), this.grad(p[BA], x - 1, y, z)), this.lerp(u, this.grad(p[AB], x, y - 1, z), this.grad(p[BB], x - 1, y - 1, z))), this.lerp(v, this.lerp(u, this.grad(p[AA + 1], x, y, z - 1), this.grad(p[BA + 1], x - 1, y, z - 1)), this.lerp(u, this.grad(p[AB + 1], x, y - 1, z - 1), this.grad(p[BB + 1], x - 1, y - 1, z - 1))));
+        }
+    }
+
+
+    // --- Scene Definitions ---
+    function initProceduralPlanet() {
+        const PLANET_RADIUS = 4;
+        let planetContainer = new THREE.Group();
+        let planetMesh, atmosphereMesh, cloudsMesh;
+        let noiseGen = new NoiseGenerator(planetSeed);
+        let currentPreset = 'terran';
+
+        const planetPresets = {
+            terran: {
+                params: { octaves: 6, persistence: 0.5, lacunarity: 2.0, initialFrequency: 1.2, elevationScale: 0.4 },
+                colors: [
+                    { stop: -0.1, color: new THREE.Color(0x0a2773) }, // Deep Ocean
+                    { stop: 0.0, color: new THREE.Color(0x134fa3) },  // Shallow Ocean
+                    { stop: 0.05, color: new THREE.Color(0x968a52) }, // Beach
+                    { stop: 0.3, color: new THREE.Color(0x22541d) },  // Forest
+                    { stop: 0.5, color: new THREE.Color(0x555555) },  // Rock
+                    { stop: 1.0, color: new THREE.Color(0xffffff) },  // Snow
+                ]
+            },
+            desert: {
+                params: { octaves: 8, persistence: 0.45, lacunarity: 2.2, initialFrequency: 0.9, elevationScale: 0.3 },
+                colors: [
+                    { stop: 0.0, color: new THREE.Color(0x4d3e3e) }, // Deep Crator
+                    { stop: 0.1, color: new THREE.Color(0x9c6e4b) }, // Lowland Sand
+                    { stop: 0.4, color: new THREE.Color(0xbf8e5f) }, // Sand Dune
+                    { stop: 0.6, color: new THREE.Color(0x8c7853) }, // Rocky area
+                    { stop: 1.0, color: new THREE.Color(0xd9cba9) }, // Mountain peak
+                ]
+            },
+            ice: {
+                params: { octaves: 5, persistence: 0.6, lacunarity: 1.8, initialFrequency: 1.5, elevationScale: 0.2 },
+                colors: [
+                    { stop: -0.2, color: new THREE.Color(0x1a237e) }, // Deep Frozen Ocean
+                    { stop: 0.0, color: new THREE.Color(0x42a5f5) },  // Frozen Ocean
+                    { stop: 0.1, color: new THREE.Color(0xb3e5fc) },  // Ice Shelf
+                    { stop: 0.5, color: new THREE.Color(0xe1f5fe) },  // Glacier
+                    { stop: 1.0, color: new THREE.Color(0xffffff) },  // Snow Cap
+                ]
+            }
+        };
+
+        function getColorFromRamp(value, ramp) {
+            for (let i = 0; i < ramp.length - 1; i++) {
+                if (value >= ramp[i].stop && value <= ramp[i + 1].stop) {
+                    const t = (value - ramp[i].stop) / (ramp[i + 1].stop - ramp[i].stop);
+                    return new THREE.Color().lerpColors(ramp[i].color, ramp[i + 1].color, t);
+                }
+            }
+            return ramp[ramp.length - 1].color;
+        }
+        
+        function generatePlanet() {
+            noiseGen = new NoiseGenerator(planetSeed);
+            const tempVec = new THREE.Vector3();
+            const positions = planetMesh.geometry.attributes.position;
+            const colors = planetMesh.geometry.attributes.color;
+            const elevations = [];
+            
+            const preset = planetPresets[currentPreset];
+            const { octaves, persistence, lacunarity, initialFrequency, elevationScale } = preset.params;
+            
+            for (let i = 0; i < positions.count; i++) {
+                tempVec.fromBufferAttribute(positions, i).normalize();
+                let noiseValue = 0, frequency = initialFrequency, amplitude = 1.0, maxAmplitude = 0;
+
+                for (let o = 0; o < octaves; o++) {
+                    noiseValue += noiseGen.noise(tempVec.x * frequency, tempVec.y * frequency, tempVec.z * frequency) * amplitude;
+                    maxAmplitude += amplitude;
+                    amplitude *= persistence;
+                    frequency *= lacunarity;
+                }
+                const elevation = noiseValue / maxAmplitude;
+                elevations.push(elevation);
+
+                const displacement = PLANET_RADIUS + elevation * elevationScale;
+                tempVec.setLength(displacement);
+                positions.setXYZ(i, tempVec.x, tempVec.y, tempVec.z);
+                
+                const color = getColorFromRamp(elevation, preset.colors);
+                colors.setXYZ(i, color.r, color.g, color.b);
+            }
+
+            positions.needsUpdate = true;
+            colors.needsUpdate = true;
+            planetMesh.geometry.computeVertexNormals();
+            updateElevationChart(elevations);
+        }
+
+        // --- 1. Create 3D Objects ---
+        const geometry = new THREE.SphereGeometry(1, planetResolution, planetResolution);
+        geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(geometry.attributes.position.count * 3), 3));
+        const material = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.1, roughness: 0.8 });
+        planetMesh = new THREE.Mesh(geometry, material);
+        planetContainer.add(planetMesh);
+
+        // Atmosphere
+        const atmosphereMat = new THREE.ShaderMaterial({
+            vertexShader: `
+                varying vec3 vNormal;
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vNormal;
+                void main() {
+                    float intensity = pow(0.6 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+                    gl_FragColor = vec4(0.5, 0.6, 1.0, 1.0) * intensity;
+                }
+            `,
+            blending: THREE.AdditiveBlending,
+            side: THREE.BackSide,
+            transparent: true
+        });
+        atmosphereMesh = new THREE.Mesh(new THREE.SphereGeometry(PLANET_RADIUS * 1.05, planetResolution, planetResolution), atmosphereMat);
+        planetContainer.add(atmosphereMesh);
+        
+        // Clouds
+        function generateCloudTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 512;
+            const context = canvas.getContext('2d');
+            const cloudNoise = new NoiseGenerator('cloud_seed');
+            const imageData = context.createImageData(canvas.width, canvas.height);
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const nx = x / canvas.width, ny = y / canvas.height;
+                    const noise = cloudNoise.noise(nx * 8, ny * 8, 0.5) * 0.5 + 0.5; // Simple 2D noise slice
+                    const alpha = noise > 0.6 ? (noise - 0.6) / 0.4 * 255 : 0;
+                    const i = (y * canvas.width + x) * 4;
+                    imageData.data[i] = 255;
+                    imageData.data[i + 1] = 255;
+                    imageData.data[i + 2] = 255;
+                    imageData.data[i + 3] = alpha;
+                }
+            }
+            context.putImageData(imageData, 0, 0);
+            return new THREE.CanvasTexture(canvas);
+        }
+        const cloudTexture = generateCloudTexture();
+        cloudTexture.wrapS = THREE.RepeatWrapping;
+        const cloudMat = new THREE.MeshPhongMaterial({
+            map: cloudTexture,
+            transparent: true,
+            opacity: 0.7,
+            blending: THREE.AdditiveBlending
+        });
+        cloudsMesh = new THREE.Mesh(new THREE.SphereGeometry(PLANET_RADIUS * 1.02, planetResolution, planetResolution), cloudMat);
+        planetContainer.add(cloudsMesh);
+
+        activeSceneObjects.add(planetContainer);
+        generatePlanet();
+
+        // --- 2. Create UI Controls ---
+        const controlsDiv = document.getElementById('controls-panel');
+        controlsDiv.innerHTML = `
+            <div id="preset-controls" class="flex items-center gap-2">
+                <label class="text-sm font-medium">Planet Type:</label>
+                ${Object.keys(planetPresets).map(key => `<button id="preset-${key}" data-preset="${key}" class="preset-button ${key === currentPreset ? 'active' : ''} capitalize">${key}</button>`).join('')}
+            </div>
+            <div class="h-8 border-l border-gray-600 hidden md:block"></div>
+            <div id="generation-controls" class="flex items-center gap-4">
+                <div class="control-group">
+                    <label for="seed-input" class="text-sm font-medium">Generation Seed</label>
+                    <input id="seed-input" type="text" value="${planetSeed}" class="w-40">
+                </div>
+                <button id="generate-btn" class="toggle-button active self-end">Generate</button>
+            </div>
+        `;
+
+        document.getElementById('seed-display').textContent = planetSeed;
+        const seedInput = document.getElementById('seed-input');
+        seedInput.addEventListener('input', () => { planetSeed = seedInput.value; });
+        document.getElementById('generate-btn').addEventListener('click', () => {
+             showLoader('Generating New World...');
+             setTimeout(() => {
+                document.getElementById('seed-display').textContent = planetSeed;
+                generatePlanet();
+                hideLoader();
+             }, 50);
+        });
+        document.querySelectorAll('.preset-button').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                showLoader('Applying Preset...');
+                setTimeout(() => {
+                    currentPreset = e.target.dataset.preset;
+                    document.querySelectorAll('.preset-button').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    generatePlanet();
+                    hideLoader();
+                }, 50);
+            });
+        });
+
+        // --- 3. Define Animation Loop ---
+        function update(delta) {
+            if (isPaused) return;
+            planetContainer.rotation.y += delta * animationSpeed * 0.2;
+            cloudsMesh.rotation.y += delta * animationSpeed * 0.25;
+            cloudTexture.offset.x -= delta * animationSpeed * 0.02;
+        }
+       
+        // --- 4. Define Cleanup ---
+        function cleanup() {
+            cloudTexture.dispose();
+        }
+
+        return { update, cleanup, followTarget: planetContainer };
+    }
+
+    function initStarfield() {
+        const starCount = 10000;
+        const vertices = [];
+        for (let i = 0; i < starCount; i++) {
+            vertices.push(THREE.MathUtils.randFloatSpread(1000), THREE.MathUtils.randFloatSpread(1000), THREE.MathUtils.randFloatSpread(1000));
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5, sizeAttenuation: true });
+        const stars = new THREE.Points(geometry, material);
+        activeSceneObjects.add(stars);
+
+        document.getElementById('controls-panel').innerHTML = `<div class="text-lg text-gray-400">A dynamic starfield background.</div>`;
+
+        function update(delta) {
+            if(isPaused) return;
+            stars.rotation.y += delta * animationSpeed * 0.05;
+        }
+
+        return { update, cleanup: () => {} };
+    }
+    
+    // --- Complex Visualizer Logic ---
+    function initComplexVisualizer() {
+        let currentView = 'shader';
+        let viewInstances = {};
+        const container = document.getElementById('complex-view-container');
+        container.innerHTML = `
+            <div id="shader-view" class="view-container active">
+                <div class="overlay-container">
+                    <div class="title-container">
+                        <h1>Shader View (Optimized)</h1>
+                        <p>The blue wave is sine, the red wave is cosine, and the green wave is their sum.</p>
+                    </div>
+                    <div id="controls-shader" class="controls-container">
+                        <div class="control-group"><label for="angle-slider-shader">Angle (θ):</label><input type="range" id="angle-slider-shader" min="-180" max="180" value="45" step="1"><span id="angle-value-shader" class="value-display">45°</span></div>
+                        <div class="control-group"><label for="frequency-slider-shader">Frequency:</label><input type="range" id="frequency-slider-shader" min="0" max="100" value="0" step="1"><span id="frequency-value-shader" class="value-display">1.0 Hz</span></div>
+                        <div class="control-group"><label for="zoom-slider-shader">Zoom:</label><input type="range" id="zoom-slider-shader" min="0" max="100" value="0" step="1"><span id="zoom-value-shader" class="value-display">1.0x</span></div>
+                    </div>
+                </div>
+            </div>
+            <div id="geometry-view" class="view-container">
+                <div class="overlay-container">
+                    <div class="title-container">
+                        <h1>Geometry View (Classic)</h1>
+                        <p>A 3D visualization of waves in the complex domain.</p>
+                    </div>
+                    <div id="controls-geometry" class="controls-container">
+                        <div class="control-group"><label for="angle-slider-geometry">Angle (θ):</label><input type="range" id="angle-slider-geometry" min="0" max="360" value="45" step="1"><span id="angle-value-geometry" class="value-display">45°</span></div>
+                        <div class="control-group"><label for="frequency-slider-geometry">Frequency:</label><input type="range" id="frequency-slider-geometry" min="0" max="100" value="0" step="1"><span id="frequency-value-geometry" class="value-display">1.0x</span></div>
+                        <div class="control-group"><label for="amplitude-slider-geometry">Amplitude:</label><input type="range" id="amplitude-slider-geometry" min="0.1" max="2.5" value="1" step="0.1"><span id="amplitude-value-geometry" class="value-display">1.0</span></div>
+                    </div>
+                </div>
+            </div>
+            <footer class="cv-footer">
+                <div class="container mx-auto px-4 py-3 flex justify-center items-center">
+                    <div id="tab-container" class="flex items-center bg-gray-700 rounded-lg p-1 space-x-1">
+                        <button id="btn-shader" class="tab-button active text-sm font-medium py-2 px-4 rounded-md transition-colors duration-200 ease-in-out hover:bg-gray-600">Shader View</button>
+                        <button id="btn-geometry" class="tab-button text-sm font-medium py-2 px-4 rounded-md transition-colors duration-200 ease-in-out hover:bg-gray-600">Geometry View</button>
+                    </div>
+                </div>
+            </footer>
+        `;
+        
+        // --- View Logic (copied from provided file) ---
+        const createAxisLabel = (scene, text, position, size = 30) => {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            context.font = `Bold ${size}px Inter, sans-serif`;
+            const textMetrics = context.measureText(text);
+            canvas.width = textMetrics.width; canvas.height = size * 1.5;
+            context.font = `Bold ${size}px Inter, sans-serif`; context.fillStyle = '#e5e7eb';
+            context.textAlign = 'center'; context.textBaseline = 'middle';
+            context.fillText(text, canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.scale.set(canvas.width / 100, canvas.height / 100, 1.0);
+            sprite.position.copy(position);
+            scene.add(sprite);
+            return sprite;
+        };
+        
+        function teardownView(viewName) {
+            const instance = viewInstances[viewName];
+            if (!instance) return;
+            cancelAnimationFrame(instance.animationId);
+            instance.resizeObserver.disconnect();
+            instance.scene.traverse(object => {
+                if (object.geometry) object.geometry.dispose();
+                if (object.material) {
+                    if (Array.isArray(object.material)) object.material.forEach(material => material.dispose());
+                    else object.material.dispose();
+                }
+            });
+            instance.renderer.dispose();
+            const canvas = instance.container.querySelector('canvas');
+            if(canvas) instance.container.removeChild(canvas);
+            delete viewInstances[viewName];
+        }
+
+        function setupShaderView() {
+            if (viewInstances.shader) return;
+            const container = document.getElementById('shader-view');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(4, 4, 7);
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.insertBefore(renderer.domElement, container.firstChild);
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0, 0);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const pointLight = new THREE.PointLight(0xffffff, 1);
+            pointLight.position.set(5, 5, 5);
+            scene.add(pointLight);
+            const axisLength = 2.5;
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)]), new THREE.LineBasicMaterial({ color: 0xff0000 })));
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)]), new THREE.LineBasicMaterial({ color: 0x00ff00 })));
+            scene.add(new THREE.Mesh(new THREE.RingGeometry(1.49, 1.51, 128), new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide })));
+            const vectorGroup = new THREE.Group();
+            scene.add(vectorGroup);
+            vectorGroup.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1.5, 0xf59e0b, 0.2, 0.1));
+            const pointGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+            const vectorPoint = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 2 }));
+            vectorPoint.position.x = 1.5;
+            vectorGroup.add(vectorPoint);
+            const sinMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 2 }));
+            const cosMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2 }));
+            const resultMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 2 }));
+            scene.add(sinMarker, cosMarker, resultMarker);
+            const angleSlider = document.getElementById('angle-slider-shader'), angleValueSpan = document.getElementById('angle-value-shader');
+            const frequencySlider = document.getElementById('frequency-slider-shader'), frequencyValueSpan = document.getElementById('frequency-value-shader');
+            const zoomSlider = document.getElementById('zoom-slider-shader'), zoomValueSpan = document.getElementById('zoom-value-shader');
+            const waveZ = 4, waveWidth = 10, waveHeight = 5;
+            const vertexShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+            const fragmentShader = `uniform float frequency; uniform float domainWidth; uniform vec3 waveColor; uniform float waveType; varying vec2 vUv;
+                void main() {
+                    float x = (vUv.x - 0.5) * domainWidth; float y_wave;
+                    if (waveType == 0.0) { y_wave = sin(x * frequency); } else if (waveType == 1.0) { y_wave = cos(x * frequency); } else { y_wave = sin(x * frequency) + cos(x * frequency); }
+                    float v_wave = (y_wave + 2.5) / 5.0; float thickness = 0.01; float line = smoothstep(thickness, 0.0, abs(vUv.y - v_wave));
+                    if (line < 0.1) discard; gl_FragColor = vec4(waveColor * line, line);
+                }`;
+            const uniforms = { frequency: { value: 1.0 }, domainWidth: { value: 2.0 * Math.PI }, waveColor: { value: new THREE.Color(0x3b82f6) }, waveType: { value: 0.0 } };
+            const createMaterial = (color, type) => {
+                const mat = new THREE.ShaderMaterial({ vertexShader, fragmentShader, transparent: true, side: THREE.DoubleSide, uniforms: THREE.UniformsUtils.clone(uniforms) });
+                mat.uniforms.waveColor.value = new THREE.Color(color);
+                mat.uniforms.waveType.value = type;
+                return mat;
+            };
+            const sinMaterial = createMaterial(0x3b82f6, 0.0), cosMaterial = createMaterial(0xef4444, 1.0), resultMaterial = createMaterial(0x22c55e, 2.0);
+            const waveGeometry = new THREE.PlaneGeometry(waveWidth, waveHeight);
+            const sinWave = new THREE.Mesh(waveGeometry, sinMaterial); sinWave.position.z = -waveZ;
+            const cosWave = new THREE.Mesh(waveGeometry, cosMaterial); cosWave.position.z = -waveZ;
+            const resultWave = new THREE.Mesh(waveGeometry, resultMaterial); resultWave.position.z = waveZ;
+            scene.add(sinWave, cosWave, resultWave);
+            createAxisLabel(scene, 'x', new THREE.Vector3(axisLength + 0.3, 0, 0));
+            createAxisLabel(scene, 'i', new THREE.Vector3(0, axisLength + 0.3, 0));
+            const MIN_FREQ = 1, MAX_FREQ = 1.855e43, MIN_ZOOM = 1.0, MAX_ZOOM = 1.855e43;
+            const getLogValue = (slider, min, max) => min * Math.pow(max / min, parseFloat(slider.value) / parseFloat(slider.max));
+            const updateUniforms = () => {
+                const frequency = getLogValue(frequencySlider, MIN_FREQ, MAX_FREQ);
+                const zoom = getLogValue(zoomSlider, MIN_ZOOM, MAX_ZOOM);
+                const domainWidth = (2.0 * Math.PI) / zoom;
+                [sinMaterial, cosMaterial, resultMaterial].forEach(m => {
+                    m.uniforms.frequency.value = frequency;
+                    m.uniforms.domainWidth.value = domainWidth;
+                });
+                frequencyValueSpan.textContent = `${frequency.toExponential(1)} Hz`;
+                zoomValueSpan.textContent = `${zoom.toExponential(1)}x`;
+                updateVisualization();
+            };
+            const updateVisualization = () => {
+                const angleDegrees = parseInt(angleSlider.value);
+                const angleRadians = angleDegrees * (Math.PI / 180);
+                const frequency = getLogValue(frequencySlider, MIN_FREQ, MAX_FREQ);
+                const zoom = getLogValue(zoomSlider, MIN_ZOOM, MAX_ZOOM);
+                vectorGroup.rotation.z = angleRadians;
+                const domainWidth = (2.0 * Math.PI) / zoom;
+                const spatialAngle = angleRadians / frequency;
+                const waveX = (spatialAngle / domainWidth) * waveWidth;
+                const markerAngle = angleRadians;
+                sinMarker.position.set(waveX, Math.sin(markerAngle), -waveZ);
+                cosMarker.position.set(waveX, Math.cos(markerAngle), -waveZ);
+                resultMarker.position.set(waveX, Math.sin(markerAngle) + Math.cos(markerAngle), waveZ);
+                angleValueSpan.textContent = `${angleDegrees}°`;
+            };
+            angleSlider.addEventListener('input', updateVisualization);
+            frequencySlider.addEventListener('input', updateUniforms);
+            zoomSlider.addEventListener('input', updateUniforms);
+            let animationId;
+            const animate = () => {
+                animationId = requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+                if(viewInstances.shader) viewInstances.shader.animationId = animationId;
+            };
+            const resizeObserver = new ResizeObserver(() => {
+                const { clientWidth, clientHeight } = container;
+                if (clientWidth === 0 || clientHeight === 0) return;
+                camera.aspect = clientWidth / clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(clientWidth, clientHeight);
+            });
+            resizeObserver.observe(container);
+            updateUniforms();
+            animate();
+            viewInstances.shader = { scene, renderer, container, animationId, resizeObserver };
+        }
+
+        function setupGeometryView() {
+            if (viewInstances.geometry) return;
+            const container = document.getElementById('geometry-view');
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(4, 4, 7);
+            const renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.insertBefore(renderer.domElement, container.firstChild);
+            const controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.target.set(0, 0, 0);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+            const pointLight = new THREE.PointLight(0xffffff, 1);
+            pointLight.position.set(5, 5, 5);
+            scene.add(pointLight);
+            const axisLength = 2.5;
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)]), new THREE.LineBasicMaterial({ color: 0xff0000 })));
+            scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)]), new THREE.LineBasicMaterial({ color: 0x00ff00 })));
+            scene.add(new THREE.Mesh(new THREE.RingGeometry(1.49, 1.51, 128), new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide })));
+            const vectorGroup = new THREE.Group();
+            scene.add(vectorGroup);
+            vectorGroup.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1.5, 0xf59e0b, 0.2, 0.1));
+            const pointGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+            const vectorPoint = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 2 }));
+            vectorPoint.position.x = 1.5;
+            vectorGroup.add(vectorPoint);
+            const sinMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 2 }));
+            const cosMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2 }));
+            const resultMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 2 }));
+            scene.add(sinMarker, cosMarker, resultMarker);
+            const angleSlider = document.getElementById('angle-slider-geometry'), angleValueSpan = document.getElementById('angle-value-geometry');
+            const frequencySlider = document.getElementById('frequency-slider-geometry'), frequencyValueSpan = document.getElementById('frequency-value-geometry');
+            const amplitudeSlider = document.getElementById('amplitude-slider-geometry'), amplitudeValueSpan = document.getElementById('amplitude-value-geometry');
+            let sinWave, cosWave, resultWave;
+            const MIN_FREQ = 1, MAX_FREQ = 10000;
+            const getLogFrequency = () => MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, parseFloat(frequencySlider.value) / parseFloat(frequencySlider.max));
+            createAxisLabel(scene, 'x', new THREE.Vector3(axisLength + 0.3, 0, 0));
+            createAxisLabel(scene, 'i', new THREE.Vector3(0, axisLength + 0.3, 0));
+            const regenerateWaves = () => {
+                const frequency = getLogFrequency();
+                const amplitude = parseFloat(amplitudeSlider.value);
+                [sinWave, cosWave, resultWave].forEach(wave => { if (wave) { scene.remove(wave); wave.geometry.dispose(); if (wave.material) wave.material.dispose(); } });
+                let tubeSegments = Math.min(Math.max(128, Math.floor(128 * (frequency / 10))), 4096);
+                const createWave = (func, color, zPos) => {
+                    const points = [];
+                    for (let i = 0; i <= tubeSegments; i++) {
+                        const t = i / tubeSegments;
+                        const angle = (t * Math.PI * 2) * frequency;
+                        points.push(new THREE.Vector3(t * 10 - 5, func(angle) * amplitude, zPos));
+                    }
+                    const curve = new THREE.CatmullRomCurve3(points);
+                    const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, 0.03, 8, false);
+                    const tubeMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5 });
+                    return new THREE.Mesh(tubeGeometry, tubeMaterial);
+                };
+                const waveZ = 4;
+                sinWave = createWave(Math.sin, 0x3b82f6, -waveZ);
+                cosWave = createWave(Math.cos, 0xef4444, -waveZ);
+                resultWave = createWave((angle) => Math.sin(angle) + Math.cos(angle), 0x22c55e, waveZ);
+                scene.add(sinWave, cosWave, resultWave);
+                frequencyValueSpan.textContent = `${frequency.toFixed(1)}x`;
+                amplitudeValueSpan.textContent = amplitude.toFixed(1);
+                updateVisualization();
+            };
+            const updateVisualization = () => {
+                const angleDegrees = parseInt(angleSlider.value);
+                const frequency = getLogFrequency();
+                const amplitude = parseFloat(amplitudeSlider.value);
+                const angleRadians = angleDegrees * (Math.PI / 180);
+                vectorGroup.rotation.z = angleRadians;
+                const waveX = (angleRadians / (Math.PI * 2)) * 10 - 5;
+                const freqAngle = angleRadians * frequency;
+                const waveZ = 4;
+                sinMarker.position.set(waveX, Math.sin(freqAngle) * amplitude, -waveZ);
+                cosMarker.position.set(waveX, Math.cos(freqAngle) * amplitude, -waveZ);
+                resultMarker.position.set(waveX, (Math.sin(freqAngle) + Math.cos(freqAngle)) * amplitude, waveZ);
+                angleValueSpan.textContent = `${angleDegrees}°`;
+            };
+            angleSlider.addEventListener('input', updateVisualization);
+            frequencySlider.addEventListener('input', regenerateWaves);
+            amplitudeSlider.addEventListener('input', regenerateWaves);
+            let animationId;
+            const animate = () => {
+                animationId = requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+                if (viewInstances.geometry) viewInstances.geometry.animationId = animationId;
+            };
+            const resizeObserver = new ResizeObserver(() => {
+                const { clientWidth, clientHeight } = container;
+                if (clientWidth === 0 || clientHeight === 0) return;
+                camera.aspect = clientWidth / clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(clientWidth, clientHeight);
+            });
+            resizeObserver.observe(container);
+            regenerateWaves();
+            animate();
+            viewInstances.geometry = { scene, renderer, container, animationId, resizeObserver };
+        }
+
+        const btnShader = document.getElementById('btn-shader'), btnGeometry = document.getElementById('btn-geometry');
+        const shaderView = document.getElementById('shader-view'), geometryView = document.getElementById('geometry-view');
+
+        function switchView(newViewName) {
+            if (newViewName === currentView) return;
+            teardownView(currentView);
+            shaderView.classList.toggle('active', newViewName === 'shader');
+            geometryView.classList.toggle('active', newViewName === 'geometry');
+            btnShader.classList.toggle('active', newViewName === 'shader');
+            btnGeometry.classList.toggle('active', newViewName === 'geometry');
+            if (newViewName === 'shader') setupShaderView();
+            if (newViewName === 'geometry') setupGeometryView();
+            currentView = newViewName;
+        }
+
+        btnShader.addEventListener('click', () => switchView('shader'));
+        btnGeometry.addEventListener('click', () => switchView('geometry'));
+
+        setupShaderView();
+
+        return {
+            update: () => {}, // This scene manages its own loop
+            cleanup: () => {
+                teardownView(currentView);
+                container.innerHTML = '';
+            }
+        };
+    }
+
+
+    // --- UI & CORE SYSTEM SETUP (Boilerplate) ---
+
+    function createMenu() {
+        const menuDiv = document.getElementById('menu');
+        const mobileMenuDropdown = document.getElementById('mobile-menu-dropdown');
+        menuDiv.innerHTML = '';
+        mobileMenuDropdown.innerHTML = '';
+        Object.keys(scenes).forEach(key => {
+            const sceneTitle = scenes[key].title;
+            const desktopButton = document.createElement('button');
+            desktopButton.id = `btn-${key}`;
+            desktopButton.className = 'menu-button';
+            desktopButton.textContent = sceneTitle;
+            desktopButton.onclick = () => switchScene(key);
+            menuDiv.appendChild(desktopButton);
+            const mobileButton = document.createElement('button');
+            mobileButton.id = `mobile-btn-${key}`;
+            mobileButton.className = 'mobile-menu-item text-white';
+            mobileButton.textContent = sceneTitle;
+            mobileButton.onclick = () => { switchScene(key); mobileMenuDropdown.classList.add('hidden'); };
+            mobileMenuDropdown.appendChild(mobileButton);
+        });
+    }
+
+    function setupMobileMenu() {
+        const menuButton = document.getElementById('mobile-menu-button');
+        const dropdown = document.getElementById('mobile-menu-dropdown');
+        menuButton.addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('hidden'); });
+        window.addEventListener('click', () => { if (!dropdown.classList.contains('hidden')) dropdown.classList.add('hidden'); });
+    }
+
+    function updateElevationChart(elevations) {
+        if (!elevationChart) return;
+        const bins = 20;
+        const counts = new Array(bins).fill(0);
+        const minElev = -1, maxElev = 1;
+        elevations.forEach(e => {
+            const binIndex = Math.floor(((e - minElev) / (maxElev - minElev)) * bins);
+            if(binIndex >= 0 && binIndex < bins) counts[binIndex]++;
+        });
+        elevationChart.data.datasets[0].data = counts;
+        elevationChart.update();
+    }
+
+    function setupInfoPanel() {
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (e.target.closest('canvas') || e.target.closest('a')) return;
+            e.currentTarget.classList.toggle('expanded');
+        });
+        const ctx = document.getElementById('placeholder-chart').getContext('2d');
+        const labels = Array.from({length: 20}, (_, i) => ((i / 10) - 1).toFixed(1) );
+        elevationChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Elevation Count', data: [],
+                    backgroundColor: 'rgba(79, 70, 229, 0.5)', borderColor: 'rgba(129, 140, 248, 1)',
+                }]
+            },
+            options: {
+                maintainAspectRatio: false,
+                scales: { y: { beginAtZero: true, ticks: { color: '#9ca3af' } }, x: { ticks: { color: '#9ca3af', maxRotation: 90, minRotation: 45 } } },
+                plugins: { legend: { display: false } }
+            }
+        });
+    }
+
+    function setupFullscreen() {
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; return; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        const handleFullscreenChange = () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+            document.body.classList.toggle('fullscreen-active', isFullscreen);
+            if (!isFullscreen) document.querySelectorAll('.show-on-hover').forEach(el => el.classList.remove('show-on-hover'));
+            setTimeout(onWindowResize, 100);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+    }
+
+    function setupVR() {
+        const vrButton = document.getElementById('vr-button');
+        renderer.xr.enabled = true;
+        if ('xr' in navigator) {
+            navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                vrButton.disabled = !supported;
+                if(supported) {
+                    vrButton.addEventListener('click', () => {
+                        const session = renderer.xr.getSession();
+                        if (session) session.end();
+                        else navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'] }).then((session) => renderer.xr.setSession(session));
+                    });
+                    renderer.xr.addEventListener('sessionstart', () => {
+                        playerDolly.position.copy(camera.position); playerDolly.quaternion.copy(camera.quaternion);
+                        camera.position.set(0, 0, 0); camera.quaternion.identity();
+                        controls.enabled = false;
+                        vrButton.querySelector('span').textContent = 'Exit VR'; vrButton.classList.add('active');
+                    });
+                    renderer.xr.addEventListener('sessionend', () => {
+                        camera.position.copy(playerDolly.position); camera.scale.copy(playerDolly.scale);
+                        playerDolly.position.set(0, 0, 0); playerDolly.quaternion.identity(); playerDolly.scale.set(1, 1, 1);
+                        controls.enabled = true;
+                        vrButton.querySelector('span').textContent = 'Enter VR'; vrButton.classList.remove('active');
+                    });
+                }
+            });
+        }
+        controller1 = renderer.xr.getController(0); playerDolly.add(controller1);
+        controller2 = renderer.xr.getController(1); playerDolly.add(controller2);
+        const controllerModelFactory = new XRControllerModelFactory();
+        const handModelFactory = new XRHandModelFactory();
+        controllerGrip1 = renderer.xr.getControllerGrip(0); controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1)); playerDolly.add(controllerGrip1);
+        controllerGrip2 = renderer.xr.getControllerGrip(1); controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2)); playerDolly.add(controllerGrip2);
+        hand1 = renderer.xr.getHand(0); hand1.add(handModelFactory.createHandModel(hand1)); playerDolly.add(hand1);
+        hand2 = renderer.xr.getHand(1); hand2.add(handModelFactory.createHandModel(hand2)); playerDolly.add(hand2);
+    }
+   
+    function setupSettingsPanel() {
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsButton = document.getElementById('settings-button');
+        const closeSettingsButton = document.getElementById('close-settings');
+        const graphicsSlider = document.getElementById('graphics-slider');
+        const graphicsQualityValue = document.getElementById('graphics-quality-value');
+        const energySlider = document.getElementById('energy-slider');
+        const energyValue = document.getElementById('energy-value');
+        const followToggle = document.getElementById('follow-toggle');
+        const planetResSlider = document.getElementById('planet-resolution-slider');
+        const planetResValue = document.getElementById('planet-resolution-value');
+
+        function toggleSettingsPanel() {
+            if (settingsPanel.classList.contains('open')) settingsPanel.classList.remove('open');
+            else { settingsPanel.classList.remove('hidden'); requestAnimationFrame(() => settingsPanel.classList.add('open')); }
+        }
+        settingsButton.addEventListener('click', toggleSettingsPanel);
+        closeSettingsButton.addEventListener('click', () => settingsPanel.classList.remove('open'));
+        settingsPanel.addEventListener('transitionend', (e) => {
+            if (e.propertyName === 'transform' && !settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+
+        followToggle.addEventListener('click', (e) => {
+            followMode = !followMode; e.target.textContent = followMode ? 'On' : 'Off'; e.target.classList.toggle('active', followMode);
+        });
+        energySlider.addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value); energyValue.textContent = `${animationSpeed.toFixed(2)}x`;
+        });
+        planetResSlider.addEventListener('input', (e) => planetResValue.textContent = e.target.value);
+        planetResSlider.addEventListener('change', (e) => {
+            planetResolution = parseInt(e.target.value, 10); 
+            if (currentSceneKey === 'procedural_planet') {
+                switchScene(currentSceneKey, true); // Force reload
+            }
+        });
+        graphicsSlider.addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value); renderer.setPixelRatio(quality);
+            if (quality < 0.8) graphicsQualityValue.textContent = "Low";
+            else if (quality < 1.5) graphicsQualityValue.textContent = "Medium";
+            else graphicsQualityValue.textContent = "High";
+        });
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+
+    function updateCameraFollow() {
+        if(followMode && followObject) {
+            const distance = 10;
+            const offset = controls.target.clone().sub(camera.position).normalize().multiplyScalar(distance);
+            const targetPosition = followObject.position.clone().sub(offset);
+            const container = renderer.xr.isPresenting ? playerDolly : camera;
+            container.position.lerp(targetPosition, 0.1);
+            if (!renderer.xr.isPresenting) controls.target.lerp(followObject.position, 0.1);
+        }
+    }
+
+    function updateVRInputs() {
+        if (!renderer.xr.isPresenting) return;
+        const deadzone = 0.15;
+        const updateControllerState = (controller, state) => {
+            if (controller && controller.gamepad) {
+                const gp = controller.gamepad;
+                state.trigger.pressed = gp.buttons[0]?.pressed;
+                state.grip.pressed = gp.buttons[1]?.pressed;
+                state.thumbstick.x = Math.abs(gp.axes[2]) > deadzone ? gp.axes[2] : 0;
+                state.thumbstick.y = Math.abs(gp.axes[3]) > deadzone ? gp.axes[3] : 0;
+            }
+        };
+        updateControllerState(controller1, vrInputs.left);
+        updateControllerState(controller2, vrInputs.right);
+    }
+
+    function handleVRControllers(delta) {
+        if (renderer.xr.isPresenting) {
+            const speed = 3.0, turnSpeed = 1.5;
+            const camDir = camera.getWorldQuaternion(new THREE.Quaternion());
+            const moveDir = new THREE.Vector3(vrInputs.left.thumbstick.x, 0, vrInputs.left.thumbstick.y);
+            if (moveDir.length() > 0.1) {
+                const flatCamQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), new THREE.Euler().setFromQuaternion(camDir).y);
+                moveDir.applyQuaternion(flatCamQuat).normalize().multiplyScalar(speed * delta);
+                playerDolly.position.add(moveDir);
+            }
+            if (Math.abs(vrInputs.right.thumbstick.x) > 0.1) playerDolly.rotation.y -= vrInputs.right.thumbstick.x * turnSpeed * delta;
+            if (Math.abs(vrInputs.right.thumbstick.y) > 0.1) playerDolly.position.y -= vrInputs.right.thumbstick.y * speed * delta;
+            const bothGrips = vrInputs.left.grip.pressed && vrInputs.right.grip.pressed;
+            if (bothGrips && !vrInputs.isZooming) {
+                vrInputs.isZooming = true;
+                vrInputs.initialZoomDistance = controllerGrip1.position.distanceTo(controllerGrip2.position);
+                vrInputs.initialDollyScale.copy(playerDolly.scale);
+            } else if (bothGrips && vrInputs.isZooming) {
+                const currentDist = controllerGrip1.position.distanceTo(controllerGrip2.position);
+                if (vrInputs.initialZoomDistance > 0.01) {
+                    const scaleFactor = currentDist / vrInputs.initialZoomDistance;
+                    playerDolly.scale.copy(vrInputs.initialDollyScale.clone().multiplyScalar(scaleFactor)).clampScalar(0.1, 10.0);
+                }
+            } else if (!bothGrips && vrInputs.isZooming) {
+                vrInputs.isZooming = false;
+            }
+        }
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        updateVRInputs();
+        if (!renderer.xr.isPresenting && currentSceneKey !== 'complex_visualizer') controls.update(); 
+        if(currentUpdate) currentUpdate(delta); 
+        handleVRControllers(delta);
+        updateCameraFollow();
+        if(currentSceneKey !== 'complex_visualizer') renderer.render(scene, camera); 
+    }
+   
+    init();
+
+</script>
+</body>
+</html>
+

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dimensionality Reduction Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            color: #e5e7eb;
+            overflow: hidden;
+        }
+        #container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #ui-panel, #settings-panel {
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(55, 65, 81, 0.5);
+            z-index: 10;
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 16px; height: 16px;
+            background: #3b82f6; cursor: pointer;
+            border-radius: 50%;
+        }
+        .control-btn {
+            background-color: rgba(31, 41, 55, 0.8);
+            border: 1px solid rgba(55, 65, 81, 0.5);
+        }
+        .control-btn.active {
+            background-color: #3b82f6;
+            border-color: rgba(59, 130, 246, 0.5);
+            color: white;
+        }
+        select, .viz-btn {
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+        }
+        #loader {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+            background-color: rgba(0,0,0,0.8);
+            padding: 2rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            width: 320px;
+        }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="m-0 p-0">
+    <div id="container"></div>
+
+    <div id="loader" class="hidden">
+        <div class="spinner"></div>
+        <p id="loader-message">Running algorithm...</p>
+        <div class="w-full bg-gray-700 rounded-full h-2.5 mt-4">
+            <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+        </div>
+        <p id="progress-text" class="text-sm text-gray-400 mt-2"></p>
+    </div>
+
+    <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-center w-full max-w-3xl">
+        <h1 class="text-xl font-bold text-gray-100" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.7);">Dimensionality Reduction Explorer</h1>
+        <p class="text-sm text-gray-400">Visualizing high-dimensional data in 3D & 2D</p>
+    </div>
+
+    <button id="settings-btn" class="absolute top-4 right-4 z-30 p-2 rounded-md bg-gray-800 bg-opacity-50 hover:bg-opacity-75 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-300"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
+    
+    <div id="settings-panel" class="absolute top-16 right-4 z-20 p-4 rounded-lg shadow-2xl w-72 hidden max-h-[calc(100vh-5rem)] overflow-y-auto">
+        <h3 class="text-lg font-bold mb-3 text-gray-100 border-b border-gray-700 pb-2">Algorithm Settings</h3>
+        
+        <div id="tsne-settings" class="space-y-4">
+              <div>
+                  <label for="perplexity" class="block text-sm font-medium text-gray-300">Perplexity: <span id="perplexityValue">30</span></label>
+                  <input id="perplexity" type="range" min="2" max="100" step="1" value="30" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+              </div>
+              <div>
+                  <label for="epsilon" class="block text-sm font-medium text-gray-300">Learning Rate (&epsilon;): <span id="epsilonValue">10</span></label>
+                  <input id="epsilon" type="range" min="1" max="50" step="1" value="10" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+              </div>
+        </div>
+        
+        <div id="umap-settings" class="space-y-4 hidden">
+             <!-- UMAP settings remain here -->
+        </div>
+
+        <div id="pca-settings" class="hidden">
+            <p class="text-sm text-gray-400">PCA is a deterministic algorithm with no hyperparameters to tune.</p>
+        </div>
+        
+        <div id="original-settings" class="hidden">
+            <p class="text-sm text-gray-400">Shows the first 3 dimensions of the original high-dimensional data.</p>
+        </div>
+
+        <div id="viz-settings-container" class="mt-6">
+            <h3 class="text-lg font-bold mb-3 text-gray-100 border-b border-gray-700 pb-2">Visualization</h3>
+            <div id="pca-viz-settings" class="space-y-3 mt-4 hidden">
+                <button id="show-pca-projection-btn" class="w-full text-center px-4 py-2 rounded-md text-sm font-medium viz-btn transition-colors hover:bg-gray-600">Animate Projection</button>
+            </div>
+             <div id="tsne-viz-settings" class="space-y-3 mt-4 hidden">
+                 <label class="flex items-center justify-between text-sm text-gray-300">
+                    <span>Show Neighbors</span>
+                    <div class="relative">
+                        <input type="checkbox" id="show-tsne-neighbors-toggle" class="sr-only peer">
+                        <div class="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+
+        <h3 class="text-lg font-bold mb-3 mt-6 text-gray-100 border-b border-gray-700 pb-2">Display Settings</h3>
+         <div class="space-y-4 mt-4">
+            <div>
+                <label for="pointSize" class="block text-sm font-medium text-gray-300">Point Size: <span id="pointSizeValue">1.0</span></label>
+                <input id="pointSize" type="range" min="0.1" max="5" step="0.1" value="1.0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+            </div>
+              <div>
+                <label for="animationSpeed" class="block text-sm font-medium text-gray-300">Animation Speed: <span id="animationSpeedValue">1000</span>ms</label>
+                <input id="animationSpeed" type="range" min="100" max="3000" step="100" value="1000" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+            </div>
+        </div>
+    </div>
+    
+    <div id="ui-panel" class="absolute bottom-4 left-1/2 -translate-x-1/2 p-4 rounded-lg shadow-2xl max-w-5xl w-full">
+        <div class="flex items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+                  <div>
+                      <label for="dataset" class="block text-xs font-medium text-gray-400 mb-1">Dataset</label>
+                      <select id="dataset" class="rounded-md px-3 py-2 text-white text-sm">
+                          <option value="blobs">Gaussian Blobs</option>
+                          <option value="swiss-roll">Swiss Roll</option>
+                          <option value="linked-rings">Linked Rings</option>
+                      </select>
+                  </div>
+                  <div>
+                      <span class="block text-xs font-medium text-gray-400 mb-1">Projection</span>
+                      <div id="algorithm-selector" class="flex gap-1">
+                          <button data-algo="original" class="algo-btn control-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-600 transition-colors active">Original</button>
+                          <button data-algo="pca" class="algo-btn control-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-600 transition-colors">PCA</button>
+                          <button data-algo="tsne" class="algo-btn control-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-600 transition-colors">t-SNE</button>
+                          <button data-algo="umap" class="algo-btn control-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-600 transition-colors">UMAP</button>
+                      </div>
+                  </div>
+            </div>
+            
+            <button id="run-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition duration-300 text-base">Run Reduction</button>
+
+            <div class="flex items-center gap-4">
+                  <div>
+                      <span class="block text-xs font-medium text-gray-400 mb-1 text-right">Target Dimensions</span>
+                      <div id="dimension-selector" class="flex gap-1 justify-end">
+                          <button data-dim="3" class="dim-btn control-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-600 transition-colors active">3D</button>
+                          <button data-dim="2" class="dim-btn control-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-600 transition-colors">2D</button>
+                      </div>
+                  </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/" } }
+    </script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/ml-pca@4.1.1/dist/pca.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/tsne-js@1.0.3/tsne.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/umap-js@1.3.3/lib/umap-js.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tweenjs/tween.js@18.6.4/dist/tween.umd.min.js" defer></script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Global State & Refs ---
+        let scene, camera, renderer, controls, pointsObject = null, pcaAxesGroup = null, neighborLinesGroup = null;
+        let highDimData = [], pointColors = [], nearestNeighbors = [];
+        let reducedData3D = [], reducedData2D = [];
+        let originalData3D = [], originalData2D = [];
+        let pcaModel;
+        
+        let state = {
+            dataset: 'blobs',
+            algorithm: 'original',
+            targetDim: 3,
+            pointSize: 1.0,
+            animationSpeed: 1000,
+            tsne: { perplexity: 30, epsilon: 10 },
+            umap: { nNeighbors: 15, minDist: 0.1 },
+            viz: { showTsneNeighbors: false }
+        };
+
+        // --- UI Element Refs ---
+        const loader = document.getElementById('loader');
+        const loaderMessage = document.getElementById('loader-message');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const runBtn = document.getElementById('run-btn');
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+        
+        // --- Initialization ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            // FIX: Lowered camera near plane to prevent clipping when zoomed in
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.01, 2000);
+            camera.position.set(0, 15, 35);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+            // FIX: Moved grid down slightly to prevent z-fighting with points on the y=0 plane
+            const grid = new THREE.GridHelper(500, 100, 0x4b5563, 0x374151);
+            grid.position.y = -0.5;
+            scene.add(grid);
+
+            pcaAxesGroup = new THREE.Group();
+            scene.add(pcaAxesGroup);
+            neighborLinesGroup = new THREE.Group();
+            scene.add(neighborLinesGroup);
+
+            setupEventListeners();
+            updateAlgorithmUI();
+            runReduction();
+            animate();
+        }
+
+        // --- Data Generation & Processing ---
+        function generateData() {
+            const n = 1000;
+            highDimData = []; pointColors = [];
+            const colors = [new THREE.Color(0xff6347), new THREE.Color(0x4682b4), new THREE.Color(0x32cd32), new THREE.Color(0xffd700)];
+
+            if (state.dataset === 'blobs') {
+                const dims = 10;
+                const centers = [[1,1,1,1,1,1,1,1,1,1], [-1,-1,-1,-1,-1,-1,-1,-1,-1,-1], [1,1,1,1,-1,-1,-1,-1,-1,-1], [-1,-1,-1,-1,1,1,1,1,1,1]];
+                for (let i = 0; i < n; i++) {
+                    const c_idx = i % centers.length;
+                    const point = Array.from({length: dims}, (_, j) => centers[c_idx][j] + (Math.random() - 0.5) * 2.5);
+                    highDimData.push(point);
+                    pointColors.push(colors[c_idx].r, colors[c_idx].g, colors[c_idx].b);
+                }
+            } else if (state.dataset === 'swiss-roll') {
+                 for (let i = 0; i < n; i++) {
+                    const t = 1.5 + 4 * Math.PI * (i / n);
+                    highDimData.push([t * Math.cos(t), 10 * Math.random(), t * Math.sin(t), Math.random()*5, Math.random()*5]);
+                    const color = new THREE.Color().setHSL(t / (5 * Math.PI), 0.8, 0.6);
+                    pointColors.push(color.r, color.g, color.b);
+                }
+            } else if (state.dataset === 'linked-rings') {
+                 for (let i = 0; i < n; i++) {
+                    const angle1 = Math.random() * 2 * Math.PI, angle2 = Math.random() * 2 * Math.PI;
+                    const radius = 8, tubeRadius = 2;
+                    let x,y,z, color;
+                    if (i < n / 2) {
+                        x = (radius + tubeRadius * Math.cos(angle2)) * Math.cos(angle1); y = (radius + tubeRadius * Math.cos(angle2)) * Math.sin(angle1); z = tubeRadius * Math.sin(angle2); color = colors[0];
+                    } else {
+                        x = (radius + tubeRadius * Math.cos(angle2)) * Math.cos(angle1) + radius; y = tubeRadius * Math.sin(angle2); z = (radius + tubeRadius * Math.cos(angle2)) * Math.sin(angle1); color = colors[1];
+                    }
+                     highDimData.push([x,y,z,...Array.from({length: 4}, Math.random)]);
+                     pointColors.push(color.r, color.g, color.b);
+                }
+            }
+            computeOriginalProjection();
+        }
+        
+        function computeOriginalProjection() {
+            originalData3D = highDimData.map(p => [p[0], p[1] || 0, p[2] || 0]);
+            originalData2D = highDimData.map(p => [p[0], p[1] || 0]);
+            normalizeAndScale(originalData3D, 25);
+            normalizeAndScale(originalData2D, 25);
+        }
+
+        function normalizeAndScale(data, scale) {
+            if (!data || data.length === 0) return;
+            const dims = data[0].length;
+            const min = Array(dims).fill(Infinity), max = Array(dims).fill(-Infinity);
+            data.forEach(p => { for(let d=0; d<dims; d++) { min[d] = Math.min(min[d], p[d] || 0); max[d] = Math.max(max[d], p[d] || 0); }});
+            const range = max.map((m, i) => m - min[i]);
+            data.forEach(p => { for(let d=0; d<dims; d++) { p[d] = range[d] > 1e-6 ? ((p[d] - min[d]) / range[d] - 0.5) * 2 * scale : 0; }});
+        }
+        
+        // --- Main Reduction Logic ---
+        async function runReduction() {
+            runBtn.disabled = true;
+            generateData();
+            
+            if (pointsObject) { scene.remove(pointsObject); pointsObject.geometry.dispose(); pointsObject.material.dispose(); }
+            createVisualization(originalData3D);
+
+            loader.classList.remove('hidden');
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            if (state.algorithm === 'pca') await runPca();
+            else if (state.algorithm === 'tsne') await runTsneWithProgress();
+            else if (state.algorithm === 'umap') await runUmapWithProgress();
+            
+            normalizeAndScale(reducedData3D, 25);
+            normalizeAndScale(reducedData2D, 25);
+            
+            animateToTargetDimension();
+            loader.classList.add('hidden');
+            runBtn.disabled = false;
+        }
+        
+        async function runPca() {
+            updateProgressUI(0, 1, "Running PCA...");
+            pcaModel = new PCA(highDimData);
+            reducedData3D = pcaModel.predict(highDimData, {nComponents: 3}).to2DArray();
+            reducedData2D = pcaModel.predict(highDimData, {nComponents: 2}).to2DArray();
+            updateProgressUI(1, 1, "Finished PCA.");
+            visualizePcaComponents();
+        }
+
+        async function runTsneWithProgress() {
+            updateProgressUI(0, highDimData.length, "Pre-calculating neighbors...");
+            await precomputeNearestNeighbors(5);
+            updateProgressUI(highDimData.length, highDimData.length, "Neighbor calculation complete.");
+            await new Promise(r => setTimeout(r, 100)); 
+
+
+            const totalSteps = 500, updateFrequency = 5;
+            const model3D = new tsnejs.tSNE({ ...state.tsne, dim: 3 });
+            model3D.initDataRaw(highDimData);
+            for (let k = 0; k < totalSteps; k++) {
+                model3D.step();
+                if (k % updateFrequency === 0) {
+                    updateProgressUI(k, totalSteps, "Phase 1/2: t-SNE 3D");
+                    if (state.targetDim === 3) { let sol = model3D.getSolution(); normalizeAndScale(sol, 25); updatePointsGeometry(sol); }
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+            reducedData3D = model3D.getSolution();
+
+            const model2D = new tsnejs.tSNE({ ...state.tsne, dim: 2 });
+            model2D.initDataRaw(highDimData);
+            for (let k = 0; k < totalSteps; k++) {
+                model2D.step();
+                if (k % updateFrequency === 0) {
+                    updateProgressUI(k, totalSteps, "Phase 2/2: t-SNE 2D");
+                    if (state.targetDim === 2) { let sol = model2D.getSolution(); normalizeAndScale(sol, 25); updatePointsGeometry(sol); }
+                    await new Promise(r => setTimeout(r, 0));
+                }
+            }
+            reducedData2D = model2D.getSolution();
+        }
+
+        async function runUmapWithProgress() {
+            const umap3D = new UMAP({ ...state.umap, nComponents: 3 });
+            const nEpochs3D = umap3D.initializeFit(highDimData);
+            for (let i = 0; i < nEpochs3D; i+=2) {
+                umap3D.step(); umap3D.step();
+                updateProgressUI(i, nEpochs3D, "Phase 1/2: UMAP 3D");
+                if (state.targetDim === 3) { let emb = umap3D.getEmbedding(); normalizeAndScale(emb, 25); updatePointsGeometry(emb); }
+                await new Promise(r => setTimeout(r, 0));
+            }
+            reducedData3D = umap3D.getEmbedding();
+            
+            const umap2D = new UMAP({ ...state.umap, nComponents: 2 });
+            const nEpochs2D = umap2D.initializeFit(highDimData);
+            for (let i = 0; i < nEpochs2D; i+=2) {
+                umap2D.step(); umap2D.step();
+                updateProgressUI(i, nEpochs2D, "Phase 2/2: UMAP 2D");
+                if (state.targetDim === 2) { let emb = umap2D.getEmbedding(); normalizeAndScale(emb, 25); updatePointsGeometry(emb); }
+                await new Promise(r => setTimeout(r, 0));
+            }
+            reducedData2D = umap2D.getEmbedding();
+        }
+
+        // --- Visualization & Animation ---
+        function createVisualization(initialData) {
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(initialData.flat()), 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pointColors), 3));
+            const material = new THREE.PointsMaterial({ size: state.pointSize, vertexColors: true, sizeAttenuation: true });
+            pointsObject = new THREE.Points(geometry, material);
+            scene.add(pointsObject);
+        }
+        
+        function updatePointsGeometry(data) {
+            if (!pointsObject) return;
+            const positions = pointsObject.geometry.attributes.position.array;
+            for (let i = 0; i < data.length; i++) {
+                positions[i * 3] = data[i][0];
+                positions[i * 3 + 1] = data[i][1];
+                positions[i * 3 + 2] = data[i][2] || 0;
+            }
+            pointsObject.geometry.attributes.position.needsUpdate = true;
+        }
+        
+        function visualizePcaComponents() {
+            while(pcaAxesGroup.children.length) pcaAxesGroup.remove(pcaAxesGroup.children[0]);
+            if (!pcaModel) return;
+
+            const components = pcaModel.getEigenvectors().to2DArray().slice(0, 3);
+            const colors = [0xff0000, 0x00ff00, 0x0000ff];
+            const scale = 30;
+            
+            components.forEach((vec, i) => {
+                const material = new THREE.LineBasicMaterial({ color: colors[i] });
+                const start = new THREE.Vector3(0,0,0);
+                const end = new THREE.Vector3(vec[0], vec[1] || 0, vec[2] || 0).multiplyScalar(scale);
+                const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+                pcaAxesGroup.add(new THREE.Line(geometry, material));
+            });
+        }
+
+        function animatePcaProjection() {
+            if (!pointsObject || !pcaModel) return;
+            
+            const tempArray = new Float32Array(originalData3D.flat());
+
+            TWEEN.removeAll();
+            new TWEEN.Tween({ t: 0 })
+                .to({ t: 1 }, state.animationSpeed * 1.5)
+                .easing(TWEEN.Easing.Cubic.InOut)
+                .onUpdate(({t}) => {
+                     for (let i = 0; i < highDimData.length; i++) {
+                        const originalPoint = new THREE.Vector3().fromArray(originalData3D[i]);
+                        const projectedPoint = new THREE.Vector3().fromArray(reducedData3D[i]);
+                        const interpolatedPoint = originalPoint.lerp(projectedPoint, t);
+                        tempArray[i*3] = interpolatedPoint.x;
+                        tempArray[i*3+1] = interpolatedPoint.y;
+                        tempArray[i*3+2] = interpolatedPoint.z;
+                     }
+                    pointsObject.geometry.attributes.position.array.set(tempArray);
+                    pointsObject.geometry.attributes.position.needsUpdate = true;
+                })
+                .start();
+        }
+
+        function animateToTargetDimension() {
+            if (!pointsObject) return;
+            let data;
+            if (state.algorithm === 'original') data = state.targetDim === 3 ? originalData3D : originalData2D;
+            else if (state.algorithm === 'pca') data = state.targetDim === 3 ? reducedData3D : reducedData2D;
+            else if (state.algorithm === 'tsne') data = state.targetDim === 3 ? reducedData3D : reducedData2D;
+            else if (state.algorithm === 'umap') data = state.targetDim === 3 ? reducedData3D : reducedData2D;
+
+            if (!data || data.length === 0) return;
+            
+            const initialPos = pointsObject.geometry.attributes.position.array.slice();
+            const targetPos = new Float32Array(initialPos.length);
+            for (let i = 0; i < data.length; i++) {
+                targetPos[i*3] = data[i][0];
+                targetPos[i*3+1] = data[i][1];
+                targetPos[i*3+2] = state.targetDim === 3 ? (data[i][2] || 0) : 0;
+            }
+
+            TWEEN.removeAll();
+            new TWEEN.Tween(initialPos).to(targetPos, state.animationSpeed)
+                .easing(TWEEN.Easing.Quadratic.InOut)
+                .onUpdate(() => {
+                    pointsObject.geometry.attributes.position.array.set(initialPos);
+                    pointsObject.geometry.attributes.position.needsUpdate = true;
+                }).start();
+        }
+        
+        async function precomputeNearestNeighbors(k) {
+            nearestNeighbors = [];
+            const euc_dist_sq = (a, b) => a.reduce((sum, val, i) => sum + (val - b[i])**2, 0);
+
+            for(let i=0; i<highDimData.length; i++) {
+                // FIX: Update UI more frequently to prevent "stuck" appearance
+                if (i % 10 === 0) {
+                     updateProgressUI(i, highDimData.length, "Pre-calculating neighbors...");
+                     await new Promise(r => setTimeout(r,0));
+                }
+                let distances = [];
+                for(let j=0; j<highDimData.length; j++) {
+                    if (i === j) continue;
+                    distances.push({ index: j, dist: euc_dist_sq(highDimData[i], highDimData[j]) });
+                }
+                distances.sort((a,b) => a.dist - b.dist);
+                nearestNeighbors[i] = distances.slice(0, k).map(d => d.index);
+            }
+        }
+        
+        function handleMouseMove(event) {
+            if (!state.viz.showTsneNeighbors || state.algorithm !== 'tsne' || !pointsObject) return;
+            
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(pointsObject);
+
+            while(neighborLinesGroup.children.length) neighborLinesGroup.remove(neighborLinesGroup.children[0]);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const pointIndex = intersect.index;
+                const neighbors = nearestNeighbors[pointIndex];
+                if (!neighbors) return;
+
+                const positions = pointsObject.geometry.attributes.position.array;
+                const startPoint = new THREE.Vector3().fromArray(positions, pointIndex * 3);
+
+                const material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5 });
+                
+                neighbors.forEach(neighborIndex => {
+                    const endPoint = new THREE.Vector3().fromArray(positions, neighborIndex * 3);
+                    const geometry = new THREE.BufferGeometry().setFromPoints([startPoint, endPoint]);
+                    neighborLinesGroup.add(new THREE.Line(geometry, material));
+                });
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update(); TWEEN.update();
+            renderer.render(scene, camera);
+        }
+
+        // --- UI Management & Event Listeners ---
+        function updateProgressUI(current, total, message) {
+            const percent = total > 0 ? Math.min(100, (current / total) * 100) : 0;
+            progressBar.style.width = `${percent}%`;
+            progressText.textContent = `Step ${current} / ${total}`;
+            loaderMessage.textContent = message;
+        }
+
+        function setupEventListeners() {
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+            window.addEventListener('mousemove', handleMouseMove);
+            
+            runBtn.addEventListener('click', runReduction);
+            document.getElementById('dataset').addEventListener('change', (e) => state.dataset = e.target.value);
+            document.getElementById('settings-btn').addEventListener('click', () => document.getElementById('settings-panel').classList.toggle('hidden'));
+
+            document.querySelectorAll('.algo-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (runBtn.disabled) return;
+                    state.algorithm = btn.dataset.algo;
+                    document.querySelector('.algo-btn.active').classList.remove('active');
+                    btn.classList.add('active');
+                    updateAlgorithmUI();
+                    if(state.algorithm !== 'tsne' && state.algorithm !== 'umap') animateToTargetDimension();
+                });
+            });
+
+            document.querySelectorAll('.dim-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (runBtn.disabled) return;
+                    state.targetDim = parseInt(btn.dataset.dim);
+                    document.querySelector('.dim-btn.active').classList.remove('active');
+                    btn.classList.add('active');
+                    animateToTargetDimension();
+                });
+            });
+            
+            document.getElementById('show-pca-projection-btn').addEventListener('click', animatePcaProjection);
+            document.getElementById('show-tsne-neighbors-toggle').addEventListener('change', e => {
+                state.viz.showTsneNeighbors = e.target.checked;
+                if (!e.target.checked) while(neighborLinesGroup.children.length) neighborLinesGroup.remove(neighborLinesGroup.children[0]);
+            });
+
+            // Sliders etc.
+            const sliders = {
+                'perplexity': { valueEl: 'perplexityValue', obj: 'tsne', key: 'perplexity' },
+                'epsilon': { valueEl: 'epsilonValue', obj: 'tsne', key: 'epsilon' },
+                'pointSize': { valueEl: 'pointSizeValue', key: 'pointSize', fixed: 1 },
+                'animationSpeed': { valueEl: 'animationSpeedValue', key: 'animationSpeed' }
+            };
+            Object.entries(sliders).forEach(([id, config]) => {
+                const slider = document.getElementById(id);
+                slider.addEventListener('input', () => {
+                    const value = parseFloat(slider.value);
+                    document.getElementById(config.valueEl).textContent = config.fixed ? value.toFixed(config.fixed) : value;
+                    if (config.obj) state[config.obj][config.key] = value;
+                    else state[config.key] = value;
+                    if (id === 'pointSize' && pointsObject) pointsObject.material.size = value;
+                });
+            });
+        }
+        
+        function updateAlgorithmUI() {
+            ['tsne', 'umap', 'pca', 'original'].forEach(s => document.getElementById(`${s}-settings`).classList.add('hidden'));
+            document.getElementById(`${state.algorithm}-settings`).classList.remove('hidden');
+            
+            document.getElementById('pca-viz-settings').classList.toggle('hidden', state.algorithm !== 'pca');
+            document.getElementById('tsne-viz-settings').classList.toggle('hidden', state.algorithm !== 'tsne');
+
+            pcaAxesGroup.visible = state.algorithm === 'pca';
+            if(state.algorithm !== 'tsne') {
+                 while(neighborLinesGroup.children.length) neighborLinesGroup.remove(neighborLinesGroup.children[0]);
+            }
+        }
+
+        // FIX: Wait for all scripts to load before initializing the app
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
+

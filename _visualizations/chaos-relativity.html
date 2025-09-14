@@ -1,0 +1,421 @@
+---
+date: 2025-08-27
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Physics & Chaos Explorer</title>
+    
+    <!-- Plotly.js for interactive charts -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+    
+    <!-- KaTeX for LaTeX math rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU07NsNEuj0/fYs97IOa7/ZbJx2CR51iDJStKZFsUZiQAI75Pdk6SOx" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" xintegrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"></script>
+
+    <!-- Google Fonts for a clean look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- Base Styles & Variables --- */
+        :root {
+            --bg-light: #f8f9fa;
+            --text-light: #212529;
+            --card-bg-light: #ffffff;
+            --border-light: #dee2e6;
+            --accent-color: #007bff;
+            --shadow-light: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+            /* --- Improved Dark Mode Colors --- */
+            --bg-dark: #121212; 
+            --text-dark: #f0f0f0; 
+            --card-bg-dark: #1e1e1e; 
+            --border-dark: #555; /* Brighter border for better visibility */
+            --shadow-dark: 0 4px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 2rem 1rem;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        /* --- Theme-Specific Styles --- */
+        body.light-mode {
+            background-color: var(--bg-light);
+            color: var(--text-light);
+        }
+        body.dark-mode {
+            background-color: var(--bg-dark);
+            color: var(--text-dark);
+        }
+
+        body.light-mode .plot-card {
+            background-color: var(--card-bg-light);
+            box-shadow: var(--shadow-light);
+            border: 1px solid var(--border-light);
+        }
+        body.dark-mode .plot-card {
+            background-color: var(--card-bg-dark);
+            box-shadow: var(--shadow-dark);
+            border: 1px solid var(--border-dark);
+        }
+        
+        body.light-mode .formula-box {
+            background-color: #f1f3f5;
+        }
+        body.dark-mode .formula-box {
+            background-color: #2c2f33;
+        }
+
+        body.light-mode #theme-switcher {
+            background-color: var(--text-light);
+            color: var(--bg-light);
+        }
+        body.dark-mode #theme-switcher {
+            background-color: var(--text-dark);
+            color: var(--bg-dark);
+        }
+
+        /* --- Layout & Containers --- */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 2rem;
+        }
+
+        header {
+            grid-column: 1 / -1;
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 { font-size: 2.5rem; font-weight: 700; }
+        h2 {
+            margin-top: 0;
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .plot-card {
+            border-radius: 12px;
+            padding: 1.5rem;
+            transition: background-color 0.3s, box-shadow 0.3s, border-color 0.3s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .plot-container {
+            width: 100%;
+            min-height: 450px;
+            flex-grow: 1;
+        }
+        
+        .formula-box { 
+            padding: 1rem; 
+            border-radius: 8px; 
+            margin-top: 1rem; 
+            margin-bottom: 1rem;
+            font-size: 1.1rem; 
+            text-align: center; 
+            min-height: 50px;
+            transition: background-color 0.3s;
+        }
+
+        /* --- Interactive Elements --- */
+        .slider-container { margin-top: 1rem; text-align: center; }
+        input[type="range"] { width: 80%; cursor: pointer; }
+        label { font-weight: 600; }
+        #theme-switcher {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 25px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.3s, color 0.3s;
+            z-index: 1000;
+        }
+        
+        /* --- Responsive Design --- */
+        @media (max-width: 600px) {
+            body { padding: 1rem 0.5rem; }
+            .container { grid-template-columns: 1fr; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body class="dark-mode">
+
+    <button id="theme-switcher">Switch to Light Mode</button>
+
+    <header>
+        <h1>Interactive Physics & Chaos Explorer</h1>
+        <p>From Black Holes to Bifurcations</p>
+    </header>
+
+    <div class="container">
+        <!-- Bekenstein-Hawking Information Limit Graph -->
+        <div class="plot-card">
+            <h2>Bekenstein-Hawking Information Limit</h2>
+            <p>This plot shows how a black hole's maximum information content (in bits) grows with its mass. Because information scales with the area of the event horizon, it is proportional to the square of the mass.</p>
+            <div class="formula-box">$$ I_{\text{BH}} \propto M^2 $$</div>
+            <div id="bekensteinPlot" class="plot-container"></div>
+        </div>
+        
+        <!-- Advanced Bifurcation Diagram Plot -->
+        <div class="plot-card">
+            <h2>Advanced Bifurcation Diagram</h2>
+            <p>This diagram uses a more complex "Verhulst-style" function to reveal intricate structures beyond the r=4 limit of the standard logistic map. Zoom in to explore the details.</p>
+             <div class="formula-box" style="font-size: 1rem;">$$ x_{n+1} = r \cdot e^{-(x_n-0.5)^2} \cdot (1 + \sin(x_n-0.5)) $$</div>
+            <div id="bifurcationPlot" class="plot-container"></div>
+        </div>
+        
+        <!-- Lorentz Factor vs. Parabola Plot -->
+        <div class="plot-card">
+            <h2>Lorentz Factor vs. Parabola</h2>
+            <p>Compares the asymptotic growth of the Lorentz factor in special relativity to the steady quadratic growth of a true parabola.</p>
+            <div id="lorentzPlot" class="plot-container"></div>
+        </div>
+
+        <!-- Cobweb Plot -->
+        <div class="plot-card">
+            <h2>Interactive Cobweb Plot</h2>
+            <p>Shows how the population (x) evolves based on the growth rate (r) for the standard logistic map. The path seeks a stable state or becomes chaotic.</p>
+            <div id="cobwebPlot" class="plot-container"></div>
+            <div class="slider-container">
+                <label for="rSlider">Growth Rate (r): <span id="rValue">3.5</span></label><br>
+                <input type="range" id="rSlider" min="2.5" max="4.0" value="3.5" step="0.001">
+            </div>
+        </div>
+        
+        <!-- Parabolas at Bifurcation Points Plot -->
+        <div class="plot-card">
+            <h2>Parabolas at Critical Points</h2>
+            <p>Shows the subtle changes in the logistic map's shape at key bifurcation points and inside the period-3 stable window.</p>
+            <div id="parabolaShapesPlot" class="plot-container"></div>
+        </div>
+    </div>
+
+    <script>
+        // --- Global Theme and Layout Settings ---
+        let currentTheme = 'dark';
+        const themes = {
+            dark: {
+                plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#e0e0e0' },
+                xaxis: { gridcolor: '#555', linecolor: '#555', zerolinecolor: '#666' },
+                yaxis: { gridcolor: '#555', linecolor: '#555', zerolinecolor: '#666' }
+            },
+            light: {
+                plot_bgcolor: 'rgba(0,0,0,0)', paper_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#212529' },
+                xaxis: { gridcolor: '#dee2e6', linecolor: '#dee2e6', zerolinecolor: '#ccc' },
+                yaxis: { gridcolor: '#dee2e6', linecolor: '#dee2e6', zerolinecolor: '#ccc' }
+            }
+        };
+
+        const baseLayout = {
+            margin: { l: 60, r: 20, b: 50, t: 40 },
+            showlegend: true,
+            legend: { x: 0.05, y: 0.95 }
+        };
+
+        const plotDivIds = ['bekensteinPlot', 'lorentzPlot', 'bifurcationPlot', 'cobwebPlot', 'parabolaShapesPlot'];
+
+        // --- Theme Switcher Logic ---
+        const themeSwitcher = document.getElementById('theme-switcher');
+        themeSwitcher.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            document.body.classList.toggle('light-mode');
+            currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+            themeSwitcher.textContent = currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+            updateAllPlotsLayout();
+        });
+
+        // --- Plotting Functions ---
+
+        // 1. Bekenstein-Hawking Information vs. Mass
+        function createBekensteinPlot() {
+            // Physical constants
+            const G = 6.67430e-11; // Gravitational constant
+            const hbar = 1.054571817e-34; // Reduced Planck constant
+            const c = 299792458; // Speed of light
+            const M_solar = 1.98847e30; // Solar mass in kg
+            const ln2 = Math.log(2);
+            
+            // Formula for information in bits: I = (4 * pi * G^2 * M^2) / (hbar * c * ln(2))
+            const constantFactor = (4 * Math.PI * G * G) / (hbar * c * ln2);
+
+            const masses_solar = [];
+            const information_bits = [];
+
+            // Generate mass values on a log scale, from 1 to 10^11 solar masses
+            for (let i = 0; i <= 110; i++) {
+                const exponent = i / 10;
+                const solar_mass = Math.pow(10, exponent);
+                masses_solar.push(solar_mass);
+                
+                const mass_kg = solar_mass * M_solar;
+                const bits = constantFactor * Math.pow(mass_kg, 2);
+                information_bits.push(bits);
+            }
+
+            const trace = {
+                x: masses_solar,
+                y: information_bits,
+                mode: 'lines',
+                type: 'scatter',
+                line: { color: 'rgb(0, 123, 255)', width: 3 }
+            };
+
+            const layout = {
+                ...baseLayout,
+                showlegend: false,
+                xaxis: {
+                    title: 'Black Hole Mass (Solar Masses)',
+                    type: 'log',
+                    dtick: 'L1' // Tick at every power of 10
+                },
+                yaxis: {
+                    title: 'Information Content (Bits)',
+                    type: 'log'
+                }
+            };
+            
+            Plotly.newPlot('bekensteinPlot', [trace], layout, { responsive: true });
+        }
+        
+        // 2. Advanced Bifurcation Diagram
+        function createBifurcationPlot() {
+            const r_min = 0.1, r_max = 10.0, steps = 4000;
+            const iteration_threshold = 300, iterations = 200;
+            const r_values = [], x_values = [];
+            const n = iteration_threshold + iterations;
+            const dr = (r_max - r_min) / steps;
+
+            for (let i = 0; i < steps; i++) {
+                const r = r_min + i * dr;
+                let x = 0.5;
+                for (let j = 0; j < n; j++) {
+                    x = Math.exp(-((x - 0.5) ** 2)) * r * (1 + Math.sin(x - 0.5));
+                    if (j > iteration_threshold) { r_values.push(r); x_values.push(x); }
+                }
+            }
+            
+            const markerColor = currentTheme === 'dark' ? '#e0e0e0' : '#212529';
+            const trace = { x: r_values, y: x_values, mode: 'markers', type: 'scattergl', marker: { size: 1, opacity: 0.5, color: markerColor } };
+            const layout = { ...baseLayout, title: '', xaxis: { title: 'Growth Rate (r)', range: [r_min, r_max] }, yaxis: { title: 'Attractor Value(s) (x)', range: [-1.5, 3.5] }, showlegend: false };
+            Plotly.newPlot('bifurcationPlot', [trace], layout, { responsive: true });
+        }
+        
+        // 3. Lorentz Factor vs. Parabola
+        function createLorentzPlot() {
+            const beta = Array.from({ length: 400 }, (_, i) => i * (0.999 / 399));
+            const gamma = beta.map(b => 1 / Math.sqrt(1 - b * b));
+            const x_parabola = Array.from({ length: 400 }, (_, i) => i / 399);
+            const y_parabola = x_parabola.map(x => 1 + 9 * x * x);
+
+            const traces = [{
+                x: beta, y: gamma, mode: 'lines', name: 'Lorentz Factor', line: { width: 3 }
+            }, {
+                x: x_parabola, y: y_parabola, mode: 'lines', name: 'y = 1 + 9x²', line: { width: 3, dash: 'dash' }
+            }];
+            const layout = { ...baseLayout, title: '', xaxis: { title: 'Velocity (β = v/c) or x-value' }, yaxis: { title: 'Value (γ) or y-value', range: [1, 20] } };
+            Plotly.newPlot('lorentzPlot', traces, layout);
+        }
+
+        // 4. Interactive Cobweb Plot
+        const rSlider = document.getElementById('rSlider');
+        const rValueSpan = document.getElementById('rValue');
+        function updateCobwebPlot() {
+            const r = parseFloat(rSlider.value);
+            rValueSpan.textContent = r.toFixed(3);
+            const x = Array.from({ length: 500 }, (_, i) => i / 499);
+            const y = x.map(val => r * val * (1 - val));
+            const traces = [
+                { x: x, y: y, mode: 'lines', name: `Parabola (r=${r.toFixed(3)})`, line: { width: 2 } },
+                { x: [0, 1], y: [0, 1], mode: 'lines', name: 'y = x', line: { width: 1, dash: 'dash' } }
+            ];
+            let x_n = 0.15;
+            const cobweb_x = [], cobweb_y = [];
+            for (let i = 0; i < 100; i++) {
+                const y_n = r * x_n * (1 - x_n);
+                cobweb_x.push(x_n, x_n); cobweb_y.push(x_n, y_n);
+                cobweb_x.push(x_n, y_n); cobweb_y.push(y_n, y_n);
+                x_n = y_n;
+            }
+            traces.push({ x: cobweb_x, y: cobweb_y, mode: 'lines', name: 'Cobweb Path', line: { color: '#d62728', width: 1 } });
+            const layout = { ...baseLayout, title: '', xaxis: { title: 'State (xₙ)', range: [0, 1] }, yaxis: { title: 'Next State (xₙ₊₁)', range: [0, 1] } };
+            Plotly.newPlot('cobwebPlot', traces, layout);
+        }
+        rSlider.addEventListener('input', updateCobwebPlot);
+
+        // 5. Parabolas at Bifurcation Points
+        function createParabolaShapesPlot() {
+            const x = Array.from({ length: 500 }, (_, i) => i / 499);
+            const critical_points = {
+                '1 → 2 (r ≈ 3.0)': 3.0, '2 → 4 (r ≈ 3.449)': 3.449,
+                '4 → 8 (r ≈ 3.544)': 3.544, 'Period-3 Window (r ≈ 3.83)': 3.83
+            };
+            const traces = [{ x: [0, 1], y: [0, 1], mode: 'lines', name: 'y = x', line: { width: 1, dash: 'dash' } }];
+            Object.entries(critical_points).forEach(([name, r]) => {
+                const y = x.map(val => r * val * (1 - val));
+                traces.push({ x: x, y: y, mode: 'lines', name: name, line: { width: 2.5 } });
+            });
+            const layout = { ...baseLayout, title: '', xaxis: { title: 'Population (x)', range: [0, 1] }, yaxis: { title: 'Next Population (y)', range: [0, 1] } };
+            Plotly.newPlot('parabolaShapesPlot', traces, layout);
+        }
+
+        // --- Layout and Theme Update Logic ---
+        function updatePlotLayout(divId) {
+            const plotDiv = document.getElementById(divId);
+            if (!plotDiv || !plotDiv.data) return;
+            
+            const theme = themes[currentTheme];
+            
+            if (divId === 'bifurcationPlot') {
+                const markerColor = currentTheme === 'dark' ? '#e0e0e0' : '#212529';
+                Plotly.restyle(plotDiv, { 'marker.color': markerColor });
+            }
+
+            Plotly.relayout(plotDiv, { ...theme });
+        }
+
+        function updateAllPlotsLayout() {
+            plotDivIds.forEach(updatePlotLayout);
+        }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            renderMathInElement(document.body, {
+                delimiters: [ {left: '$$', right: '$$', display: true} ]
+            });
+
+            currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+            themeSwitcher.textContent = currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+
+            createBekensteinPlot();
+            createLorentzPlot();
+            createBifurcationPlot();
+            createParabolaShapesPlot();
+            updateCobwebPlot();
+            
+            updateAllPlotsLayout();
+        });
+        
+        window.addEventListener('resize', updateAllPlotsLayout);
+    </script>
+</body>
+</html>
+

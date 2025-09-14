@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DNA Double Helix Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px;
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        .toggle-button {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        .toggle-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #4b5563; border-radius: 2px; outline: none;
+            opacity: 0.7; transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; background: #818cf8;
+            cursor: pointer; border-radius: 50%;
+        }
+        .control-group {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+        #settings-button, #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%;
+            cursor: pointer; transition: all 0.3s;
+        }
+        #settings-button { top: 80px; right: 20px; z-index: 11; }
+        #fullscreen-button { bottom: 120px; right: 20px; z-index: 11; }
+        #settings-button:hover { background-color: #4338ca; transform: translateY(-2px) rotate(45deg); }
+        #fullscreen-button:hover { background-color: #4338ca; transform: translateY(-2px) scale(1.1); }
+        #settings-panel {
+            top: 80px; right: 0; width: 300px;
+            max-width: 90vw; border-radius: 12px 0 0 12px;
+            transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            max-height: calc(100vh - 100px); overflow-y: auto; z-index: 12;
+        }
+        #settings-panel.open { transform: translateX(0); }
+        #close-settings { font-size: 2.5rem; line-height: 1; background: none; border: none; cursor: pointer; }
+        
+        #menu, #mobile-menu-container { display: none !important; }
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #controls-panel { padding: 1rem; gap: 1rem; flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold">DNA Double Helix Simulation</h1>
+    </header>
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400"></h2>
+            <div id="toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="info-content" class="pt-4"><p id="info-description"></p></div>
+    </div>
+    <div id="controls-panel" class="ui-panel"></div>
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">VR Mode</label>
+                <button id="vr-button" class="toggle-button w-full" disabled>Checking for VR...</button>
+            </div>
+             <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Animation Speed: <span id="speed-value">1.0x</span></label>
+                <input id="speed-slider" type="range" min="0" max="5" step="0.1" value="1" class="w-full">
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Graphics Quality: <span id="graphics-quality-value">High</span></label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+    import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+    import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+    const scenes = {
+        dna_replication: {
+            title: 'DNA Processes',
+            description: 'A 3D simulation of DNA replication and repair. The Polymerase unzips the helix and synthesizes new DNA, creating Okazaki fragments on the lagging strand. Activate the Nuclease and use the slider to target and cut a specific backbone site.',
+            init: initDnaScene,
+        },
+    };
+
+    const baseColors = { 'A': 0x3b82f6, 'T': 0x22c55e, 'C': 0xfab005, 'G': 0xef4444 };
+    const complementMap = { 'A': 'T', 'T': 'A', 'C': 'G', 'G': 'C' };
+
+    function generateComplement(sequence) {
+        return sequence.split('').map(base => complementMap[base]).join('');
+    }
+
+    function initDnaScene() {
+        const seq1_part = "ATCGGTACTAGCATCGGTACTAGCATCGGTACTAGCATCGGTACTAGC";
+        const seq1 = seq1_part;
+        const seq2 = generateComplement(seq1);
+        const resources = { geometries: [], materials: [] };
+        const baseGeometries = {
+            'A': createPurineGeometry(), 'G': createPurineGeometry(true),
+            'C': createPyrimidineGeometry(), 'T': createPyrimidineGeometry(true)
+        };
+        Object.values(baseGeometries).forEach(g => resources.geometries.push(g));
+
+        let polymeraseActive = false, nucleaseActive = false, showBasePairs = true;
+        let polymeraseTime = 0, nucleaseTime = 0;
+        let nucleaseCutSite = 10; 
+        const nucleaseCutTime = 2;
+
+        const mainGroup = new THREE.Group();
+        activeSceneObjects.add(mainGroup);
+
+        const helix = createDnaHelix(seq1, seq2, new THREE.Vector3(0, 0, 0));
+        mainGroup.add(helix.group);
+        
+        const dnaPolymerase = createProtein(new THREE.Color(0x8b5cf6), 3.5);
+        const nuclease = createProtein(new THREE.Color(0xdb2777), 1.5);
+        mainGroup.add(dnaPolymerase, nuclease);
+
+        const nucleaseTargetIndicator = new THREE.Mesh(
+            new THREE.SphereGeometry(0.5, 16, 16),
+            new THREE.MeshBasicMaterial({ color: 0xff0000, transparent: true, opacity: 0.7 })
+        );
+        mainGroup.add(nucleaseTargetIndicator);
+
+        const okazakiFragments = createOkazakiFragments(helix.basePositions.length);
+        mainGroup.add(...okazakiFragments);
+
+        const newStrand = createNewStrand(helix.basePositions.length);
+        mainGroup.add(newStrand);
+
+        const box = new THREE.Box3().setFromObject(mainGroup);
+        const center = box.getCenter(new THREE.Vector3());
+        mainGroup.position.y -= center.y;
+        controls.target.copy(mainGroup.position);
+        camera.position.z = 60;
+        camera.position.y = 10;
+        controls.update();
+
+        document.getElementById('controls-panel').innerHTML = `
+            <div class="control-group">
+                <label class="text-sm font-medium">DNA Polymerase</label>
+                <button id="polymerase-toggle" class="toggle-button">Start</button>
+            </div>
+            <div class="control-group">
+                <label class="text-sm font-medium">Nuclease</label>
+                <button id="nuclease-toggle" class="toggle-button">Activate</button>
+            </div>
+            <div class="control-group">
+                 <label class="text-sm font-medium">Nuclease Target: <span id="nuclease-site-value">${nucleaseCutSite}</span></label>
+                 <input id="nuclease-slider" type="range" min="0" max="${helix.backboneSpheres.length - 1}" step="1" value="${nucleaseCutSite}" class="w-32 md:w-48">
+            </div>
+            <div class="control-group">
+                <label class="text-sm font-medium">Show Base Pairs</label>
+                <button id="pairs-toggle" class="toggle-button active">On</button>
+            </div>
+        `;
+        
+        const infoContent = document.getElementById('info-content');
+        const legend = document.createElement('div');
+        legend.className = 'mt-4 grid grid-cols-2 gap-2 text-sm';
+        legend.innerHTML = Object.entries(baseColors).map(([base, color]) => `
+            <div class="flex items-center">
+                <div class="w-4 h-4 rounded-full mr-2" style="background-color: #${new THREE.Color(color).getHexString()}"></div>
+                <span>${base} (${complementMap[base]}) - ${ {A:'Adenine', T:'Thymine', C:'Cytosine', G:'Guanine'}[base] }</span>
+            </div>`).join('');
+        infoContent.appendChild(legend);
+
+        document.getElementById('polymerase-toggle').addEventListener('click', e => {
+            polymeraseActive = !polymeraseActive;
+            e.target.classList.toggle('active', polymeraseActive);
+            e.target.textContent = polymeraseActive ? 'Running' : 'Start';
+            if (!polymeraseActive) polymeraseTime = 0;
+        });
+        document.getElementById('nuclease-toggle').addEventListener('click', e => {
+            nucleaseActive = !nucleaseActive;
+            e.target.classList.toggle('active', nucleaseActive);
+            e.target.textContent = nucleaseActive ? 'Active' : 'Activate';
+            if (!nucleaseActive) {
+                nucleaseTime = 0;
+                helix.backboneSpheres[nucleaseCutSite].visible = true;
+            }
+        });
+        document.getElementById('nuclease-slider').addEventListener('input', e => {
+            helix.backboneSpheres[nucleaseCutSite].visible = true; // Restore old site
+            nucleaseCutSite = parseInt(e.target.value);
+            document.getElementById('nuclease-site-value').textContent = nucleaseCutSite;
+        });
+         document.getElementById('pairs-toggle').addEventListener('click', e => {
+            showBasePairs = !showBasePairs;
+            e.target.classList.toggle('active', showBasePairs);
+            e.target.textContent = showBasePairs ? 'On' : 'Off';
+            helix.rungs.forEach(rung => rung.visible = showBasePairs);
+        });
+        
+        function createPyrimidineGeometry(hasBranch = false) {
+            const shape = new THREE.Shape();
+            shape.moveTo(0.8, 0); shape.lineTo(0.4, 0.7); shape.lineTo(-0.4, 0.7);
+            shape.lineTo(-0.8, 0); shape.lineTo(-0.4, -0.7); shape.lineTo(0.4, -0.7);
+            shape.closePath();
+            if (hasBranch) { shape.moveTo(-0.8, 0); shape.lineTo(-1.1, -0.2); }
+            return new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: false }).center();
+        }
+        function createPurineGeometry(hasBranch = false) {
+            const shape = new THREE.Shape();
+            shape.moveTo(0, 0.8); shape.lineTo(-0.7, 0.4); shape.lineTo(-0.7, -0.4);
+            shape.lineTo(0, -0.8); shape.lineTo(0.7, -0.4); shape.lineTo(0.9, 0);
+            shape.lineTo(0.7, 0.4); shape.closePath();
+            if(hasBranch) { shape.moveTo(0.9, 0); shape.lineTo(1.2, 0.2); }
+            return new THREE.ExtrudeGeometry(shape, { depth: 0.2, bevelEnabled: false }).center();
+        }
+        function createProtein(color, size) {
+            const material = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.2 });
+            resources.materials.push(material);
+            const protein = new THREE.Mesh(new THREE.IcosahedronGeometry(size, 1), material);
+            resources.geometries.push(protein.geometry);
+            for (let i = 0; i < 5; i++) {
+                const lobeGeom = new THREE.SphereGeometry(size * Math.random() * 0.5 + 0.2, 8, 8);
+                resources.geometries.push(lobeGeom);
+                const lobe = new THREE.Mesh(lobeGeom, material);
+                lobe.position.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize().multiplyScalar(size * 0.8);
+                protein.add(lobe);
+            }
+            return protein;
+        }
+        function createOkazakiFragments(count) {
+            const fragments = [];
+            const fragmentGeom = new THREE.CylinderGeometry(0.3, 0.3, 1.2, 8);
+            const fragmentMat = new THREE.MeshStandardMaterial({ color: 0x6ee7b7, roughness: 0.4 });
+            resources.geometries.push(fragmentGeom);
+            resources.materials.push(fragmentMat);
+            for(let i = 0; i < count; i++) {
+                const frag = new THREE.Mesh(fragmentGeom, fragmentMat);
+                frag.visible = false;
+                fragments.push(frag);
+            }
+            return fragments;
+        }
+        function createNewStrand(length) {
+            const curve = new THREE.CatmullRomCurve3(
+                Array.from({length}, (_, i) => new THREE.Vector3(0, -i * 0.8, 0))
+            );
+            const geom = new THREE.TubeGeometry(curve, length * 2, 0.15, 8, false);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.3 });
+            resources.geometries.push(geom);
+            resources.materials.push(mat);
+            const strand = new THREE.Mesh(geom, mat);
+            strand.visible = false;
+            return strand;
+        }
+        function createDnaHelix(seq1, seq2, positionOffset, angleDegrees = 20) {
+            const group = new THREE.Group();
+            group.position.copy(positionOffset);
+            const basePositions = [], backboneSpheres = [], templateBases = [], complementBases = [], rungs = [];
+            const radius = 3.5, y_step = 0.8, angleStep = THREE.MathUtils.degToRad(angleDegrees);
+
+            const backboneGeom = new THREE.SphereGeometry(0.2, 8, 8);
+            const rungGeom = new THREE.CylinderGeometry(0.05, 0.05, radius - 1, 6);
+            const backboneMat = new THREE.MeshStandardMaterial({ color: 0xadb5bd });
+            const rungMat = new THREE.MeshStandardMaterial({ color: 0x6b7280 });
+            const textMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            resources.geometries.push(backboneGeom, rungGeom);
+            resources.materials.push(backboneMat, rungMat, textMat);
+
+            for (let i = 0; i < seq1.length; i++) {
+                const y = -i * y_step;
+                const angle = i * angleStep;
+                
+                // --- Template Strand (left) ---
+                const base1 = createBase(seq1[i], textMat);
+                base1.position.set(-(radius / 2), 0, 0);
+                templateBases.push(base1);
+                
+                // --- Complement Strand (right) ---
+                const base2 = createBase(seq2[i], textMat);
+                base2.position.set(radius / 2, 0, 0);
+                complementBases.push(base2);
+
+                // --- Rung ---
+                const rung = new THREE.Mesh(rungGeom, rungMat);
+                rung.rotation.z = Math.PI / 2;
+                rungs.push(rung);
+
+                const stepGroup = new THREE.Group();
+                stepGroup.position.y = y;
+                stepGroup.rotation.y = angle;
+                stepGroup.add(base1, base2, rung);
+                group.add(stepGroup);
+
+                const b1 = new THREE.Mesh(backboneGeom, backboneMat);
+                const b2 = b1.clone();
+                b1.position.set(-(radius / 2) - 0.8, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), angle + 5 * Math.PI/180).add(new THREE.Vector3(0,y,0));
+                b2.position.set( (radius / 2) + 0.8, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), angle - 5 * Math.PI/180).add(new THREE.Vector3(0,y,0));
+                backboneSpheres.push(b1, b2);
+                group.add(b1, b2);
+                
+                basePositions.push(new THREE.Vector3(0, y, 0));
+            }
+            return { group, basePositions, backboneSpheres, templateBases, complementBases, rungs };
+        }
+        function createBase(baseChar, textMat) {
+            const baseMat = new THREE.MeshStandardMaterial({ color: baseColors[baseChar], roughness: 0.5 });
+            resources.materials.push(baseMat);
+            const base = new THREE.Mesh(baseGeometries[baseChar], baseMat);
+            base.rotation.x = -Math.PI / 2;
+            const textGeom = new TextGeometry(baseChar, { font, size: 0.6, height: 0.1 });
+            resources.geometries.push(textGeom);
+            textGeom.center();
+            const textMesh = new THREE.Mesh(textGeom, textMat);
+            textMesh.position.y = 0.15;
+            textMesh.rotation.x = Math.PI / 2;
+            base.add(textMesh);
+            return base;
+        }
+        
+        function update(delta) {
+            const speed = delta * animationSpeed;
+
+            if (polymeraseActive) {
+                polymeraseTime += speed * 2;
+                const path = helix.basePositions;
+                const progress = polymeraseTime % path.length;
+                const currentIndex = Math.floor(progress);
+                
+                // Animate Polymerase Position
+                const polymerasePathPoint = helix.backboneSpheres[currentIndex * 2].position.clone();
+                dnaPolymerase.position.lerp(polymerasePathPoint, 0.1);
+
+                // Unzipping, Highlighting, and Synthesis
+                const unzipRadius = 3.0;
+                helix.templateBases.forEach((base, i) => {
+                    const dist = Math.abs(i - progress);
+                    
+                    if (dist < 0.5) base.material.emissive.setHex(0xffff00);
+                    else base.material.emissive.setHex(0x000000);
+
+                    const unzipAmount = Math.max(0, 1 - dist / 8.0);
+                    const easeOut = 1 - Math.pow(1 - unzipAmount, 3);
+                    
+                    const complementBase = helix.complementBases[i];
+                    const rung = helix.rungs[i];
+
+                    base.position.x = THREE.MathUtils.lerp(-0.7, -unzipRadius, easeOut);
+                    complementBase.position.x = THREE.MathUtils.lerp(0.7, unzipRadius, easeOut);
+                    rung.scale.x = 1 - easeOut;
+                    
+                    // Okazaki & New Strand
+                    if (dist > 2 && dist < 12) {
+                        const frag = okazakiFragments[i];
+                        if(i % 5 === 0) {
+                            frag.visible = true;
+                            frag.position.copy(complementBase.parent.localToWorld(complementBase.position));
+                            frag.lookAt(base.parent.localToWorld(base.position));
+                        }
+                    } else {
+                        okazakiFragments[i].visible = false;
+                    }
+
+                    // Show new synthesized strand up to the current point
+                    if (i <= currentIndex) {
+                        newStrand.visible = true;
+                         const points = newStrand.geometry.parameters.path.points;
+                         const targetPos = complementBase.parent.localToWorld(new THREE.Vector3(0.7,0,0));
+                         points[i].lerp(targetPos, 0.2);
+                    }
+                });
+                newStrand.geometry.verticesNeedUpdate = true;
+                newStrand.geometry.computeBoundingSphere();
+                
+            } else { // Reset state
+                helix.templateBases.forEach((base, i) => {
+                     base.material.emissive.setHex(0x000000);
+                     base.position.x = -0.7;
+                     helix.complementBases[i].position.x = 0.7;
+                     helix.rungs[i].scale.x = 1;
+                     okazakiFragments[i].visible = false;
+                });
+                newStrand.visible = false;
+            }
+
+            // Nuclease Animation
+            const targetSphere = helix.backboneSpheres[nucleaseCutSite];
+            const targetPos = targetSphere.getWorldPosition(new THREE.Vector3());
+            nucleaseTargetIndicator.position.copy(targetPos);
+            nucleaseTargetIndicator.visible = nucleaseActive || document.getElementById('nuclease-slider')?.matches(':hover');
+
+            if (nucleaseActive) {
+                nucleaseTime += speed;
+                const duration = 4;
+                const progress = Math.min(nucleaseTime / duration, 1.0);
+                const startPos = new THREE.Vector3(10, targetPos.y, 10);
+                
+                if (progress < 0.5) nuclease.position.lerpVectors(startPos, targetPos, progress * 2);
+                else {
+                    nuclease.position.copy(targetPos);
+                    if (nucleaseTime > nucleaseCutTime && nucleaseTime < nucleaseCutTime + speed) {
+                         targetSphere.visible = false;
+                    }
+                }
+                if (nucleaseTime >= duration) nucleaseTime = 0;
+            } else {
+                 nuclease.position.lerp(new THREE.Vector3(10, 0, 10), 0.05);
+            }
+        }
+
+        function cleanup() {
+            resources.geometries.forEach(g => g.dispose());
+            resources.materials.forEach(m => m.dispose());
+            if (legend.parentNode) legend.parentNode.removeChild(legend);
+        }
+
+        return { update, cleanup };
+    }
+
+    let scene, camera, renderer, controls, clock, font;
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {};
+    let currentCleanup = () => {};
+    let animationSpeed = 1.0;
+    
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x030712);
+        camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
+        camera.position.set(0, 5, 80);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.xr.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        dirLight.position.set(15, 20, 10);
+        scene.add(dirLight);
+
+        scene.add(activeSceneObjects);
+        
+        const fontLoader = new FontLoader();
+        fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json', (loadedFont) => {
+            font = loadedFont;
+            setupUI();
+            const firstSceneKey = Object.keys(scenes)[0];
+            switchScene(firstSceneKey);
+        });
+
+        window.addEventListener('resize', onWindowResize);
+        renderer.setAnimationLoop(animate);
+    }
+
+    function switchScene(key) {
+        if (currentCleanup) currentCleanup();
+        while(activeSceneObjects.children.length > 0) { 
+            activeSceneObjects.remove(activeSceneObjects.children[0]); 
+        }
+        document.getElementById('controls-panel').innerHTML = '';
+        
+        const sceneData = scenes[key];
+        document.getElementById('info-title').textContent = sceneData.title;
+        document.getElementById('info-description').textContent = sceneData.description;
+        
+        const result = sceneData.init();
+        currentUpdate = result.update || (() => {});
+        currentCleanup = result.cleanup || (() => {});
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        controls.update();
+        currentUpdate(delta);
+        renderer.render(scene, camera); 
+    }
+    
+    function setupUI() {
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (!e.target.closest('button, a, input')) {
+                e.currentTarget.classList.toggle('expanded');
+            }
+        });
+
+        const settingsPanel = document.getElementById('settings-panel');
+        document.getElementById('settings-button').addEventListener('click', () => {
+            settingsPanel.classList.remove('hidden');
+            requestAnimationFrame(() => settingsPanel.classList.add('open'));
+        });
+        document.getElementById('close-settings').addEventListener('click', () => {
+            settingsPanel.classList.remove('open');
+        });
+        settingsPanel.addEventListener('transitionend', () => {
+            if (!settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value);
+            document.getElementById('speed-value').textContent = `${animationSpeed.toFixed(1)}x`;
+        });
+        document.getElementById('graphics-slider').addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value);
+            renderer.setPixelRatio(window.devicePixelRatio * quality);
+            document.getElementById('graphics-quality-value').textContent = quality < 0.8 ? "Low" : quality < 1.5 ? "Medium" : "High";
+        });
+
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        document.addEventListener('fullscreenchange', () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+        });
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+    
+    init();
+
+</script>
+</body>
+</html>
+

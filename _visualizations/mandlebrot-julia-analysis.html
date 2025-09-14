@@ -1,0 +1,467 @@
+---
+date: 2025-08-27
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Real-Time Mandelbrot & Julia Set Explorer</title>
+    <style>
+        /* General page styling */
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            width: 100%;
+            overflow: hidden; /* Prevent scrolling */
+            background-color: #000;
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Container for the main Mandelbrot canvas */
+        #mandelbrot-container {
+            flex: 1; 
+            min-height: 50%; /* Ensure it has a good portion of the screen */
+            position: relative;
+        }
+
+        /* Main Mandelbrot canvas */
+        #mandelbrotCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+
+        /* Container for the visualization graphs at the bottom */
+        #visualizations-container {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr); /* 5 columns on desktop */
+            height: 250px; 
+            background-color: #111;
+            border-top: 2px solid #333;
+            flex-shrink: 0;
+        }
+
+        /* Individual graph container */
+        .graph-container {
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+            position: relative;
+            border-left: 1px solid #333;
+            min-width: 0; /* Fix for flexbox/grid overflow */
+        }
+        .graph-container:first-child {
+            border-left: none;
+        }
+
+        /* Canvas elements for the graphs */
+        .graph-canvas {
+            width: 100%;
+            height: calc(100% - 30px);
+            background-color: #000;
+            border-radius: 4px;
+        }
+        
+        /* Titles for each graph */
+        .graph-title {
+            font-size: 14px;
+            margin-bottom: 5px;
+            color: #ccc;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* UI Overlays */
+        #instructions, #vector-info {
+            position: absolute;
+            left: 15px;
+            padding: 10px 15px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            font-size: 14px;
+            pointer-events: none;
+            max-width: calc(100% - 40px);
+        }
+        #instructions {
+            bottom: 15px;
+            transition: opacity 0.5s ease-in-out;
+        }
+        #vector-info {
+            top: 15px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* --- RESPONSIVE DESIGN FOR MOBILE --- */
+        @media (max-width: 900px) {
+             #visualizations-container {
+                grid-template-columns: repeat(3, 1fr); /* 3 columns on tablet */
+                height: 340px;
+             }
+             .graph-container { border-top: 1px solid #333; }
+             .graph-container:nth-child(-n+3) { border-top: none; } /* First row */
+             .graph-container:nth-child(3n+1) { border-left: none; } /* First column */
+             .graph-container:nth-child(3n) { border-left: 1px solid #333; } /* Last column */
+        }
+
+        @media (max-width: 600px) {
+             #visualizations-container {
+                grid-template-columns: repeat(2, 1fr); /* 2 columns on phone */
+                height: 500px;
+             }
+             .graph-container:nth-child(-n+2) { border-top: none; }
+             .graph-container:nth-child(2n+1) { border-left: none; }
+             .graph-container:nth-child(2n) { border-left: 1px solid #333; }
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="mandelbrot-container">
+        <canvas id="mandelbrotCanvas"></canvas>
+        <div id="instructions">
+            <p><strong>Hover</strong> to see live updates</p>
+            <p><strong>Click</strong> to lock selection</p>
+            <p><strong>Scroll/Pinch</strong> to zoom</p>
+        </div>
+        <div id="vector-info">c = 0.000 + 0.000i</div>
+    </div>
+
+    <div id="visualizations-container">
+        <div class="graph-container">
+            <div class="graph-title">Julia Set (for c)</div>
+            <canvas class="graph-canvas" id="juliaCanvas"></canvas>
+        </div>
+        <div class="graph-container">
+            <div class="graph-title">Complex Plane</div>
+            <canvas class="graph-canvas" id="complexPlaneCanvas"></canvas>
+        </div>
+        <div class="graph-container">
+            <div class="graph-title">Iteration Path</div>
+            <canvas class="graph-canvas" id="iterationCanvas"></canvas>
+        </div>
+        <div class="graph-container">
+            <div class="graph-title">Real Component</div>
+            <canvas class="graph-canvas" id="cosWaveCanvas"></canvas>
+        </div>
+        <div class="graph-container">
+            <div class="graph-title">Imaginary Component</div>
+            <canvas class="graph-canvas" id="sinWaveCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // --- GET ELEMENTS AND CONTEXTS ---
+        const mandelbrotCanvas = document.getElementById('mandelbrotCanvas');
+        const m_ctx = mandelbrotCanvas.getContext('2d');
+        const graphCanvases = {
+            julia: document.getElementById('juliaCanvas').getContext('2d'),
+            cp: document.getElementById('complexPlaneCanvas').getContext('2d'),
+            cos: document.getElementById('cosWaveCanvas').getContext('2d'),
+            sin: document.getElementById('sinWaveCanvas').getContext('2d'),
+            iter: document.getElementById('iterationCanvas').getContext('2d'),
+        };
+        const instructions = document.getElementById('instructions');
+        const vectorInfo = document.getElementById('vector-info');
+
+        // --- GLOBAL STATE ---
+        let m_width, m_height;
+        let centerX = -0.7, centerY = 0;
+        let viewHeight = 4.0;
+        const maxIterations = 150;
+        
+        let hoverC_re = 0.0, hoverC_im = 0.0; // For live hover updates
+        let lockedC_re = -0.4, lockedC_im = 0.6; // Default starting point
+        let isLocked = true; // Start with a locked selection
+
+        // Interaction state
+        let isDragging = false;
+        let mouseX = 0, mouseY = 0;
+        let lastX = 0, lastY = 0;
+        let instructionTimeout;
+        let hoverTimeout;
+
+        // --- COORDINATE MAPPING ---
+        function getComplexCoords(px, py) {
+            const viewWidth = viewHeight * (m_width / m_height);
+            const re = centerX - viewWidth / 2 + (px / m_width) * viewWidth;
+            const im = centerY + viewHeight / 2 - (py / m_height) * viewHeight;
+            return { re, im };
+        }
+
+        function getPixelCoords(re, im) {
+            const viewWidth = viewHeight * (m_width / m_height);
+            const px = ((re - centerX + viewWidth / 2) / viewWidth) * m_width;
+            const py = ((-im + centerY + viewHeight / 2) / viewHeight) * m_height;
+            return { px, py };
+        }
+        
+        // --- FRACTAL LOGIC ---
+        function calculateMandelbrot(c_re, c_im) {
+            let z_re = 0, z_im = 0, n = 0;
+            while (n < maxIterations) {
+                const z_re_sq = z_re * z_re;
+                const z_im_sq = z_im * z_im;
+                if (z_re_sq + z_im_sq > 4) return n;
+                const z_im_temp = 2 * z_re * z_im + c_im;
+                z_re = z_re_sq - z_im_sq + c_re;
+                z_im = z_im_temp;
+                n++;
+            }
+            return maxIterations;
+        }
+
+        function calculateJulia(z_re, z_im, c_re, c_im) {
+            let n = 0;
+            while (n < maxIterations) {
+                const z_re_sq = z_re * z_re;
+                const z_im_sq = z_im * z_im;
+                if (z_re_sq + z_im_sq > 4) return n;
+                const z_im_temp = 2 * z_re * z_im + c_im;
+                z_re = z_re_sq - z_im_sq + c_re;
+                z_im = z_im_temp;
+                n++;
+            }
+            return maxIterations;
+        }
+
+        // --- DRAWING FUNCTIONS ---
+        function drawMandelbrot() {
+            const pixelStep = isDragging ? 4 : 1;
+            for (let px = 0; px < m_width; px += pixelStep) {
+                for (let py = 0; py < m_height; py += pixelStep) {
+                    const { re, im } = getComplexCoords(px, py);
+                    const iterations = calculateMandelbrot(re, im);
+                    if (iterations === maxIterations) {
+                        m_ctx.fillStyle = '#000';
+                    } else {
+                        const hue = (iterations * 10) % 360;
+                        const saturation = 90;
+                        const lightness = iterations < 15 ? 15 + iterations * 2.5 : 50;
+                        m_ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                    }
+                    m_ctx.fillRect(px, py, pixelStep, pixelStep);
+                }
+            }
+            drawSelectionMarker();
+        }
+
+        function drawSelectionMarker() {
+            if (!isLocked) return;
+            const { px, py } = getPixelCoords(lockedC_re, lockedC_im);
+            m_ctx.strokeStyle = '#fff';
+            m_ctx.lineWidth = 1.5;
+            m_ctx.beginPath();
+            m_ctx.moveTo(px - 10, py);
+            m_ctx.lineTo(px + 10, py);
+            m_ctx.moveTo(px, py - 10);
+            m_ctx.lineTo(px, py + 10);
+            m_ctx.stroke();
+        }
+
+        function drawJuliaSet(ctx, c_re, c_im) {
+            const w = ctx.canvas.width;
+            const h = ctx.canvas.height;
+            const pixelStep = 1;
+
+            for (let px = 0; px < w; px += pixelStep) {
+                for (let py = 0; py < h; py += pixelStep) {
+                    const z_re = (px - w / 2) / (w / 4);
+                    const z_im = (py - h / 2) / (h / 4);
+                    const iterations = calculateJulia(z_re, z_im, c_re, c_im);
+
+                    if (iterations === maxIterations) {
+                        ctx.fillStyle = '#000';
+                    } else {
+                        const hue = (iterations * 10) % 360;
+                        const saturation = 90;
+                        const lightness = iterations < 15 ? 15 + iterations * 2.5 : 50;
+                        ctx.fillStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+                    }
+                    ctx.fillRect(px, py, pixelStep, pixelStep);
+                }
+            }
+        }
+
+        // --- VISUALIZATION LOGIC ---
+        function updateAllVisualizations(c_re, c_im) {
+            const sign = c_im >= 0 ? '+' : '-';
+            vectorInfo.textContent = `c = ${c_re.toFixed(3)} ${sign} ${Math.abs(c_im).toFixed(3)}i`;
+            
+            drawComplexPlane(graphCanvases.cp, c_re, c_im);
+            drawWave(graphCanvases.cos, c_re, false);
+            drawWave(graphCanvases.sin, c_im, true);
+            drawIterationPath(graphCanvases.iter, c_re, c_im);
+            drawJuliaSet(graphCanvases.julia, c_re, c_im);
+        }
+        
+        function drawAxes(ctx, labelX, labelY) {
+            const w = ctx.canvas.width; const h = ctx.canvas.height;
+            const cX = w / 2; const cY = h / 2;
+            ctx.strokeStyle = '#444'; ctx.fillStyle = '#999'; ctx.font = '12px Inter';
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.beginPath(); ctx.moveTo(0, cY); ctx.lineTo(w, cY); ctx.stroke();
+            ctx.fillText(labelX, w - 20, cY - 10);
+            ctx.beginPath(); ctx.moveTo(cX, 0); ctx.lineTo(cX, h); ctx.stroke();
+            ctx.fillText(labelY, cX + 15, 10);
+        }
+
+        function drawComplexPlane(ctx, c_re, c_im) {
+            const w = ctx.canvas.width; const h = ctx.canvas.height;
+            ctx.clearRect(0, 0, w, h); drawAxes(ctx, 'Re', 'Im');
+            const scale = Math.min(w, h) / 4;
+            const vX = w / 2 + c_re * scale; const vY = h / 2 - c_im * scale;
+            ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(w / 2, h / 2); ctx.lineTo(vX, vY); ctx.stroke();
+            const headlen = 8; const angle = Math.atan2(vY - h / 2, vX - w / 2);
+            ctx.fillStyle = '#00ffff'; ctx.beginPath(); ctx.moveTo(vX, vY);
+            ctx.lineTo(vX - headlen * Math.cos(angle - Math.PI / 6), vY - headlen * Math.sin(angle - Math.PI / 6));
+            ctx.lineTo(vX - headlen * Math.cos(angle + Math.PI / 6), vY - headlen * Math.sin(angle + Math.PI / 6));
+            ctx.closePath(); ctx.fill();
+        }
+
+        function drawWave(ctx, amp, isSine) {
+            const w = ctx.canvas.width; const h = ctx.canvas.height;
+            ctx.clearRect(0, 0, w, h); drawAxes(ctx, 'θ', 'Amp');
+            const cY = h / 2; const waveH = (h / 2) * 0.8;
+            ctx.strokeStyle = isSine ? '#ff00ff' : '#ffff00'; ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let x = 0; x < w; x++) {
+                const angle = (x / w) * Math.PI * 4;
+                const y = cY - amp * Math[isSine ? 'sin' : 'cos'](angle) * waveH;
+                if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        }
+
+        function drawIterationPath(ctx, c_re, c_im) {
+            const w = ctx.canvas.width; const h = ctx.canvas.height;
+            ctx.clearRect(0, 0, w, h); drawAxes(ctx, 'Re', 'Im');
+            const scale = Math.min(w, h) / 4.2;
+            ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(w/2, h/2, 2 * scale, 0, Math.PI * 2); ctx.stroke();
+            let z_re = 0, z_im = 0, n = 0; const path = [{x: 0, y: 0}];
+            while (n < maxIterations) {
+                const z_re_sq = z_re * z_re; const z_im_sq = z_im * z_im;
+                if (z_re_sq + z_im_sq > 4) break;
+                const z_im_temp = 2 * z_re * z_im + c_im;
+                z_re = z_re_sq - z_im_sq + c_re; z_im = z_im_temp;
+                path.push({x: z_re, y: z_im}); n++;
+            }
+            ctx.strokeStyle = '#0f0'; ctx.lineWidth = 1.5; ctx.beginPath();
+            for(let i = 0; i < path.length; i++) {
+                const px = w/2 + path[i].x * scale; const py = h/2 - path[i].y * scale;
+                if(i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.stroke();
+        }
+
+
+        // --- EVENT HANDLERS ---
+        function handleResize() {
+            const container = document.getElementById('mandelbrot-container');
+            m_width = container.clientWidth; m_height = container.clientHeight;
+            mandelbrotCanvas.width = m_width; mandelbrotCanvas.height = m_height;
+            document.querySelectorAll('.graph-canvas').forEach(canvas => {
+                const parent = canvas.parentElement;
+                canvas.width = parent.clientWidth - 20;
+                canvas.height = parent.clientHeight - 40;
+            });
+            drawMandelbrot();
+            updateAllVisualizations(isLocked ? lockedC_re : hoverC_re, isLocked ? lockedC_im : hoverC_im);
+        }
+
+        function handleWheel(event) {
+            event.preventDefault();
+            const rect = mandelbrotCanvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            const { re: re_before, im: im_before } = getComplexCoords(mouseX, mouseY);
+            const zoomFactor = event.deltaY < 0 ? 1 / 1.25 : 1.25;
+            viewHeight *= zoomFactor;
+            const { re: re_after, im: im_after } = getComplexCoords(mouseX, mouseY);
+            centerX += re_before - re_after;
+            centerY += im_before - im_after;
+            drawMandelbrot();
+        }
+
+        function handleMouseDown(e) {
+            isDragging = true;
+            lastX = e.clientX;
+            lastY = e.clientY;
+            mandelbrotCanvas.style.cursor = 'grabbing';
+            showInstructions();
+        }
+
+        function handleMouseMove(e) {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+
+            if (isDragging) {
+                isLocked = false; // Unlock on drag
+                const dx = e.clientX - lastX;
+                const dy = e.clientY - lastY;
+                const viewWidth = viewHeight * (m_width / m_height);
+                centerX -= (dx / m_width) * viewWidth;
+                centerY += (dy / m_height) * viewHeight;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                drawMandelbrot();
+            }
+            
+            if (!isLocked) {
+                const rect = mandelbrotCanvas.getBoundingClientRect();
+                const { re, im } = getComplexCoords(mouseX - rect.left, mouseY - rect.top);
+                hoverC_re = re;
+                hoverC_im = im;
+                
+                clearTimeout(hoverTimeout);
+                hoverTimeout = setTimeout(() => {
+                    updateAllVisualizations(hoverC_re, hoverC_im);
+                }, 20); // 20ms delay for performance
+            }
+        }
+
+        function handleMouseUp(e) {
+            const wasDragging = isDragging;
+            isDragging = false;
+            mandelbrotCanvas.style.cursor = 'crosshair';
+
+            if (Math.abs(e.clientX - lastX) < 5 && Math.abs(e.clientY - lastY) < 5 && wasDragging) {
+                 isLocked = !isLocked;
+                 if (isLocked) {
+                    lockedC_re = hoverC_re;
+                    lockedC_im = hoverC_im;
+                    updateAllVisualizations(lockedC_re, lockedC_im);
+                 }
+            }
+            drawMandelbrot();
+        }
+
+        function showInstructions() {
+            clearTimeout(instructionTimeout);
+            instructions.style.opacity = 1;
+            instructionTimeout = setTimeout(() => { instructions.style.opacity = 0; }, 4000);
+        }
+
+        // --- INITIALIZATION ---
+        window.addEventListener('resize', handleResize);
+        mandelbrotCanvas.addEventListener('mousedown', handleMouseDown);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        mandelbrotCanvas.addEventListener('wheel', handleWheel, { passive: false });
+        
+        handleResize();
+        showInstructions();
+    </script>
+</body>
+</html>

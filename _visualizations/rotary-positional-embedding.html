@@ -1,0 +1,403 @@
+---
+date: 2025-08-27
+---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Positional Encoding in 3D(Final Version)</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #000000; /* Pure black background */
+            color: #e5e7eb;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+        #title-container {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #title-container h1 {
+            margin: 0;
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: #ffffff;
+        }
+        #title-container p {
+            margin: 0.25rem;
+            color: #9ca3af;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        #controls-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(17, 24, 39, 0.8);
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            border: 1px solid #374151;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            z-index: 101;
+            width: 90%;
+            max-width: 900px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(5px);
+        }
+        .controls-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+        .control-group label {
+            font-weight: 500;
+            white-space: nowrap;
+            color: #9ca3af;
+        }
+        .control-group input[type="range"] {
+            width: 120px;
+            cursor: pointer;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+        }
+        .control-group input[type="range"]::-webkit-slider-runnable-track { background: #374151; height: 0.25rem; border-radius: 0.5rem; }
+        .control-group input[type="range"]::-moz-range-track { background: #374151; height: 0.25rem; border-radius: 0.5rem; }
+        .control-group input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; margin-top: -5px; background-color: #e879f9; height: 1rem; width: 1rem; border-radius: 9999px; border: 2px solid #111827; }
+        .control-group input[type="range"]::-moz-range-thumb { background-color: #e879f9; height: 1rem; width: 1rem; border-radius: 9999px; border: 2px solid #111827; }
+        .control-group .value-display { font-weight: bold; min-width: 50px; text-align: center; background-color: #1f2937; padding: 0.25rem 0.5rem; border-radius: 6px; color: #e5e7eb; }
+        .warning { font-size: 0.75rem; color: #fca5a5; text-align: center; margin-top: 0.5rem; }
+        
+        /* Toggle Switch Styles */
+        .toggle-switch { position: relative; display: inline-block; width: 50px; height: 28px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #374151; transition: .4s; border-radius: 28px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .toggle-slider { background-color: #e879f9; }
+        input:checked + .toggle-slider:before { transform: translateX(22px); }
+
+        #slice-controls { display: none; } /* Initially hidden */
+        
+        .color-key {
+            width: 120px;
+            height: 12px;
+            border-radius: 6px;
+            background: linear-gradient(to right, red, lime, cyan, blue, magenta);
+        }
+
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="title-container">
+        <h1>Rotary Positional Embedding (RoPE)</h1>
+        <p>
+            Top Half (Sine) vs Bottom Half (Cosine).
+            <span style="color: #ff0000; font-weight: 500;">Trough</span>
+            <span class="color-key"></span>
+            <span style="color: #ff00ff; font-weight: 500;">Peak</span>
+        </p>
+    </div>
+
+    <div id="container"></div>
+
+    <div id="controls-container">
+        <div class="controls-row">
+            <div class="control-group">
+                <label for="dModelSlider">d_model:</label>
+                <input type="range" id="dModelSlider" min="2" max="512" step="2" value="64">
+                <span id="dModelValue" class="value-display">64</span>
+            </div>
+            <div class="control-group">
+                <label for="seqLengthSlider">Seq Length:</label>
+                <input type="range" id="seqLengthSlider" min="0" max="100" step="1" value="50">
+                <span id="seqLengthValue" class="value-display">1000</span>
+            </div>
+             <div class="control-group">
+                <label for="thetaSlider">Theta (θ):</label>
+                <input type="range" id="thetaSlider" min="100" max="100000" step="100" value="10000">
+                <span id="thetaValue" class="value-display">10000</span>
+            </div>
+            <div class="control-group">
+                <label for="sliceToggle">Token Position Slice:</label>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="sliceToggle">
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>
+        </div>
+        <div class="controls-row" id="slice-controls">
+             <div class="control-group">
+                <label for="sliceSlider">Position:</label>
+                <input type="range" id="sliceSlider" min="0" max="999" step="1" value="0">
+                <span id="sliceValue" class="value-display">0</span>
+            </div>
+        </div>
+        <p class="warning">Note: High values can impact performance.</p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Scene Setup ---
+        let scene, camera, renderer, controls;
+        let sinMesh, cosMesh;
+        let d_model = 64;
+        let seq_length = 1000;
+        let theta = 10000;
+        const dummy = new THREE.Object3D();
+
+        // --- UI Elements ---
+        const dModelSlider = document.getElementById('dModelSlider');
+        const dModelValue = document.getElementById('dModelValue');
+        const seqLengthSlider = document.getElementById('seqLengthSlider');
+        const seqLengthValue = document.getElementById('seqLengthValue');
+        const thetaSlider = document.getElementById('thetaSlider');
+        const thetaValue = document.getElementById('thetaValue');
+        const sliceToggle = document.getElementById('sliceToggle');
+        const sliceControls = document.getElementById('slice-controls');
+        const sliceSlider = document.getElementById('sliceSlider');
+        const sliceValue = document.getElementById('sliceValue');
+        
+        const minSeq = 10;
+        const maxSeq = 100000;
+        const minLog = Math.log(minSeq);
+        const maxLog = Math.log(maxSeq);
+        const logScale = (maxLog - minLog) / 100;
+
+        function getLogValue(sliderVal) {
+            return Math.round(Math.exp(minLog + logScale * sliderVal));
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 20000);
+            camera.position.set(d_model * 1.2, d_model, 100);
+
+            const container = document.getElementById('container');
+            try {
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                container.appendChild(renderer.domElement);
+            } catch (e) {
+                console.error("Could not initialize WebGL Renderer.", e);
+                alert("Sorry, your browser couldn't create a WebGL context. This may be due to high settings.");
+                return;
+            }
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+            scene.add(ambientLight);
+             const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight1.position.set(1, 1, 1);
+            scene.add(dirLight1);
+            
+            createVisualization();
+
+            window.addEventListener('resize', onWindowResize);
+            dModelSlider.addEventListener('input', onSliderChange);
+            seqLengthSlider.addEventListener('input', onSliderChange);
+            thetaSlider.addEventListener('input', onSliderChange);
+            sliceToggle.addEventListener('change', onToggleChange);
+            sliceSlider.addEventListener('input', onSliceSliderChange);
+
+            animate();
+        }
+
+        function valueToColor(value) {
+            const t = (value + 1) / 2;
+            const hue = t * 0.8;
+            return new THREE.Color().setHSL(hue, 1.0, 0.5);
+        }
+
+        function createVisualization() {
+            if (sinMesh) scene.remove(sinMesh);
+            if (cosMesh) scene.remove(cosMesh);
+
+            const sliceMode = sliceToggle.checked;
+            const slicePosition = parseInt(sliceSlider.value);
+            const dimensions = d_model / 2;
+            
+            // Hard cap on rendered sequence length to prevent crashes
+            const render_seq_length = Math.min(seq_length, 1024);
+            
+            let count = sliceMode ? dimensions : render_seq_length * dimensions;
+            
+            const MAX_INSTANCES = (512 * 1024) / 2; 
+            if (count > MAX_INSTANCES) {
+                console.warn(`Instance count (${count}) exceeds safety limit. Aborting render.`);
+                return;
+            };
+            if (count <= 0) return;
+
+            const geometry = new THREE.BoxGeometry(0.8, 1, 0.8);
+            const sinMaterial = new THREE.MeshBasicMaterial();
+            const cosMaterial = new THREE.MeshBasicMaterial();
+            
+            sinMesh = new THREE.InstancedMesh(geometry, sinMaterial, count);
+            cosMesh = new THREE.InstancedMesh(geometry, cosMaterial, count);
+            sinMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            cosMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+            if (sliceMode) {
+                const pos = slicePosition;
+                for (let i = 0; i < dimensions; i++) {
+                    const angle = pos / Math.pow(theta, (2 * i) / d_model);
+                    const sinVal = Math.sin(angle);
+                    const cosVal = Math.cos(angle);
+                    
+                    const sinHeight = Math.max(Math.abs(sinVal) * 15, 0.1);
+                    dummy.position.set(i * 2 - dimensions, (sinVal * sinHeight) / 2, 0);
+                    dummy.scale.set(1, sinHeight, 1);
+                    dummy.updateMatrix();
+                    sinMesh.setMatrixAt(i, dummy.matrix);
+                    sinMesh.setColorAt(i, valueToColor(sinVal));
+
+                    const cosHeight = Math.max(Math.abs(cosVal) * 15, 0.1);
+                    dummy.position.set(i * 2 - dimensions, (-cosVal * cosHeight) / 2, 0);
+                    dummy.scale.set(1, cosHeight, 1);
+                    dummy.updateMatrix();
+                    cosMesh.setMatrixAt(i, dummy.matrix);
+                    cosMesh.setColorAt(i, valueToColor(-cosVal));
+                }
+            } else {
+                let instanceIndex = 0;
+                for (let pos = 0; pos < render_seq_length; pos++) {
+                    for (let i = 0; i < dimensions; i++) {
+                        const angle = pos / Math.pow(theta, (2 * i) / d_model);
+                        const sinVal = Math.sin(angle);
+                        const cosVal = Math.cos(angle);
+
+                        const sinHeight = Math.max(Math.abs(sinVal) * 15, 0.1);
+                        dummy.position.set(i * 2 - dimensions, (sinVal * sinHeight) / 2, pos - render_seq_length / 2);
+                        dummy.scale.set(1, sinHeight, 1);
+                        dummy.updateMatrix();
+                        sinMesh.setMatrixAt(instanceIndex, dummy.matrix);
+                        sinMesh.setColorAt(instanceIndex, valueToColor(sinVal));
+
+                        const cosHeight = Math.max(Math.abs(cosVal) * 15, 0.1);
+                        dummy.position.set(i * 2 - dimensions, (-cosVal * cosHeight) / 2, pos - render_seq_length / 2);
+                        dummy.scale.set(1, cosHeight, 1);
+                        dummy.updateMatrix();
+                        cosMesh.setMatrixAt(instanceIndex, dummy.matrix);
+                        cosMesh.setColorAt(instanceIndex, valueToColor(-cosVal));
+                        
+                        instanceIndex++;
+                    }
+                }
+            }
+            
+            sinMesh.instanceMatrix.needsUpdate = true;
+            cosMesh.instanceMatrix.needsUpdate = true;
+            if (sinMesh.instanceColor) sinMesh.instanceColor.needsUpdate = true;
+            if (cosMesh.instanceColor) cosMesh.instanceColor.needsUpdate = true;
+            scene.add(sinMesh);
+            scene.add(cosMesh);
+            
+            if (controls) {
+                controls.target.set(0, 0, 0);
+            }
+        }
+
+        function onSliderChange() {
+            d_model = parseInt(dModelSlider.value);
+            seq_length = getLogValue(parseInt(seqLengthSlider.value));
+            theta = parseInt(thetaSlider.value);
+
+            dModelValue.textContent = d_model;
+            seqLengthValue.textContent = seq_length;
+            thetaValue.textContent = theta;
+
+            sliceSlider.max = seq_length - 1;
+            if (parseInt(sliceSlider.value) > seq_length - 1) {
+                sliceSlider.value = seq_length - 1;
+            }
+            sliceValue.textContent = sliceSlider.value;
+            debouncedUpdate();
+        }
+
+        function onSliceSliderChange() {
+            sliceSlider.max = seq_length - 1;
+            if (parseInt(sliceSlider.value) > seq_length - 1) {
+                sliceSlider.value = seq_length - 1;
+            }
+            sliceValue.textContent = sliceSlider.value;
+            debouncedUpdate();
+        }
+
+        function onToggleChange() {
+            sliceControls.style.display = this.checked ? 'flex' : 'none';
+            if (this.checked) {
+                controls.reset();
+                camera.position.set(0, d_model * 0.5, d_model * 1.5);
+            } else {
+                controls.reset();
+                camera.position.set(d_model * 1.2, d_model, 100);
+            }
+            debouncedUpdate();
+        }
+
+        let updateTimeout;
+        function debouncedUpdate() {
+            clearTimeout(updateTimeout);
+            updateTimeout = setTimeout(createVisualization, 150);
+        }
+
+        function onWindowResize() {
+            if (!renderer) return;
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            if (!renderer) return;
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        onSliderChange();
+        init();
+    </script>
+</body>
+</html>

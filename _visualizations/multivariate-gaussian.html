@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multidimensional Normal Distributions</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU0KOVEMmg9rtab2JJv5tnGDxI3JEoqwCIlC5LhJSmbmyLGhEzOTUAP" crossorigin="anonymous">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000;
+            color: #e5e7eb;
+            overflow: hidden;
+        }
+        #container, #labels, #svg-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        #container {
+             pointer-events: auto;
+        }
+        #labels {
+            z-index: 2;
+        }
+        #svg-overlay {
+            z-index: 19; /* Below formula, above everything else */
+        }
+        .label {
+            color: #9ca3af;
+            font-size: 12px;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.7);
+        }
+        #ui-panel, #settings-panel {
+            background-color: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(55, 65, 81, 0.5);
+            z-index: 10;
+        }
+        #settings-panel {
+            z-index: 30; /* Higher z-index to be on top of other UI */
+        }
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #3b82f6;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .katex {
+             font-size: 0.9em;
+        }
+        #formula-1d .katex {
+            font-size: 1.2em;
+        }
+        #formula-container {
+            position: absolute;
+            z-index: 20;
+            pointer-events: none;
+            background-color: rgba(17, 24, 39, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(55, 65, 81, 0.5);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            transform: translate(-50%, -100%);
+            transition: opacity 0.2s ease-in-out;
+        }
+         #mode-selector .mode-btn {
+             background-color: rgba(17, 24, 39, 0.8);
+             backdrop-filter: blur(10px);
+             border: 1px solid rgba(55, 65, 81, 0.5);
+         }
+         #mode-selector .mode-btn.bg-blue-600 {
+             border-color: rgba(59, 130, 246, 0.5);
+         }
+        .cov-matrix {
+            font-family: 'Fira Code', monospace;
+            border-left: 2px solid #6b7280;
+            border-right: 2px solid #6b7280;
+            padding: 0 8px;
+        }
+        .cov-matrix-popup {
+            background-color: rgba(31, 41, 55, 0.9);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            width: 28px;
+            height: 28px;
+            border: none;
+            padding: 0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch-wrapper {
+            padding: 0;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+        }
+        .settings-section-header {
+            border-bottom: 1px solid rgba(55, 65, 81, 0.8);
+            padding-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+            color: #9ca3af;
+        }
+    </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code&display=swap" rel="stylesheet">
+</head>
+<body class="m-0 p-0">
+    <div id="container"></div>
+    <div id="labels"></div>
+    <svg id="svg-overlay" class="hidden"><line id="connector-line" stroke="#6b7280" stroke-width="1.5" stroke-dasharray="4 2"/></svg>
+
+    <div class="absolute top-4 left-1/2 -translate-x-1/2 z-10 text-center w-full max-w-3xl">
+        <h1 class="text-xl font-bold text-gray-100" style="text-shadow: 1px 1px 3px rgba(0,0,0,0.7);">Multivariate Gaussian</h1>
+    </div>
+
+    <button id="settings-btn" class="absolute top-4 right-4 z-30 p-2 rounded-md bg-gray-800 bg-opacity-50 hover:bg-opacity-75 transition">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-300"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+    </button>
+    
+    <div id="settings-panel" class="absolute top-16 right-4 z-20 p-4 rounded-lg shadow-2xl w-72 hidden max-h-[calc(100vh-5rem)] overflow-y-auto">
+        <h3 class="text-lg font-bold mb-2 text-gray-100">Settings</h3>
+        <div class="space-y-4">
+             <div>
+                <h4 class="settings-section-header text-sm">Visibility</h4>
+                <div class="space-y-2 pl-1">
+                    <div class="flex items-center justify-between"><label for="showSurface" class="text-sm font-medium text-gray-300">Surface</label><input id="showSurface" type="checkbox" class="h-4 w-4 rounded" checked></div>
+                    <div class="flex items-center justify-between"><label for="showPoints" class="text-sm font-medium text-gray-300">Data Points</label><input id="showPoints" type="checkbox" class="h-4 w-4 rounded" checked></div>
+                    <div class="flex items-center justify-between"><label for="showContour" class="text-sm font-medium text-gray-300">Contour / Ellipsoid</label><input id="showContour" type="checkbox" class="h-4 w-4 rounded" checked></div>
+                    <div class="flex items-center justify-between"><label for="showHistograms" class="text-sm font-medium text-gray-300">Histograms</label><input id="showHistograms" type="checkbox" class="h-4 w-4 rounded" checked></div>
+                </div>
+            </div>
+
+            <div>
+                 <h4 class="settings-section-header text-sm">Data Points</h4>
+                 <div class="space-y-3">
+                     <div>
+                        <label for="numPoints" class="block text-sm font-medium text-gray-300">Number of Points: <span id="numPointsValue">20000</span></label>
+                        <input id="numPoints" type="range" min="100" max="50000" step="100" value="20000" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                     <div>
+                        <label for="pointSize" class="block text-sm font-medium text-gray-300">Point Size: <span id="pointSizeValue">0.08</span></label>
+                        <input id="pointSize" type="range" min="0.01" max="0.5" step="0.01" value="0.08" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                     <div>
+                        <label for="pointOpacity" class="block text-sm font-medium text-gray-300">Point Opacity: <span id="pointOpacityValue">1.0</span></label>
+                        <input id="pointOpacity" type="range" min="0.1" max="1.0" step="0.05" value="1.0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                 </div>
+            </div>
+
+            <div>
+                 <h4 class="settings-section-header text-sm">Graphics</h4>
+                 <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="flex items-center justify-between"><label for="surfaceColor" class="text-sm font-medium text-gray-300">Surface</label><input id="surfaceColor" type="color" value="#8f00ff"></div>
+                        <div class="flex items-center justify-between"><label for="contourColor" class="text-sm font-medium text-gray-300">Contour</label><input id="contourColor" type="color" value="#34d399"></div>
+                        <div class="flex items-center justify-between"><label for="colorX" class="text-sm font-medium text-gray-300">X-Axis</label><input id="colorX" type="color" value="#ef4444"></div>
+                        <div class="flex items-center justify-between"><label for="colorZ" class="text-sm font-medium text-gray-300">Z-Axis</label><input id="colorZ" type="color" value="#3b82f6"></div>
+                        <div class="flex items-center justify-between"><label for="gridColor" class="text-sm font-medium text-gray-300">Grid</label><input id="gridColor" type="color" value="#444444"></div>
+                    </div>
+                     <div>
+                        <label for="surfaceOpacity" class="block text-sm font-medium text-gray-300">Surface Opacity: <span id="surfaceOpacityValue">0.6</span></label>
+                        <input id="surfaceOpacity" type="range" min="0" max="1" step="0.05" value="0.6" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                     <div>
+                        <label for="traceOpacity" class="block text-sm font-medium text-gray-300">Trace Opacity: <span id="traceOpacityValue">0.5</span></label>
+                        <input id="traceOpacity" type="range" min="0" max="1" step="0.05" value="0.5" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                     <div>
+                        <label for="contourWidth" class="block text-sm font-medium text-gray-300">Contour Width: <span id="contourWidthValue">2</span></label>
+                        <input id="contourWidth" type="range" min="1" max="10" step="0.5" value="2" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                     <div>
+                        <label for="gridResolution" class="block text-sm font-medium text-gray-300">Grid Lines: <span id="gridResolutionValue">10</span></label>
+                        <input id="gridResolution" type="range" min="2" max="200" step="1" value="10" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                     <div>
+                        <label for="surfaceResolution" class="block text-sm font-medium text-gray-300">Surface Detail: <span id="surfaceResolutionValue">150</span></label>
+                        <input id="surfaceResolution" type="range" min="20" max="500" step="10" value="150" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                    <div>
+                        <label for="animationSpeed" class="block text-sm font-medium text-gray-300">Animation Speed: <span id="animationSpeedValue">4.0s</span></label>
+                        <input id="animationSpeed" type="range" min="1" max="10" step="0.5" value="4" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="formula-container" class="hidden">
+        <div id="formula-1d" class="hidden"><span>$$f(x) = \frac{1}{\sigma\sqrt{2\pi}} e^{-\frac{1}{2}\left(\frac{x-\mu}{\sigma}\right)^2}$$</span></div>
+        <div id="formula-2d" class="hidden"><span>$$f(\mathbf{x}) = \frac{1}{2\pi \sqrt{\det(\mathbf{\Sigma})}} \exp\left(-\frac{1}{2}(\mathbf{x}-\mathbf{\mu})^\mathrm{T}\mathbf{\Sigma}^{-1}(\mathbf{x}-\mathbf{\mu})\right)$$</span></div>
+        <div id="formula-3d" class="hidden"><span>$$f(\mathbf{x}) = \frac{1}{(2\pi)^{3/2} \sqrt{\det(\mathbf{\Sigma})}} \exp\left(-\frac{1}{2}(\mathbf{x}-\mathbf{\mu})^\mathrm{T}\mathbf{\Sigma}^{-1}(\mathbf{x}-\mathbf{\mu})\right)$$</span></div>
+    </div>
+    
+    <div class="absolute top-12 left-1/2 -translate-x-1/2 z-10 flex justify-center w-full max-w-3xl mt-2">
+        <div id="mode-selector" class="flex gap-2 justify-center">
+            <button data-mode="1d" class="mode-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 transition-colors">1D Normal</button>
+            <button data-mode="2d" class="mode-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 transition-colors">2D Bivariate</button>
+            <button data-mode="3d" class="mode-btn px-4 py-2 text-sm font-medium text-gray-300 rounded-md hover:bg-gray-700 transition-colors">3D Trivariate</button>
+        </div>
+    </div>
+
+    <div id="animation-controls-container" class="absolute top-24 left-1/2 -translate-x-1/2 z-10 flex justify-center w-full max-w-xl mt-2 gap-2 hidden">
+        <button id="convolve-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300 text-sm">Convolve</button>
+    </div>
+    
+    <div id="ui-panel" class="absolute bottom-4 left-1/2 -translate-x-1/2 p-4 rounded-lg shadow-2xl max-w-5xl w-full">
+        <!-- 1D Controls -->
+        <div id="controls-1d" class="hidden">
+            <div class="flex items-center justify-between gap-6">
+                <div class="grid grid-cols-2 gap-x-6 gap-y-2 flex-grow">
+                    <div>
+                        <label for="mean" class="block text-sm font-medium text-gray-300">&mu;: <span id="meanValue" class="font-bold text-blue-400">0.0</span></label>
+                        <input id="mean" type="range" min="-15" max="15" step="0.1" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                    <div>
+                        <label for="stdDev" class="block text-sm font-medium text-gray-300">&sigma;: <span id="stdDevValue" class="font-bold text-blue-400">1.0</span></label>
+                        <input id="stdDev" type="range" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                    </div>
+                </div>
+                <button id="generateData1D" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 text-base">Generate</button>
+            </div>
+        </div>
+        
+        <!-- 2D Controls -->
+        <div id="controls-2d" class="hidden">
+             <div class="flex items-center justify-between gap-6">
+                 <div class="grid grid-cols-3 gap-x-6 gap-y-2 flex-grow">
+                     <div>
+                         <label for="stdDevX2D" class="block text-sm font-medium text-gray-300">&sigma;<sub>x</sub>: <span id="stdDevXValue2D" class="font-bold text-blue-400">1.0</span></label>
+                         <input id="stdDevX2D" type="range" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div>
+                         <label for="stdDevZ2D" class="block text-sm font-medium text-gray-300">&sigma;<sub>z</sub>: <span id="stdDevZValue2D" class="font-bold text-blue-400">1.0</span></label>
+                         <input id="stdDevZ2D" type="range" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div>
+                         <label for="correlation2D" class="block text-sm font-medium text-gray-300">&rho;<sub>xz</sub>: <span id="correlationValue2D" class="font-bold text-blue-400">0.0</span></label>
+                         <input id="correlation2D" type="range" min="-0.99" max="0.99" step="0.01" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                 </div>
+                 <div class="flex items-center gap-4">
+                    <p id="covarianceOutput2D" class="text-center font-mono text-green-400">Cov(X,Z) = 0.00</p>
+                    <div id="cov-btn-2d" class="relative">
+                        <button id="toggle-cov-matrix-2d" class="font-mono text-xl p-2 rounded-md transition-colors bg-pink-600 hover:bg-pink-700 text-white">&Sigma;</button>
+                        <div id="cov-matrix-popup-2d" class="hidden cov-matrix-popup absolute bottom-full right-0 mb-2 p-2 rounded-md">
+                             <div class="cov-matrix grid grid-cols-2 gap-x-4 text-center text-green-400">
+                                 <span id="cov-2d-00">1.00</span><span id="cov-2d-01">0.00</span>
+                                 <span id="cov-2d-10">0.00</span><span id="cov-2d-11">1.00</span>
+                             </div>
+                        </div>
+                    </div>
+                    <button id="generateData2D" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 text-base">Generate</button>
+                 </div>
+             </div>
+        </div>
+
+        <!-- 3D Controls -->
+        <div id="controls-3d" class="hidden">
+             <div class="flex items-start justify-between gap-4">
+                 <div class="grid grid-cols-3 gap-x-4 gap-y-2 flex-grow">
+                     <div>
+                         <label for="stdDevX3D" class="block text-sm font-medium text-gray-300">&sigma;<sub>x</sub>: <span id="stdDevXValue3D" class="font-bold text-blue-400">1.0</span></label>
+                         <input id="stdDevX3D" type="range" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div>
+                         <label for="stdDevY3D" class="block text-sm font-medium text-gray-300">&sigma;<sub>y</sub>: <span id="stdDevYValue3D" class="font-bold text-blue-400">1.0</span></label>
+                         <input id="stdDevY3D" type="range" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                      <div>
+                         <label for="stdDevZ3D" class="block text-sm font-medium text-gray-300">&sigma;<sub>z</sub>: <span id="stdDevZValue3D" class="font-bold text-blue-400">1.0</span></label>
+                         <input id="stdDevZ3D" type="range" min="0.1" max="10" step="0.1" value="1" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div>
+                         <label for="rhoXY" class="block text-sm font-medium text-gray-300">&rho;<sub>xy</sub>: <span id="rhoXYValue" class="font-bold text-blue-400">0.0</span></label>
+                         <input id="rhoXY" type="range" min="-0.9" max="0.9" step="0.01" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div>
+                         <label for="rhoXZ" class="block text-sm font-medium text-gray-300">&rho;<sub>xz</sub>: <span id="rhoXZValue" class="font-bold text-blue-400">0.0</span></label>
+                         <input id="rhoXZ" type="range" min="-0.9" max="0.9" step="0.01" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div>
+                         <label for="rhoYZ" class="block text-sm font-medium text-gray-300">&rho;<sub>yz</sub>: <span id="rhoYZValue" class="font-bold text-blue-400">0.0</span></label>
+                         <input id="rhoYZ" type="range" min="-0.9" max="0.9" step="0.01" value="0" class="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider">
+                     </div>
+                     <div id="error-message-3d" class="text-red-500 text-xs text-center hidden col-span-3 pt-1">Invalid correlation matrix. The combination of &rho; values is not possible.</div>
+                 </div>
+                 <div class="flex items-center gap-4 self-center">
+                     <div id="cov-btn-3d" class="relative">
+                         <button id="toggle-cov-matrix-3d" class="font-mono text-xl p-2 rounded-md transition-colors bg-pink-600 hover:bg-pink-700 text-white">&Sigma;</button>
+                         <div id="cov-matrix-popup-3d" class="hidden cov-matrix-popup absolute bottom-full right-0 mb-2 p-2 rounded-md">
+                             <div class="cov-matrix grid grid-cols-3 gap-x-3 text-center text-green-400 text-sm">
+                                 <span id="cov-3d-00">1.00</span><span id="cov-3d-01">0.00</span><span id="cov-3d-02">0.00</span>
+                                 <span id="cov-3d-10">0.00</span><span id="cov-3d-11">1.00</span><span id="cov-3d-12">0.00</span>
+                                 <span id="cov-3d-20">0.00</span><span id="cov-3d-21">0.00</span><span id="cov-3d-22">1.00</span>
+                             </div>
+                         </div>
+                     </div>
+                     <button id="generateData3D" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-5 rounded-lg transition duration-300 text-base">Generate</button>
+                 </div>
+             </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0i8" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" xintegrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous" onload="renderMathInElement(document.body);"></script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+        let scene, camera, renderer, controls, labelRenderer, raycaster;
+        const clock = new THREE.Clock();
+        const visualizationGroup = new THREE.Group();
+        const pdfGroup = new THREE.Group();
+        const guidesGroup = new THREE.Group();
+        const HISTOGRAM_BINS = 40;
+        const PLANE_SIZE = 60;
+        const TRACE_SCALE_FACTOR = 1.5;
+        let currentMode = '';
+        let peakPosition = new THREE.Vector3();
+        let maxHistHeight = 5;
+        let surfaceMaterialToAnimate = null;
+        let covarianceMatrixObject = null;
+        let convolveStartTime = 0;
+        
+        let sweepMasterGroup = null;
+        let sweepGroupX = null;
+        let sweepGroupZ = null;
+        let sweepAngle = 0;
+
+        let convolveSurface = null;
+        let revealPhase = 'none';
+        let revealStartTime = 0;
+        let pointsToReveal = null;
+        
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        const formulaContainer = document.getElementById('formula-container');
+        const svgOverlay = document.getElementById('svg-overlay');
+        const connectorLine = document.getElementById('connector-line');
+
+        const controls1D = document.getElementById('controls-1d');
+        const controls2D = document.getElementById('controls-2d');
+        const controls3D = document.getElementById('controls-3d');
+        const formula1D = document.getElementById('formula-1d');
+        const formula2D = document.getElementById('formula-2d');
+        const formula3D = document.getElementById('formula-3d');
+        const meanSlider = document.getElementById('mean');
+        const stdDevSlider = document.getElementById('stdDev');
+        const generateButton1D = document.getElementById('generateData1D');
+        const meanValue = document.getElementById('meanValue');
+        const stdDevValue = document.getElementById('stdDevValue');
+        const stdDevXSlider2D = document.getElementById('stdDevX2D');
+        const stdDevZSlider2D = document.getElementById('stdDevZ2D');
+        const correlationSlider2D = document.getElementById('correlation2D');
+        const generateButton2D = document.getElementById('generateData2D');
+        const stdDevXValue2D = document.getElementById('stdDevXValue2D');
+        const stdDevZValue2D = document.getElementById('stdDevZValue2D');
+        const correlationValue2D = document.getElementById('correlationValue2D');
+        const covarianceOutput2D = document.getElementById('covarianceOutput2D');
+        const stdDevXSlider3D = document.getElementById('stdDevX3D');
+        const stdDevYSlider3D = document.getElementById('stdDevY3D');
+        const stdDevZSlider3D = document.getElementById('stdDevZ3D');
+        const rhoXYSlider = document.getElementById('rhoXY');
+        const rhoXZSlider = document.getElementById('rhoXZ');
+        const rhoYZSlider = document.getElementById('rhoYZ');
+        const generateButton3D = document.getElementById('generateData3D');
+        const stdDevXValue3D = document.getElementById('stdDevXValue3D');
+        const stdDevYValue3D = document.getElementById('stdDevYValue3D');
+        const stdDevZValue3D = document.getElementById('stdDevZValue3D');
+        const rhoXYValue = document.getElementById('rhoXYValue');
+        const rhoXZValue = document.getElementById('rhoXZValue');
+        const rhoYZValue = document.getElementById('rhoYZValue');
+        const toggleCov2D = document.getElementById('toggle-cov-matrix-2d');
+        const popupCov2D = document.getElementById('cov-matrix-popup-2d');
+        const toggleCov3D = document.getElementById('toggle-cov-matrix-3d');
+        const popupCov3D = document.getElementById('cov-matrix-popup-3d');
+        const covBtn2D = document.getElementById('cov-btn-2d');
+        const covBtn3D = document.getElementById('cov-btn-3d');
+        const convolveBtn = document.getElementById('convolve-btn');
+        const animationControlsContainer = document.getElementById('animation-controls-container');
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsPanel = document.getElementById('settings-panel');
+        
+        const settings = {
+            surfaceColor: new THREE.Color(document.getElementById('surfaceColor').value),
+            contourColor: new THREE.Color(document.getElementById('contourColor').value),
+            colorX: new THREE.Color(document.getElementById('colorX').value),
+            colorZ: new THREE.Color(document.getElementById('colorZ').value),
+            gridColor: new THREE.Color(document.getElementById('gridColor').value),
+            gridResolution: parseInt(document.getElementById('gridResolution').value),
+            surfaceResolution: parseInt(document.getElementById('surfaceResolution').value),
+            showSurface: document.getElementById('showSurface').checked,
+            showPoints: document.getElementById('showPoints').checked,
+            showContour: document.getElementById('showContour').checked,
+            showHistograms: document.getElementById('showHistograms').checked,
+            numPoints: parseInt(document.getElementById('numPoints').value),
+            pointSize: parseFloat(document.getElementById('pointSize').value),
+            pointOpacity: parseFloat(document.getElementById('pointOpacity').value),
+            surfaceOpacity: parseFloat(document.getElementById('surfaceOpacity').value),
+            traceOpacity: parseFloat(document.getElementById('traceOpacity').value),
+            contourWidth: parseFloat(document.getElementById('contourWidth').value),
+            animationSpeed: parseFloat(document.getElementById('animationSpeed').value),
+        };
+
+        init();
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000000);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('container').appendChild(renderer.domElement);
+            labelRenderer = new CSS2DRenderer();
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('labels').appendChild(labelRenderer.domElement);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            raycaster = new THREE.Raycaster();
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            scene.add(guidesGroup);
+            visualizationGroup.add(pdfGroup);
+            scene.add(visualizationGroup);
+            setupEventListeners();
+            switchMode('2d');
+            animate();
+        }
+        
+        function setupEventListeners() {
+            modeButtons.forEach(btn => btn.addEventListener('click', () => switchMode(btn.dataset.mode)));
+            
+            [meanSlider, stdDevSlider].forEach(s => {
+                s.addEventListener('input', update1DSliderText);
+                s.addEventListener('change', update1DDistribution);
+            });
+            generateButton1D.addEventListener('click', update1DDistribution);
+            
+            [stdDevXSlider2D, stdDevZSlider2D, correlationSlider2D].forEach(s => {
+                s.addEventListener('input', update2DSliderText);
+                s.addEventListener('change', update2DDistribution);
+            });
+            generateButton2D.addEventListener('click', update2DDistribution);
+            
+            [stdDevXSlider3D, stdDevYSlider3D, stdDevZSlider3D, rhoXYSlider, rhoXZSlider, rhoYZSlider].forEach(s => {
+                s.addEventListener('input', () => {
+                    update3DSliderText();
+                    validate3DCorrelation();
+                });
+                s.addEventListener('change', update3DDistribution);
+            });
+            generateButton3D.addEventListener('click', update3DDistribution);
+            
+            toggleCov2D.addEventListener('click', () => toggleCovarianceMatrix('2d'));
+            toggleCov3D.addEventListener('click', () => toggleCovarianceMatrix('3d'));
+            convolveBtn.addEventListener('click', startConvolveAnimation);
+
+            // Settings Panel Listeners
+            settingsBtn.addEventListener('click', () => settingsPanel.classList.toggle('hidden'));
+            
+            const refresh = () => refreshVisualization();
+            
+            // Colors
+            document.getElementById('surfaceColor').addEventListener('input', (e) => { settings.surfaceColor.set(e.target.value); refresh(); });
+            document.getElementById('contourColor').addEventListener('input', (e) => { settings.contourColor.set(e.target.value); refresh(); });
+            document.getElementById('colorX').addEventListener('input', (e) => { settings.colorX.set(e.target.value); refresh(); });
+            document.getElementById('colorZ').addEventListener('input', (e) => { settings.colorZ.set(e.target.value); refresh(); });
+            document.getElementById('gridColor').addEventListener('input', (e) => { settings.gridColor.set(e.target.value); setupSceneForMode(currentMode); });
+            
+            // Visibility
+            document.getElementById('showSurface').addEventListener('input', e => { settings.showSurface = e.target.checked; refresh(); });
+            document.getElementById('showPoints').addEventListener('input', e => { settings.showPoints = e.target.checked; refresh(); });
+            document.getElementById('showContour').addEventListener('input', e => { settings.showContour = e.target.checked; refresh(); });
+            document.getElementById('showHistograms').addEventListener('input', e => { settings.showHistograms = e.target.checked; refresh(); });
+            
+            // Data Points
+            document.getElementById('numPoints').addEventListener('input', e => {
+                document.getElementById('numPointsValue').textContent = e.target.value;
+            });
+            document.getElementById('numPoints').addEventListener('change', e => {
+                settings.numPoints = parseInt(e.target.value);
+                refresh();
+            });
+             document.getElementById('pointSize').addEventListener('input', e => {
+                document.getElementById('pointSizeValue').textContent = parseFloat(e.target.value).toFixed(2);
+                settings.pointSize = parseFloat(e.target.value);
+                refresh();
+            });
+            document.getElementById('pointOpacity').addEventListener('input', e => {
+                document.getElementById('pointOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
+                settings.pointOpacity = parseFloat(e.target.value);
+                refresh();
+            });
+            
+            // Graphics
+            document.getElementById('surfaceOpacity').addEventListener('input', e => {
+                document.getElementById('surfaceOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
+                settings.surfaceOpacity = parseFloat(e.target.value);
+                refresh();
+            });
+             document.getElementById('traceOpacity').addEventListener('input', e => {
+                document.getElementById('traceOpacityValue').textContent = parseFloat(e.target.value).toFixed(2);
+                settings.traceOpacity = parseFloat(e.target.value);
+            });
+             document.getElementById('contourWidth').addEventListener('input', e => {
+                document.getElementById('contourWidthValue').textContent = parseFloat(e.target.value).toFixed(1);
+                settings.contourWidth = parseFloat(e.target.value);
+                refresh();
+            });
+            document.getElementById('gridResolution').addEventListener('input', (e) => {
+                document.getElementById('gridResolutionValue').textContent = e.target.value;
+                 settings.gridResolution = parseInt(e.target.value);
+                setupSceneForMode(currentMode);
+            });
+            document.getElementById('surfaceResolution').addEventListener('input', (e) => {
+                document.getElementById('surfaceResolutionValue').textContent = e.target.value;
+            });
+            document.getElementById('surfaceResolution').addEventListener('change', (e) => {
+                settings.surfaceResolution = parseInt(e.target.value);
+                refresh();
+            });
+            document.getElementById('animationSpeed').addEventListener('input', e => {
+                const speed = parseFloat(e.target.value);
+                document.getElementById('animationSpeedValue').textContent = speed.toFixed(1) + 's';
+                settings.animationSpeed = speed;
+            });
+
+            window.addEventListener('resize', onWindowResize);
+            renderer.domElement.addEventListener('pointerdown', onCanvasClick);
+        }
+        
+        function refreshVisualization() {
+            if (currentMode === '1d') update1DDistribution();
+            else if (currentMode === '2d') update2DDistribution();
+            else if (currentMode === '3d') update3DDistribution();
+        }
+
+        function toggleCovarianceMatrix(mode) {
+            const popup = document.getElementById(`cov-matrix-popup-${mode}`);
+            if (covarianceMatrixObject) {
+                guidesGroup.remove(covarianceMatrixObject);
+                covarianceMatrixObject = null;
+                return;
+            }
+            const matrixContainer = document.createElement('div');
+            matrixContainer.innerHTML = popup.innerHTML;
+            matrixContainer.className = "cov-matrix-popup p-2 rounded-md";
+            covarianceMatrixObject = new CSS2DObject(matrixContainer);
+            const halfSize = PLANE_SIZE / 2;
+            if (mode === '2d') {
+                covarianceMatrixObject.position.set(halfSize * 0.5, 4, halfSize * 0.5);
+            } else {
+                covarianceMatrixObject.position.set(halfSize * 0.6, halfSize * 0.6, 0);
+            }
+            guidesGroup.add(covarianceMatrixObject);
+        }
+        
+        function switchMode(newMode) {
+            if (currentMode === newMode) return;
+            currentMode = newMode;
+            modeButtons.forEach(btn => {
+                btn.classList.toggle('bg-blue-600', btn.dataset.mode === newMode);
+                btn.classList.toggle('text-white', btn.dataset.mode === newMode);
+            });
+            controls1D.classList.toggle('hidden', newMode !== '1d');
+            controls2D.classList.toggle('hidden', newMode !== '2d');
+            controls3D.classList.toggle('hidden', newMode !== '3d');
+            animationControlsContainer.classList.toggle('hidden', newMode !== '2d');
+            covBtn2D.classList.toggle('hidden', newMode !== '2d');
+            covBtn3D.classList.toggle('hidden', newMode !== '3d');
+            formula1D.classList.toggle('hidden', newMode !== '1d');
+            formula2D.classList.toggle('hidden', newMode !== '2d');
+            formula3D.classList.toggle('hidden', newMode !== '3d');
+            formulaContainer.classList.add('hidden');
+            svgOverlay.classList.add('hidden');
+            
+            if (covarianceMatrixObject) {
+                guidesGroup.remove(covarianceMatrixObject);
+                covarianceMatrixObject = null;
+            }
+
+            setupSceneForMode(newMode);
+
+            if (newMode === '1d') update1DDistribution();
+            else if (currentMode === '2d') update2DDistribution();
+            else if (currentMode === '3d') {
+                validate3DCorrelation();
+                update3DDistribution();
+            }
+        }
+        
+        function setupSceneForMode(mode) {
+            clearGuides();
+            const halfSize = PLANE_SIZE / 2;
+            const createAxisLabel = (text, position) => {
+                const textDiv = document.createElement('div');
+                textDiv.className = 'label text-lg italic';
+                textDiv.textContent = text;
+                const label = new CSS2DObject(textDiv);
+                label.position.copy(position);
+                guidesGroup.add(label);
+            };
+
+            if (mode === '1d') {
+                camera.position.set(0, 5, 25);
+                camera.lookAt(0, 0, 0);
+                controls.target.set(0, 0, 0);
+                const lineMaterial = new THREE.LineBasicMaterial({ color: settings.gridColor });
+                const points = [new THREE.Vector3(-halfSize, 0, 0), new THREE.Vector3(halfSize, 0, 0)];
+                const lineGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                guidesGroup.add(new THREE.Line(lineGeometry, lineMaterial));
+                for (let i = -halfSize; i <= halfSize; i += 5) {
+                    const numDiv = document.createElement('div');
+                    numDiv.className = 'label';
+                    numDiv.textContent = i;
+                    const numLabel = new CSS2DObject(numDiv);
+                    numLabel.position.set(i, -0.5, 0);
+                    guidesGroup.add(numLabel);
+                }
+                createAxisLabel('x', new THREE.Vector3(halfSize + 1.5, 0, 0));
+                createAxisLabel('-x', new THREE.Vector3(-halfSize - 1.5, 0, 0));
+            } else if (mode === '2d') {
+                camera.position.set(0, PLANE_SIZE * 0.6, PLANE_SIZE * 0.75);
+                camera.lookAt(0, 0, 0);
+                controls.target.set(0, 0, 0);
+                const divisions = settings.gridResolution * (PLANE_SIZE/10);
+                guidesGroup.add(new THREE.GridHelper(PLANE_SIZE, divisions, settings.gridColor, settings.gridColor));
+                createAxisLabel('x', new THREE.Vector3(halfSize + 1.5, 0, 0));
+                createAxisLabel('z', new THREE.Vector3(0, 0, halfSize + 1.5));
+            } else if (mode === '3d') {
+                const divisions = settings.gridResolution * (PLANE_SIZE/10);
+                camera.position.set(halfSize * 1.4, halfSize * 0.6, halfSize * 1.4);
+                camera.lookAt(0, 0, 0);
+                controls.target.set(0, 0, 0);
+                const gridXZ = new THREE.GridHelper(PLANE_SIZE, divisions, settings.gridColor, settings.gridColor);
+                gridXZ.position.y = -halfSize;
+                guidesGroup.add(gridXZ);
+                const gridXY = new THREE.GridHelper(PLANE_SIZE, divisions, settings.gridColor, settings.gridColor);
+                gridXY.rotation.x = Math.PI / 2;
+                gridXY.position.z = -halfSize;
+                guidesGroup.add(gridXY);
+                const gridYZ = new THREE.GridHelper(PLANE_SIZE, divisions, settings.gridColor, settings.gridColor);
+                gridYZ.rotation.z = Math.PI / 2;
+                gridYZ.position.x = -halfSize;
+                guidesGroup.add(gridYZ);
+            }
+        }
+        
+        function clearVisualization() {
+            const clearGroup = (group) => {
+                while(group.children.length > 0){ 
+                    const child = group.children[0];
+                    group.remove(child);
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) {
+                        if (Array.isArray(child.material)) child.material.forEach(m => m.dispose());
+                        else child.material.dispose();
+                    }
+                }
+            };
+            clearGroup(visualizationGroup);
+            clearGroup(pdfGroup);
+            visualizationGroup.add(pdfGroup);
+            surfaceMaterialToAnimate = null;
+        }
+
+        function clearGuides() {
+             while(guidesGroup.children.length > 0){ 
+                const child = guidesGroup.children[0];
+                guidesGroup.remove(child);
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+                if (child.element && child.element.parentNode) child.element.parentNode.removeChild(child.element);
+            }
+        }
+        
+        function update1DSliderText() {
+            meanValue.textContent = parseFloat(meanSlider.value).toFixed(2);
+            stdDevValue.textContent = parseFloat(stdDevSlider.value).toFixed(2);
+        }
+
+        function update1DDistribution() {
+            clearVisualization();
+            update1DSliderText();
+            const mean = parseFloat(meanSlider.value);
+            const stdDev = parseFloat(stdDevSlider.value);
+            peakPosition.set(mean, maxHistHeight, 0);
+            
+            if (settings.showHistograms) {
+                const data = generate1DData(settings.numPoints, mean, stdDev);
+                const hist = createHistogramData(data);
+                if (Math.max(...hist.bins) > 0) {
+                    visualizationGroup.add(createHistogramMesh(hist, maxHistHeight, 'x-1d', settings.colorX));
+                }
+            }
+            if (settings.showContour) {
+                const curve = create1DPdfCurve(mean, stdDev, maxHistHeight);
+                curve.material.color.set(settings.colorX); // Changed to X color
+                pdfGroup.add(curve);
+            }
+        }
+        
+        function create1DPdfCurve(mean, stdDev, maxHeight) {
+            const material = new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: settings.contourWidth });
+            const points = [];
+            const segments = 200;
+            const range = PLANE_SIZE;
+            const minX = -range/2;
+            const maxX = range/2;
+            const pdf = (x, mu, sigma) => (1 / (sigma * Math.sqrt(2 * Math.PI))) * Math.exp(-0.5 * Math.pow((x - mu) / sigma, 2));
+            const maxPdfVal = pdf(mean, mean, stdDev);
+            if (maxPdfVal <= 0 || !isFinite(maxPdfVal)) return new THREE.Group();
+            for (let i = 0; i <= segments; i++) {
+                const x = minX + (i / segments) * (maxX - minX);
+                const y = (pdf(x, mean, stdDev) / maxPdfVal) * maxHeight;
+                points.push(new THREE.Vector3(x, y, 0));
+            }
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            return new THREE.Line(geometry, material);
+        }
+        
+        function generate1DData(num, mean, stdDev) {
+            return Array.from({length: num}, () => mean + stdDev * randomNormal());
+        }
+        
+        function update2DSliderText() {
+            const stdX = parseFloat(stdDevXSlider2D.value);
+            const stdZ = parseFloat(stdDevZSlider2D.value);
+            const rho = parseFloat(correlationSlider2D.value);
+            stdDevXValue2D.textContent = stdX.toFixed(2);
+            stdDevZValue2D.textContent = stdZ.toFixed(2);
+            correlationValue2D.textContent = rho.toFixed(2);
+            const cov = rho * stdX * stdZ;
+            covarianceOutput2D.textContent = `Cov(X,Z) = ${cov.toFixed(2)}`;
+            document.getElementById('cov-2d-00').textContent = (stdX**2).toFixed(2);
+            document.getElementById('cov-2d-01').textContent = cov.toFixed(2);
+            document.getElementById('cov-2d-10').textContent = cov.toFixed(2);
+            document.getElementById('cov-2d-11').textContent = (stdZ**2).toFixed(2);
+        }
+        
+        function update2DDistribution() {
+            clearVisualization();
+            update2DSliderText();
+            peakPosition.set(0, maxHistHeight, 0);
+            const stdX = parseFloat(stdDevXSlider2D.value);
+            const stdZ = parseFloat(stdDevZSlider2D.value);
+            const rho = parseFloat(correlationSlider2D.value);
+            
+            if (settings.showPoints) {
+                const data = generateBivariateData(settings.numPoints, stdX, stdZ, rho);
+                const positions = new Float32Array(data.length * 3);
+                data.forEach((p, i) => {
+                    positions[i * 3] = p.x;
+                    positions[i * 3 + 1] = 0.01;
+                    positions[i * 3 + 2] = p.z;
+                });
+                const geom = new THREE.BufferGeometry();
+                geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                visualizationGroup.add(new THREE.Points(geom, new THREE.PointsMaterial({ color: 0xcccccc, size: settings.pointSize, opacity: settings.pointOpacity, transparent: true })));
+            }
+            
+            if (settings.showContour) {
+                const { line } = createContourEllipse(stdX, stdZ, rho);
+                pdfGroup.add(line);
+            }
+            if(settings.showSurface) {
+                pdfGroup.add(create2DPdfSurface(stdX, stdZ, rho, maxHistHeight));
+            }
+            if(settings.showHistograms) {
+                 const data = generateBivariateData(settings.numPoints/10, stdX, stdZ, rho);
+                 const xHist = createHistogramData(data.map(p => p.x));
+                 const zHist = createHistogramData(data.map(p => p.z));
+                 const halfSize = PLANE_SIZE / 2;
+                 if(Math.max(...xHist.bins)>0) {
+                     visualizationGroup.add(createHistogramMesh(xHist, maxHistHeight, 'x-2d', settings.colorX));
+                     const xCurve = create1DPdfCurve(0, stdX, maxHistHeight);
+                     xCurve.position.z = -halfSize - 0.01;
+                     xCurve.material.color.set(settings.colorX);
+                     visualizationGroup.add(xCurve);
+                 }
+                 if(Math.max(...zHist.bins)>0) {
+                     visualizationGroup.add(createHistogramMesh(zHist, maxHistHeight, 'z-2d', settings.colorZ));
+                     const zCurve = create1DPdfCurve(0, stdZ, maxHistHeight);
+                     zCurve.rotation.y = Math.PI / 2;
+                     zCurve.position.x = -halfSize - 0.01;
+                     zCurve.material.color.set(settings.colorZ);
+                     visualizationGroup.add(zCurve);
+                 }
+            }
+        }
+        
+        function create2DPdfSurface(stdX, stdZ, rho, maxHeight) {
+            const res = settings.surfaceResolution;
+            const geometry = new THREE.PlaneGeometry(PLANE_SIZE, PLANE_SIZE, res, res);
+            geometry.rotateX(-Math.PI / 2);
+            const pdf = (x, z, sx, sz, r) => {
+                if (Math.abs(r) >= 1) return 0;
+                const rho2 = r * r;
+                const norm = 1 / (2 * Math.PI * sx * sz * Math.sqrt(1 - rho2));
+                const exponent = -1 / (2 * (1 - rho2)) * ( (x*x)/(sx*sx) + (z*z)/(sz*sz) - (2*r*x*z)/(sx*sz) );
+                return norm * Math.exp(exponent);
+            };
+            const maxPdfVal = pdf(0, 0, stdX, stdZ, rho);
+            if (maxPdfVal <= 0 || !isFinite(maxPdfVal)) return new THREE.Group();
+            const positions = geometry.attributes.position;
+            for (let i = 0; i < positions.count; i++) {
+                positions.setY(i, (pdf(positions.getX(i), positions.getZ(i), stdX, stdZ, rho) / maxPdfVal) * maxHeight);
+            }
+            positions.needsUpdate = true;
+            geometry.computeVertexNormals();
+            
+            const material = new THREE.MeshLambertMaterial({ color: settings.surfaceColor, transparent: true, opacity: settings.surfaceOpacity, side: THREE.DoubleSide });
+            
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.u_revealPos = { value: -PLANE_SIZE/2 };
+                shader.uniforms.u_sweepAngle = { value: 0.0 };
+                shader.vertexShader = 'varying vec2 v_WorldPosXZ;\n' + shader.vertexShader;
+                shader.vertexShader = shader.vertexShader.replace( '#include <begin_vertex>', '#include <begin_vertex>\nv_WorldPosXZ = position.xz;' );
+                shader.fragmentShader = 'uniform float u_revealPos;\nuniform float u_sweepAngle;\nvarying vec2 v_WorldPosXZ;\n' + shader.fragmentShader;
+                shader.fragmentShader = shader.fragmentShader.replace( 'void main() {', `void main() { float c = cos(-u_sweepAngle); float s = sin(-u_sweepAngle); mat2 rot = mat2(c, -s, s, c); vec2 rotatedPos = rot * v_WorldPosXZ; if (rotatedPos.x > u_revealPos || rotatedPos.y > u_revealPos) { discard; }` );
+                surfaceMaterialToAnimate = shader;
+            };
+
+            const surfaceMesh = new THREE.Mesh(geometry, material);
+            const wireframe = new THREE.LineSegments(new THREE.WireframeGeometry(geometry), new THREE.LineBasicMaterial({ color: settings.contourColor, transparent: true, opacity: 0.2 }));
+            const group = new THREE.Group();
+            group.add(surfaceMesh, wireframe);
+            return group;
+        }
+        
+        function generateBivariateData(num, stdX, stdZ, rho) {
+            return Array.from({length: num}, () => {
+                const z1 = randomNormal(), z2 = randomNormal();
+                return { x: stdX * z1, z: stdZ * (z1 * rho + z2 * Math.sqrt(1 - rho*rho)) };
+            });
+        }
+        
+        function createContourEllipse(stdX, stdZ, rho) {
+            const s = 3; 
+            const term1 = stdX**2 + stdZ**2;
+            const term2 = Math.sqrt((stdX**2 - stdZ**2)**2 + 4 * rho**2 * stdX**2 * stdZ**2);
+            const a = Math.sqrt(0.5 * (term1 + term2)) * s;
+            const b = Math.sqrt(0.5 * (term1 - term2)) * s;
+            const theta = 0.5 * Math.atan2(2 * rho * stdX * stdZ, stdX**2 - stdZ**2);
+            const curve = new THREE.EllipseCurve(0, 0, a, b, 0, 2 * Math.PI, false, theta);
+            const points = curve.getPoints(100).map(p => new THREE.Vector3(p.x, 0.01, p.y));
+            const material = new THREE.LineBasicMaterial({ color: settings.contourColor, linewidth: settings.contourWidth });
+            return { line: new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material), maxRadius: Math.max(a, b) };
+        }
+        
+        function createTrace(variance, color) {
+            const traceLength = Math.max(0.1, variance * TRACE_SCALE_FACTOR);
+            const geometry = new THREE.PlaneGeometry(PLANE_SIZE, traceLength, 1, 20);
+            geometry.rotateX(-Math.PI / 2);
+            geometry.translate(0, 0, -traceLength / 2);
+
+            const material = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, depthWrite: false });
+
+            material.onBeforeCompile = (shader) => {
+                shader.uniforms.traceLength = { value: traceLength };
+                shader.uniforms.baseOpacity = { value: settings.traceOpacity };
+                shader.vertexShader = 'varying float vTraceZ;\n' + shader.vertexShader;
+                shader.vertexShader = shader.vertexShader.replace( '#include <begin_vertex>', '#include <begin_vertex>\nvTraceZ = position.z;' );
+                shader.fragmentShader = 'uniform float traceLength;\nuniform float baseOpacity;\nvarying float vTraceZ;\n' + shader.fragmentShader;
+                shader.fragmentShader = shader.fragmentShader.replace( '#include <color_fragment>', `#include <color_fragment>\n float alpha = (vTraceZ + traceLength) / traceLength;\n diffuseColor.a *= alpha * baseOpacity;\n` );
+            };
+
+            return new THREE.Mesh(geometry, material);
+        }
+        
+        function update3DSliderText() {
+             stdDevXValue3D.textContent = parseFloat(stdDevXSlider3D.value).toFixed(2);
+             stdDevYValue3D.textContent = parseFloat(stdDevYSlider3D.value).toFixed(2);
+             stdDevZValue3D.textContent = parseFloat(stdDevZSlider3D.value).toFixed(2);
+             rhoXYValue.textContent = parseFloat(rhoXYSlider.value).toFixed(2);
+             rhoXZValue.textContent = parseFloat(rhoXZSlider.value).toFixed(2);
+             rhoYZValue.textContent = parseFloat(rhoYZSlider.value).toFixed(2);
+        }
+        
+        function validate3DCorrelation() {
+            const rxy = parseFloat(rhoXYSlider.value), rxz = parseFloat(rhoXZSlider.value), ryz = parseFloat(rhoYZSlider.value);
+            const det = 1 - rxy**2 - rxz**2 - ryz**2 + 2 * rxy * rxz * ryz;
+            const isValid = det >= 0;
+            document.getElementById('error-message-3d').classList.toggle('hidden', isValid);
+            generateButton3D.disabled = !isValid;
+            generateButton3D.classList.toggle('bg-gray-500', !isValid);
+            generateButton3D.classList.toggle('hover:bg-gray-500', !isValid);
+            generateButton3D.classList.toggle('cursor-not-allowed', !isValid);
+            generateButton3D.classList.toggle('bg-blue-600', isValid);
+            generateButton3D.classList.toggle('hover:bg-blue-700', isValid);
+            return isValid;
+        }
+
+        function update3DDistribution() {
+            update3DSliderText();
+            if (!validate3DCorrelation()) {
+                clearVisualization();
+                return;
+            }
+            clearVisualization();
+            peakPosition.set(0, 0, 0);
+            const sx = parseFloat(stdDevXSlider3D.value), sy = parseFloat(stdDevYSlider3D.value), sz = parseFloat(stdDevZSlider3D.value);
+            const rxy = parseFloat(rhoXYSlider.value), rxz = parseFloat(rhoXZSlider.value), ryz = parseFloat(rhoYZSlider.value);
+            
+            if (settings.showPoints) {
+                const data = generateTrivariateData(settings.numPoints, sx, sy, sz, rxy, rxz, ryz);
+                const positions = new Float32Array(data.length * 3);
+                data.forEach((p, i) => {
+                    positions[i * 3] = p.x;
+                    positions[i * 3 + 1] = p.y;
+                    positions[i * 3 + 2] = p.z;
+                });
+                const geom = new THREE.BufferGeometry();
+                geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                const points = new THREE.Points(geom, new THREE.PointsMaterial({ color: 0xffffff, size: settings.pointSize, opacity: settings.pointOpacity, transparent: true, depthWrite: false }));
+                visualizationGroup.add(points);
+            }
+            if (settings.showContour || settings.showSurface) {
+                pdfGroup.add(create3DPdfEllipsoid(sx, sy, sz, rxy, rxz, ryz));
+            }
+        }
+        
+        function create3DPdfEllipsoid(sx, sy, sz, rxy, rxz, ryz) {
+            const group = new THREE.Group();
+            const L = [
+                [sx, 0, 0],
+                [sy * rxy, sy * Math.sqrt(1 - rxy**2), 0],
+                [sz * rxz, sz * (ryz - rxy * rxz) / Math.sqrt(1 - rxy**2),
+                sz * Math.sqrt(1 - rxz**2 - ((ryz - rxy * rxz)**2) / (1 - rxy**2))]
+            ];
+            if (isNaN(L[1][1]) || isNaN(L[2][1]) || isNaN(L[2][2])) return group;
+            const c = Math.sqrt(11.345);
+            const geometry = new THREE.SphereGeometry(c, 32, 32);
+            const transformMatrix = new THREE.Matrix4().set( L[0][0], L[1][0], L[2][0], 0, L[0][1], L[1][1], L[2][1], 0, L[0][2], L[1][2], L[2][2], 0, 0, 0, 0, 1 );
+            
+            if (settings.showSurface) {
+                const material = new THREE.MeshLambertMaterial({ color: settings.contourColor, transparent: true, opacity: settings.surfaceOpacity, side: THREE.DoubleSide, depthWrite: false });
+                const ellipsoid = new THREE.Mesh(geometry, material);
+                ellipsoid.applyMatrix4(transformMatrix);
+                group.add(ellipsoid);
+            }
+            if(settings.showContour){
+                const wireframe = new THREE.LineSegments( new THREE.WireframeGeometry(geometry.clone()), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3, linewidth: settings.contourWidth }) );
+                wireframe.applyMatrix4(transformMatrix);
+                group.add(wireframe);
+            }
+            return group;
+        }
+        
+        function generateTrivariateData(num, sx, sy, sz, rxy, rxz, ryz) {
+            const L = [
+                [sx, 0, 0],
+                [sy * rxy, sy * Math.sqrt(1 - rxy**2), 0],
+                [sz * rxz, sz * (ryz - rxy * rxz) / Math.sqrt(1 - rxy**2), sz * Math.sqrt(1 - rxz**2 - ((ryz - rxy * rxz)**2) / (1 - rxy**2))]
+            ];
+            if (isNaN(L[1][1]) || isNaN(L[2][1]) || isNaN(L[2][2])) return [];
+            return Array.from({length: num}, () => {
+                const z1 = randomNormal(), z2 = randomNormal(), z3 = randomNormal();
+                return { x: L[0][0] * z1 + L[1][0] * z2 + L[2][0] * z3, y: L[0][1] * z1 + L[1][1] * z2 + L[2][1] * z3, z: L[0][2] * z1 + L[1][2] * z2 + L[2][2] * z3 };
+            });
+        }
+        
+        function onCanvasClick(event) {
+            const mouse = new THREE.Vector2((event.clientX / window.innerWidth) * 2 - 1, - (event.clientY / window.innerHeight) * 2 + 1);
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(pdfGroup.children, true);
+            if (intersects.length > 0) {
+                formulaContainer.classList.remove('hidden');
+                svgOverlay.classList.remove('hidden');
+                updateFormulaPosition();
+            } else {
+                formulaContainer.classList.add('hidden');
+                svgOverlay.classList.add('hidden');
+            }
+        }
+
+        function updateFormulaPosition() {
+            if (formulaContainer.classList.contains('hidden')) return;
+            const screenPosition = peakPosition.clone().project(camera);
+            const peakX = (screenPosition.x * 0.5 + 0.5) * window.innerWidth;
+            const peakY = (-screenPosition.y * 0.5 + 0.5) * window.innerHeight;
+            formulaContainer.style.left = `${peakX}px`;
+            formulaContainer.style.top = `${peakY - 30}px`;
+            const panelRect = formulaContainer.getBoundingClientRect();
+            connectorLine.setAttribute('x1', peakX);
+            connectorLine.setAttribute('y1', peakY);
+            connectorLine.setAttribute('x2', panelRect.left + panelRect.width / 2);
+            connectorLine.setAttribute('y2', panelRect.bottom);
+        }
+
+        function randomNormal() {
+            let u=0, v=0;
+            while(u===0) u=Math.random(); while(v===0) v=Math.random();
+            return Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        }
+
+        function createHistogramMesh(hist, maxHistHeight, axis, color) {
+            const histGroup = new THREE.Group();
+            const barWidth = hist.range / HISTOGRAM_BINS;
+            const maxCount = Math.max(...hist.bins);
+            const halfSize = PLANE_SIZE/2;
+            hist.bins.forEach((count, i) => {
+                if (count > 0) {
+                    const height = (count / maxCount) * maxHistHeight;
+                    const barGeom = new THREE.BoxGeometry(barWidth * 0.9, height, 0.2);
+                    const bar = new THREE.Mesh(barGeom, new THREE.MeshLambertMaterial({color}));
+                    const xPos = hist.min + (i + 0.5) * barWidth;
+                    if(axis === 'x-1d') bar.position.set(xPos, height/2, 0);
+                    else if (axis === 'x-2d') bar.position.set(xPos, height/2, -halfSize);
+                    else if (axis === 'z-2d') {
+                        bar.rotation.y = Math.PI / 2;
+                        bar.position.set(-halfSize, height/2, xPos);
+                    }
+                    histGroup.add(bar);
+                }
+            });
+            return histGroup;
+        }
+
+        function createHistogramData(data) {
+            if(data.length === 0) return {bins: [], min:0, range:0};
+            let minVal = Math.min(...data), maxVal = Math.max(...data);
+            const range = maxVal - minVal || 1;
+            const binWidth = range / HISTOGRAM_BINS;
+            const bins = new Array(HISTOGRAM_BINS).fill(0);
+            data.forEach(val => {
+                let binIndex = Math.floor((val - minVal) / binWidth);
+                if (binIndex === HISTOGRAM_BINS) binIndex--;
+                if (binIndex >= 0 && binIndex < HISTOGRAM_BINS) bins[binIndex]++;
+            });
+            return { bins, min: minVal, range };
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            if (covarianceMatrixObject) {
+                guidesGroup.remove(covarianceMatrixObject);
+                covarianceMatrixObject = null;
+            }
+        }
+
+        function startConvolveAnimation() {
+            if (revealPhase !== 'none') return;
+            
+            revealPhase = 'sweeping';
+            convolveStartTime = clock.getElapsedTime();
+            visualizationGroup.visible = false;
+
+            const stdX = parseFloat(stdDevXSlider2D.value);
+            const stdZ = parseFloat(stdDevZSlider2D.value);
+            const rho = parseFloat(correlationSlider2D.value);
+
+            sweepAngle = 0.5 * Math.atan2(2 * rho * stdX * stdZ, stdX**2 - stdZ**2);
+
+            sweepMasterGroup = new THREE.Group();
+            sweepMasterGroup.rotation.y = sweepAngle;
+            scene.add(sweepMasterGroup);
+            
+            // X-dist (red) TRAVELLING on Z-axis
+            sweepGroupZ = new THREE.Group();
+            const xCurve = create1DPdfCurve(0, stdX, maxHistHeight);
+            xCurve.material.color.set(settings.colorX);
+            sweepGroupZ.add(xCurve);
+            sweepGroupZ.add(createTrace(stdX * stdX, settings.colorX));
+            sweepMasterGroup.add(sweepGroupZ);
+            
+            // Z-dist (blue) TRAVELLING on X-axis
+            sweepGroupX = new THREE.Group();
+            const zCurve = create1DPdfCurve(0, stdZ, maxHistHeight);
+            zCurve.material.color.set(settings.colorZ);
+            sweepGroupX.add(zCurve);
+            sweepGroupX.add(createTrace(stdZ * stdZ, settings.colorZ));
+            sweepGroupX.rotation.y = Math.PI / 2;
+            sweepMasterGroup.add(sweepGroupX);
+
+            const startPos = -PLANE_SIZE / 2 * 1.25;
+            sweepGroupX.position.x = startPos;
+            sweepGroupZ.position.z = startPos;
+            
+            convolveSurface = create2DPdfSurface(stdX, stdZ, rho, maxHistHeight);
+            convolveSurface.visible = true;
+            scene.add(convolveSurface);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            
+            if (revealPhase === 'sweeping') {
+                visualizationGroup.visible = true;
+                pointsToReveal = visualizationGroup.children.find(c => c.type === 'Points');
+                if (pointsToReveal) pointsToReveal.visible = false;
+                
+                const animElapsed = clock.getElapsedTime() - convolveStartTime;
+                const progress = Math.min(animElapsed / settings.animationSpeed, 1.0);
+                const halfSize = PLANE_SIZE / 2;
+                const sweepRange = PLANE_SIZE * 1.5;
+                const startPos = -halfSize * 1.25;
+                const currentPos = startPos + progress * sweepRange;
+                const sweepLimit = halfSize * 1.25;
+
+                if (sweepGroupX) sweepGroupX.position.x = Math.min(currentPos, sweepLimit);
+                if (sweepGroupZ) sweepGroupZ.position.z = Math.min(currentPos, sweepLimit);
+
+                if (surfaceMaterialToAnimate) {
+                    surfaceMaterialToAnimate.uniforms.u_revealPos.value = Math.min(currentPos, sweepLimit);
+                    surfaceMaterialToAnimate.uniforms.u_sweepAngle.value = sweepAngle;
+                }
+
+                if (progress >= 1.0) {
+                    if (sweepMasterGroup) scene.remove(sweepMasterGroup);
+                    if (convolveSurface) scene.remove(convolveSurface);
+                    
+                    sweepMasterGroup = null; sweepGroupX = null; sweepGroupZ = null; convolveSurface = null; surfaceMaterialToAnimate = null;
+
+                    revealPhase = 'points';
+                    revealStartTime = clock.getElapsedTime();
+                    if (pointsToReveal) {
+                        pointsToReveal.visible = true;
+                        pointsToReveal.geometry.setDrawRange(0, 0);
+                    }
+                }
+
+            } else if (revealPhase === 'points') {
+                const animElapsed = clock.getElapsedTime() - revealStartTime;
+                const progress = Math.min(animElapsed / (settings.animationSpeed / 2), 1.0);
+
+                if (pointsToReveal) {
+                    const count = Math.floor(progress * settings.numPoints);
+                    pointsToReveal.geometry.setDrawRange(0, count);
+                }
+
+                if (progress >= 1.0) {
+                    revealPhase = 'none'; 
+                    refreshVisualization();
+                }
+            }
+
+            updateFormulaPosition();
+            renderer.render(scene, camera);
+            labelRenderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
+

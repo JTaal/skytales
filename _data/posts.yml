@@ -1,0 +1,14 @@
+- title: Explaining the 4D Complex Chirp Visualization
+  author: Jasper Taal
+  thumbnail: /assets/images/chirp.png
+  post_url: /2025/08/27/complex-chirp-explained.html
+  visualization_url: /visualizations/chirp.html
+  description: An interactive visualization that represents a four-dimensional concept
+    in a 3D space.
+
+- title: Visualizing Regularisation in 3D with Ridge and Lasso
+  author: Jasper Taal
+  thumbnail: /assets/images/regularisation.png
+  post_url: /2025/09/14/regularisation.html
+  visualization_url: /visualizations/regularisation.html
+  description: Explanation of fundamental regularisation techniques

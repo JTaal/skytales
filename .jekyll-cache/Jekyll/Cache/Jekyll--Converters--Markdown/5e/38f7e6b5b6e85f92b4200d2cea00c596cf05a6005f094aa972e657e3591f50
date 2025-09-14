@@ -1,0 +1,16 @@
+I"�<p>The visualization you see is an attempt to represent a four-dimensional concept in a 3D space. The signal is a complex exponential:</p>
+
+\[s(t) = e^{j\theta(t)} = \cos(\theta(t)) + j\sin(\theta(t))\]
+
+<p>Here, the phase <code class="language-plaintext highlighter-rouge">θ(t)</code> is not linear. Its derivative, the instantaneous frequency, increases over time. This is called a “chirp” signal.</p>
+
+<h3 id="the-axes">The Axes</h3>
+
+<ul>
+  <li><strong>Real Axis (X):</strong> Represents the real part, <code class="language-plaintext highlighter-rouge">cos(θ(t))</code>.</li>
+  <li><strong>Imaginary Axis (Y):</strong> Represents the imaginary part, <code class="language-plaintext highlighter-rouge">sin(θ(t))</code>.</li>
+  <li><strong>Frequency Axis (Z):</strong> This axis is used to represent the passage of time, during which the frequency increases, causing the spiral to tighten.</li>
+</ul>
+
+<p>This creates the distinctive “chirping” spiral you see.</p>
+:ET

@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Tailor Series</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- KaTeX for LaTeX rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU0KOVEMcAgsUFkSSJAVL2f<div>ZZKaHGVAcmIMkyTsWeMVNAccJsr9izk//ocJUE41
+" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzYCklLCcTTnPucGohspwnCNkAaESfOFBQn" crossorigin="anonymous"></script>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px;
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu { display: flex; gap: 10px; }
+        .menu-button, .toggle-button, .control-select {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        .menu-button:hover, .toggle-button:hover, .control-select:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none; width: 100%; height: 4px;
+            background: #4b5563; border-radius: 2px; outline: none;
+            opacity: 0.7; transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 18px; height: 18px; background: #818cf8;
+            cursor: pointer; border-radius: 50%;
+        }
+        .control-group {
+            display: flex; flex-direction: column;
+            align-items: center; gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+        #settings-button, #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%;
+            cursor: pointer; transition: all 0.3s;
+        }
+        #settings-button { top: 80px; right: 20px; z-index: 11; }
+        #fullscreen-button { bottom: 120px; right: 20px; z-index: 11; }
+        #settings-button:hover { background-color: #4338ca; transform: translateY(-2px) rotate(45deg); }
+        #fullscreen-button:hover { background-color: #4338ca; transform: translateY(-2px) scale(1.1); }
+        #settings-panel {
+            top: 80px; right: 0; width: 300px;
+            max-width: 90vw; border-radius: 12px 0 0 12px;
+            transform: translateX(100%); transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            max-height: calc(100vh - 100px); overflow-y: auto; z-index: 12;
+        }
+        #settings-panel.open { transform: translateX(0); }
+        #close-settings { font-size: 2.5rem; line-height: 1; background: none; border: none; cursor: pointer; }
+        #formula-display { 
+            margin-top: 1rem; 
+            padding: 0.75rem; 
+            background-color: rgba(3, 7, 18, 0.6); 
+            border-radius: 8px;
+            border: 1px solid rgba(55, 65, 81, 0.5);
+            overflow-x: auto;
+            min-height: 50px;
+        }
+        .view-mode-button {
+            padding: 4px 12px; border-radius: 6px; border: none;
+            background-color: transparent; color: #d1d5db;
+            cursor: pointer; transition: background-color 0.2s; font-weight: 500;
+        }
+        .view-mode-button.active { background-color: #4f46e5; color: white; }
+       
+        /* Mobile adjustments */
+        #mobile-menu-container { display: none; }
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            #menu { display: none !important; }
+            #mobile-menu-container { display: block; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #controls-panel { flex-direction: column; gap: 1rem; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold">3D Tailor series</h1>
+        <div id="menu"></div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+        </div>
+    </header>
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400"></h2>
+            <div id="toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+        </div>
+        <div id="info-content" class="pt-4">
+            <p id="info-description"></p>
+            <div id="formula-display"></div>
+        </div>
+    </div>
+    <div id="controls-panel" class="ui-panel"></div>
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">VR Mode</label>
+                <button id="vr-button" class="toggle-button w-full" disabled>Enter VR</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium">Follow Target</label>
+                <button id="follow-toggle" class="toggle-button">Off</button>
+            </div>
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Animation Speed: <span id="speed-value">1.0x</span></label>
+                <input id="speed-slider" type="range" min="0" max="5" step="0.1" value="1" class="w-full">
+            </div>
+                 <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label class="text-sm font-medium flex justify-between">Graphics Quality: <span id="graphics-quality-value">High</span></label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+            </div>
+        </div>
+    </div>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const scenes = {
+        math_visualizer: {
+            title: 'Tailor Series',
+            description: 'Visualizing functions and their Taylor series approximations. The blue surface is the true function. Use the controls to change the function, add terms to the series, and toggle the view mode.',
+            init: initMathVisualizer,
+        },
+        // solar_system: {
+        //     title: 'Mini Solar System',
+        //     description: 'A mini solar system with a sun, a planet, and a moon. Open the settings panel and enable "Follow Target" to track the planet\'s orbit.',
+        //     init: initSolarSystem,
+        // },
+        // scene_one: {
+        //     title: 'Rotating Cube',
+        //     description: 'A simple example showing a rotating cube with a UI control to change its scale.',
+        //     init: initSceneOne,
+        // },
+        // scene_two: {
+        //     title: 'Starfield',
+        //     description: 'A second example demonstrating a particle-based starfield.',
+        //     init: initSceneTwo,
+        // },
+    };
+
+    const factorial = (n) => (n <= 1 ? 1 : n * factorial(n - 1));
+
+    const mathFunctions = {
+        sin: {
+            name: 'sin(x) + sin(z)',
+            range: [-10, 10],
+            func: (x, z) => Math.sin(x) + Math.sin(z),
+            taylorTerm: (x, z, n) => {
+                const sinX = (Math.pow(-1, n) * Math.pow(x, 2 * n + 1)) / factorial(2 * n + 1);
+                const sinZ = (Math.pow(-1, n) * Math.pow(z, 2 * n + 1)) / factorial(2 * n + 1);
+                return sinX + sinZ;
+            },
+            taylorFormula: (terms) => {
+                let formula = `f(x,z) \\approx \\sum_{n=0}^{${terms-1}} \\frac{(-1)^n}{(2n+1)!} (x^{2n+1} + z^{2n+1}) = `;
+                for(let n=0; n<terms; n++) {
+                    const sign = (n%2 === 1) ? '-' : (n > 0 ? '+' : '');
+                    formula += `${sign} \\frac{x^{${2*n+1}}+z^{${2*n+1}}}{${2*n+1}!} `;
+                }
+                return formula;
+            }
+        },
+        cos: {
+            name: 'cos(x) + cos(z)',
+            range: [-10, 10],
+            func: (x, z) => Math.cos(x) + Math.cos(z),
+            taylorTerm: (x, z, n) => {
+                const cosX = (Math.pow(-1, n) * Math.pow(x, 2 * n)) / factorial(2 * n);
+                const cosZ = (Math.pow(-1, n) * Math.pow(z, 2 * n)) / factorial(2 * n);
+                return cosX + cosZ;
+            },
+            taylorFormula: (terms) => {
+                let formula = `f(x,z) \\approx \\sum_{n=0}^{${terms-1}} \\frac{(-1)^n}{(2n)!} (x^{2n} + z^{2n}) = `;
+                for(let n=0; n<terms; n++) {
+                    const sign = (n%2 === 1) ? '-' : (n > 0 ? '+' : '');
+                    formula += `${sign} \\frac{x^{${2*n}}+z^{${2*n}}}{${2*n}!} `;
+                }
+                return formula;
+            }
+        },
+        exp: {
+             name: 'e^x',
+             range: [-3, 3],
+             func: (x, z) => Math.exp(x),
+             taylorTerm: (x, z, n) => Math.pow(x, n) / factorial(n),
+             taylorFormula: (terms) => {
+                let formula = `e^x \\approx \\sum_{n=0}^{${terms-1}} \\frac{x^n}{n!} = `;
+                for(let n=0; n<terms; n++) {
+                    formula += `\\frac{x^{${n}}}{${n}!} ${n < terms-1 ? '+' : ''} `;
+                }
+                return formula;
+            }
+        },
+        sinc: {
+            name: 'sinc(r)',
+            range: [-12, 12],
+            func: (x, z) => {
+                const r = Math.sqrt(x*x + z*z);
+                return r === 0 ? 1 : Math.sin(r) / r;
+            },
+            taylorTerm: (x, z, n) => {
+                 const rSq = x*x + z*z;
+                 return (Math.pow(-1, n) * Math.pow(rSq, n)) / factorial(2 * n + 1);
+            },
+            taylorFormula: (terms) => {
+                let formula = `\\text{sinc}(r) \\approx \\sum_{n=0}^{${terms-1}} \\frac{(-1)^n r^{2n}}{(2n+1)!} = `;
+                 for(let n=0; n<terms; n++) {
+                    const sign = (n%2 === 1) ? '-' : (n > 0 ? '+' : '');
+                    formula += `${sign} \\frac{r^{${2*n}}}{${2*n+1}!} `;
+                }
+                 return formula.replace(/r/g, '\\sqrt{x^2+z^2}');
+            }
+        },
+        gaussian: {
+            name: 'Gaussian Surface',
+            range: [-3, 3],
+            func: (x, z) => Math.exp(-(x*x + z*z)),
+            taylorTerm: (x, z, n) => {
+                const rSq = x*x + z*z;
+                return (Math.pow(-1, n) * Math.pow(rSq, n)) / factorial(n);
+            },
+            taylorFormula: (terms) => {
+                let formula = `e^{-(x^2+z^2)} \\approx \\sum_{n=0}^{${terms-1}} \\frac{(-(x^2+z^2))^n}{n!} = `;
+                for(let n=0; n<terms; n++) {
+                    const sign = (n%2 === 1) ? '-' : (n > 0 ? '+' : '');
+                    formula += `${sign} \\frac{(x^2+z^2)^{${n}}}{${n}!} `;
+                }
+                return formula;
+            }
+        },
+        hyperbolic_paraboloid: {
+            name: 'Hyperbolic Paraboloid',
+            range: [-5, 5],
+            maxTerms: 2,
+            func: (x, z) => x*x - z*z,
+            taylorTerm: (x, z, n) => {
+                if (n === 0) return x*x;
+                if (n === 1) return -(z*z);
+                return 0;
+            },
+            taylorFormula: (terms) => {
+                if (terms === 1) return `f(x,z) \\approx x^2`;
+                return `f(x,z) = x^2 - z^2`;
+            }
+        },
+        sin_xz: {
+            name: 'sin(x*z)',
+            range: [-4, 4],
+            func: (x, z) => Math.sin(x*z),
+            taylorTerm: (x, z, n) => {
+                return (Math.pow(-1, n) * Math.pow(x*z, 2*n + 1)) / factorial(2*n + 1);
+            },
+            taylorFormula: (terms) => {
+                let formula = `\\sin(xz) \\approx \\sum_{n=0}^{${terms-1}} \\frac{(-1)^n (xz)^{2n+1}}{(2n+1)!} = `;
+                for(let n=0; n<terms; n++) {
+                    const sign = (n%2 === 1) ? '-' : (n > 0 ? '+' : '');
+                    formula += `${sign} \\frac{(xz)^{${2*n+1}}}{${2*n+1}!} `;
+                }
+                return formula;
+            }
+        },
+        ripple: {
+            name: 'Ripple Surface',
+            range: [-12, 12],
+            func: (x, z) => {
+                const r2 = x*x + z*z;
+                if (r2 === 0) return 1;
+                return Math.sin(r2) / r2;
+            },
+            taylorTerm: (x, z, n) => {
+                const r2 = x*x + z*z;
+                return (Math.pow(-1, n) * Math.pow(r2, 2*n)) / factorial(2*n + 1);
+            },
+            taylorFormula: (terms) => {
+                let formula = `\\frac{\\sin(r^2)}{r^2} \\approx \\sum_{n=0}^{${terms-1}} \\frac{(-1)^n (r^2)^{2n}}{(2n+1)!} = `;
+                for(let n=0; n<terms; n++) {
+                    const sign = (n%2 === 1) ? '-' : (n > 0 ? '+' : '');
+                    formula += `${sign} \\frac{(x^2+z^2)^{${2*n}}}{${2*n+1}!} `;
+                }
+                return formula;
+            }
+        }
+    };
+
+    function initMathVisualizer() {
+        const MAX_TERMS = 160;
+        const SEGMENTS = 40;
+        let currentFuncKey = 'sin';
+        let viewMode = 'cumulative'; // 'cumulative', 'individual', 'both'
+        
+        let trueFuncMesh, cumulativeApproxMesh;
+        let termMeshes = [], termGeometries = [];
+        let trueFuncGeom, cumulativeApproxGeom;
+
+        const trueFuncMat = new THREE.MeshStandardMaterial({ color: 0x2563eb, side: THREE.DoubleSide });
+        const cumulativeApproxMat = new THREE.MeshStandardMaterial({ color: 0xc12929, side: THREE.DoubleSide, roughness: 0.6 });
+        const termMats = Array.from({length: MAX_TERMS}, (_, i) => new THREE.MeshStandardMaterial({
+            color: new THREE.Color().setHSL((i / MAX_TERMS) * 0.7 + 0.6, 0.8, 0.6),
+            wireframe: false, transparent: true, opacity: 0.4, side: THREE.DoubleSide
+        }));
+        
+        const formulaDisplay = document.getElementById('formula-display');
+
+        const generateSurfaces = () => {
+            cleanupMeshes();
+            const definition = mathFunctions[currentFuncKey];
+            const size = definition.range[1] - definition.range[0];
+            const halfSize = size / 2;
+            trueFuncGeom = new THREE.PlaneGeometry(size, size, SEGMENTS, SEGMENTS);
+            const truePos = trueFuncGeom.attributes.position;
+            const cumulativePosArray = new Float32Array(truePos.count * 3);
+            
+            for(let n = 0; n < MAX_TERMS; n++) {
+                const termPosArray = new Float32Array(truePos.count * 3);
+                for (let i = 0; i < truePos.count; i++) {
+                    const x = truePos.getX(i) + halfSize + definition.range[0];
+                    const z = truePos.getY(i) + halfSize + definition.range[0];
+                    const y = definition.taylorTerm(x, z, n);
+                    termPosArray[i*3] = truePos.getX(i); termPosArray[i*3+1] = truePos.getY(i); termPosArray[i*3+2] = y;
+                }
+                const termGeom = new THREE.BufferGeometry();
+                termGeom.setAttribute('position', new THREE.BufferAttribute(termPosArray, 3));
+                termGeom.setIndex(trueFuncGeom.getIndex()); termGeom.computeVertexNormals();
+                termGeometries.push(termGeom);
+                const termMesh = new THREE.Mesh(termGeom, termMats[n]);
+                termMesh.rotation.x = -Math.PI / 2; termMesh.visible = false;
+                termMeshes.push(termMesh); activeSceneObjects.add(termMesh);
+            }
+
+            for (let i = 0; i < truePos.count; i++) {
+                const x = truePos.getX(i) + halfSize + definition.range[0];
+                const z = truePos.getY(i) + halfSize + definition.range[0];
+                truePos.setZ(i, definition.func(x, z));
+                cumulativePosArray[i*3] = truePos.getX(i); cumulativePosArray[i*3+1] = truePos.getY(i); cumulativePosArray[i*3+2] = 0;
+            }
+            trueFuncGeom.attributes.position.needsUpdate = true; trueFuncGeom.computeVertexNormals();
+            trueFuncMesh = new THREE.Mesh(trueFuncGeom, trueFuncMat);
+            trueFuncMesh.rotation.x = -Math.PI / 2; activeSceneObjects.add(trueFuncMesh);
+            cumulativeApproxGeom = new THREE.BufferGeometry();
+            cumulativeApproxGeom.setAttribute('position', new THREE.BufferAttribute(cumulativePosArray, 3));
+            cumulativeApproxGeom.setIndex(trueFuncGeom.getIndex()); cumulativeApproxGeom.computeVertexNormals();
+            cumulativeApproxMesh = new THREE.Mesh(cumulativeApproxGeom, cumulativeApproxMat);
+            cumulativeApproxMesh.rotation.x = -Math.PI / 2; activeSceneObjects.add(cumulativeApproxMesh);
+            
+            const currentTerms = parseInt(document.getElementById('terms-slider')?.value || 1);
+            updateApproximation(currentTerms);
+        };
+
+        const updateMeshVisibility = (terms) => {
+            cumulativeApproxMesh.visible = (viewMode === 'cumulative' || viewMode === 'both');
+            termMeshes.forEach((mesh, i) => {
+                mesh.visible = (i < terms) && (viewMode === 'individual' || viewMode === 'both');
+            });
+        };
+        
+        const updateApproximation = (terms) => {
+            const cumulativePos = cumulativeApproxGeom.attributes.position;
+            cumulativePos.set(termGeometries[0].attributes.position.array);
+            for(let n = 1; n < MAX_TERMS; n++) {
+                if (n < terms) {
+                    const termPos = termGeometries[n].attributes.position;
+                    for(let i=0; i<cumulativePos.count; i++) { cumulativePos.setZ(i, cumulativePos.getZ(i) + termPos.getZ(i)); }
+                }
+            }
+            cumulativePos.needsUpdate = true; cumulativeApproxGeom.computeVertexNormals();
+            
+            updateMeshVisibility(terms);
+
+            const formulaString = mathFunctions[currentFuncKey].taylorFormula(terms);
+            katex.render(formulaString, formulaDisplay, { throwOnError: false, displayMode: true });
+        };
+
+        const controlsPanel = document.getElementById('controls-panel');
+        let optionsHTML = '';
+        Object.keys(mathFunctions).forEach(key => { optionsHTML += `<option value="${key}">${mathFunctions[key].name}</option>`; });
+        
+        controlsPanel.innerHTML = `
+            <div class="control-group"> <label for="function-select" class="text-sm font-medium">Function</label> <select id="function-select" class="control-select">${optionsHTML}</select> </div>
+            <div class="control-group"> <label for="terms-slider" class="text-sm font-medium">Taylor Series Terms: <span id="terms-value">1</span></label> <input id="terms-slider" type="range" min="1" max="${MAX_TERMS}" step="1" value="1" class="w-48"> </div>
+            <div class="control-group"> <label class="text-sm font-medium">View Mode</label> <div id="view-mode-toggle" class="flex rounded-md bg-gray-700 p-1"> <button data-mode="cumulative" class="view-mode-button active">Final</button> <button data-mode="individual" class="view-mode-button">Terms</button> <button data-mode="both" class="view-mode-button">Both</button> </div> </div>
+        `;
+        
+        const termsSlider = document.getElementById('terms-slider');
+        const termsValue = document.getElementById('terms-value');
+
+        termsSlider.addEventListener('input', (e) => {
+            const terms = parseInt(e.target.value);
+            termsValue.textContent = terms;
+            updateApproximation(terms);
+        });
+
+        document.getElementById('function-select').addEventListener('change', (e) => {
+            currentFuncKey = e.target.value;
+            const definition = mathFunctions[currentFuncKey];
+            termsSlider.max = definition.maxTerms || MAX_TERMS;
+            if (parseInt(termsSlider.value) > termsSlider.max) {
+                termsSlider.value = termsSlider.max;
+            }
+            termsValue.textContent = termsSlider.value;
+            generateSurfaces();
+        });
+
+        document.querySelectorAll('.view-mode-button').forEach(button => {
+            button.addEventListener('click', () => {
+                viewMode = button.dataset.mode;
+                document.querySelectorAll('.view-mode-button').forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                const currentTerms = parseInt(termsSlider.value);
+                updateMeshVisibility(currentTerms);
+            });
+        });
+
+        const cleanupMeshes = () => {
+             if (trueFuncMesh) activeSceneObjects.remove(trueFuncMesh);
+             if (cumulativeApproxMesh) activeSceneObjects.remove(cumulativeApproxMesh);
+             termMeshes.forEach(mesh => activeSceneObjects.remove(mesh));
+             if (trueFuncGeom) trueFuncGeom.dispose();
+             if (cumulativeApproxGeom) cumulativeApproxGeom.dispose();
+             termGeometries.forEach(geom => geom.dispose());
+             termMeshes = []; termGeometries = [];
+             formulaDisplay.innerHTML = '';
+        };
+        function cleanup() {
+            cleanupMeshes();
+            trueFuncMat.dispose(); cumulativeApproxMat.dispose(); termMats.forEach(mat => mat.dispose());
+            console.log("Cleaned up Math Visualizer");
+        }
+        generateSurfaces();
+        return { cleanup };
+    }
+
+    function initSolarSystem() {
+        const sphereGeometry = new THREE.SphereGeometry(1, 32, 16);
+        const sunMaterial = new THREE.MeshStandardMaterial({ emissive: 0xffff00, emissiveIntensity: 2, color: 0xffff00 });
+        const earthMaterial = new THREE.MeshStandardMaterial({ color: 0x2288ff, roughness: 0.7 });
+        const moonMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+        const sun = new THREE.Mesh(sphereGeometry.clone(), sunMaterial); sun.scale.setScalar(5); activeSceneObjects.add(sun);
+        const sunLight = new THREE.PointLight(0xffffff, 300, 200); activeSceneObjects.add(sunLight);
+        const earthPivot = new THREE.Group(); activeSceneObjects.add(earthPivot);
+        const earth = new THREE.Mesh(sphereGeometry.clone(), earthMaterial); earth.position.x = 15; earth.scale.setScalar(1.5); earthPivot.add(earth);
+        const moonPivot = new THREE.Group(); earth.add(moonPivot);
+        const moon = new THREE.Mesh(sphereGeometry.clone(), moonMaterial); moon.position.x = 3; moon.scale.setScalar(0.5); moonPivot.add(moon);
+        document.getElementById('controls-panel').innerHTML = `<p class="text-gray-400">A demonstration of object hierarchies and animation.</p>`;
+        document.getElementById('formula-display').style.display = 'none';
+        function update(delta) {
+            const speed = animationSpeed * delta;
+            earthPivot.rotation.y += speed * 0.2; earth.rotation.y += speed * 0.5; moonPivot.rotation.y += speed * 0.8;
+        }
+        function cleanup() {
+            sphereGeometry.dispose(); sunMaterial.dispose(); earthMaterial.dispose(); moonMaterial.dispose();
+            document.getElementById('formula-display').style.display = 'block'; console.log("Cleaned up Solar System Scene");
+        }
+        return { update, cleanup, followTarget: earth };
+    }
+
+    function initSceneOne() {
+        const geometry = new THREE.BoxGeometry(2, 2, 2);
+        const material = new THREE.MeshStandardMaterial({ color: 0x4f46e5, roughness: 0.5 });
+        const cube = new THREE.Mesh(geometry, material); activeSceneObjects.add(cube);
+        document.getElementById('controls-panel').innerHTML = `<div class="control-group"><label for="scale-slider" class="text-sm font-medium">Cube Scale: <span id="scale-value">1.0</span></label><input id="scale-slider" type="range" min="0.1" max="3" step="0.1" value="1" class="w-48"></div>`;
+        document.getElementById('scale-slider').addEventListener('input', (e) => {
+            const scale = parseFloat(e.target.value); cube.scale.set(scale, scale, scale); document.getElementById('scale-value').textContent = scale.toFixed(1);
+        });
+        document.getElementById('formula-display').style.display = 'none';
+        function update(delta) { cube.rotation.x += delta * 0.2 * animationSpeed; cube.rotation.y += delta * 0.3 * animationSpeed; }
+        function cleanup() { geometry.dispose(); material.dispose(); document.getElementById('formula-display').style.display = 'block'; console.log("Cleaned up Scene One"); }
+        return { update, cleanup, followTarget: cube };
+    }
+
+    function initSceneTwo() {
+        const starCount = 5000; const vertices = [];
+        for (let i = 0; i < starCount; i++) { vertices.push(THREE.MathUtils.randFloatSpread(500), THREE.MathUtils.randFloatSpread(500), THREE.MathUtils.randFloatSpread(500)); }
+        const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0xffffff, size: 0.5 });
+        const stars = new THREE.Points(geometry, material); activeSceneObjects.add(stars);
+        document.getElementById('controls-panel').innerHTML = `<p class="text-gray-400">A simple particle starfield.</p>`;
+        document.getElementById('formula-display').style.display = 'none';
+        function update(delta) { stars.rotation.y += delta * 0.02 * animationSpeed; }
+        function cleanup() { geometry.dispose(); material.dispose(); document.getElementById('formula-display').style.display = 'block'; console.log("Cleaned up Scene Two"); }
+        return { update, cleanup };
+    }
+
+    // =================================================================================================
+    // ||                                      TEMPLATE ENGINE                                        ||
+    // =================================================================================================
+    let scene, camera, renderer, controls, clock;
+    let playerDolly;
+    let activeSceneObjects = new THREE.Group();
+    let currentUpdate = () => {}, currentCleanup = () => {}, currentSceneKey = null;
+    let animationSpeed = 1.0, followMode = false, followObject = null;
+   
+    function init() {
+        clock = new THREE.Clock(); scene = new THREE.Scene(); scene.background = new THREE.Color(0x030712);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        playerDolly = new THREE.Group(); playerDolly.add(camera); scene.add(playerDolly);
+        renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(window.devicePixelRatio); renderer.setSize(window.innerWidth, window.innerHeight); document.body.appendChild(renderer.domElement);
+        controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.0); dirLight.position.set(5, 10, 7.5); scene.add(dirLight);
+        scene.add(activeSceneObjects); setupUI();
+        const firstSceneKey = Object.keys(scenes)[0];
+        if (firstSceneKey) { switchScene(firstSceneKey); }
+        window.addEventListener('resize', onWindowResize);
+        renderer.setAnimationLoop(animate);
+    }
+
+    function switchScene(key) {
+        if (key === currentSceneKey) return;
+        if (currentCleanup) { currentCleanup(); }
+        while(activeSceneObjects.children.length > 0) { activeSceneObjects.remove(activeSceneObjects.children[0]); }
+        document.getElementById('controls-panel').innerHTML = '';
+        followObject = null; document.getElementById('follow-toggle').classList.remove('active'); document.getElementById('follow-toggle').textContent = 'Off'; followMode = false;
+        camera.position.set(5, 7, 12); controls.target.set(0, 0, 0);
+        const sceneData = scenes[key];
+        document.getElementById('info-title').textContent = sceneData.title; document.getElementById('info-description').textContent = sceneData.description;
+        document.querySelectorAll('.menu-button').forEach(b => b.classList.remove('active')); document.getElementById(`btn-${key}`)?.classList.add('active');
+        currentSceneKey = key;
+        const result = sceneData.init();
+        currentUpdate = result.update || (() => {}); currentCleanup = result.cleanup || (() => {});
+        if (result.followTarget) { followObject = result.followTarget; camera.position.set(0, 5, 25); }
+    }
+
+    function animate() { 
+        const delta = clock.getDelta(); controls.update(); currentUpdate(delta); updateCameraFollow(); renderer.render(scene, camera); 
+    }
+
+    function updateCameraFollow() {
+        if (followMode && followObject) {
+            const targetPosition = new THREE.Vector3(); followObject.getWorldPosition(targetPosition); controls.target.lerp(targetPosition, 0.1);
+        }
+    }
+   
+    function setupUI() {
+        const menuDiv = document.getElementById('menu');
+        Object.keys(scenes).forEach(key => {
+            const button = document.createElement('button'); button.id = `btn-${key}`; button.className = 'menu-button'; button.textContent = scenes[key].title.split(':')[0]; button.onclick = () => switchScene(key); menuDiv.appendChild(button);
+        });
+        document.getElementById('info-panel').addEventListener('click', (e) => { if (!e.target.closest('button, a, input, select')) { e.currentTarget.classList.toggle('expanded'); } });
+        const settingsPanel = document.getElementById('settings-panel');
+        document.getElementById('settings-button').addEventListener('click', () => { settingsPanel.classList.remove('hidden'); requestAnimationFrame(() => settingsPanel.classList.add('open')); });
+        document.getElementById('close-settings').addEventListener('click', () => { settingsPanel.classList.remove('open'); });
+        settingsPanel.addEventListener('transitionend', () => { if (!settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden'); });
+        document.getElementById('follow-toggle').addEventListener('click', (e) => {
+            followMode = !followMode; e.target.textContent = followMode ? 'On' : 'Off'; e.target.classList.toggle('active', followMode); if (!followMode) { controls.target.lerp(new THREE.Vector3(0,0,0), 0.2); }
+        });
+        document.getElementById('speed-slider').addEventListener('input', (e) => {
+            animationSpeed = parseFloat(e.target.value); document.getElementById('speed-value').textContent = `${animationSpeed.toFixed(1)}x`;
+        });
+        document.getElementById('graphics-slider').addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value); renderer.setPixelRatio(window.devicePixelRatio * quality);
+            const qualityValueEl = document.getElementById('graphics-quality-value');
+            if (quality < 0.8) qualityValueEl.textContent = "Low"; else if (quality < 1.5) qualityValueEl.textContent = "Medium"; else qualityValueEl.textContent = "High";
+        });
+        const fullscreenButton = document.getElementById('fullscreen-button'); const enterIcon = document.getElementById('fullscreen-enter-icon'); const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; }
+        fullscreenButton.addEventListener('click', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+        document.addEventListener('fullscreenchange', () => {
+            const isFullscreen = !!document.fullscreenElement; enterIcon.classList.toggle('hidden', isFullscreen); exitIcon.classList.toggle('hidden', !isFullscreen);
+        });
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+   
+    init();
+</script>
+</body>
+</html>
+

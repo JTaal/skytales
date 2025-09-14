@@ -1,0 +1,1102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Interactive Complex Number Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712;
+            color: #e5e7eb;
+            touch-action: none;
+        }
+        .ui-element {
+            transition: opacity 0.3s ease-in-out, transform 0.3s ease-in-out;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            z-index: 10;
+        }
+        #info-panel, #mandelbrot-info-panel, #wf-info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px; /* Collapsed */
+        }
+        #info-panel.expanded, #mandelbrot-info-panel.expanded, #wf-info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header, #mandelbrot-info-header, #wf-info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon, #mandelbrot-toggle-icon, #wf-toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon, #mandelbrot-info-panel.expanded #mandelbrot-toggle-icon, #wf-info-panel.expanded #wf-toggle-icon { transform: rotate(180deg); }
+        .info-grid {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 0.5rem 1.5rem;
+            align-items: center;
+            font-family: monospace;
+            font-size: 1.1rem;
+        }
+        .info-grid > dt { color: #9ca3af; }
+        .info-grid > dd { color: #e5e7eb; font-weight: 600; }
+        #controls-panel {
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: auto;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-direction: row; 
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+         #mandelbrot-controls-panel {
+             bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: auto;
+            max-width: 95%;
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        #mandelbrot-main-controls {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            width: 100%;
+        }
+
+        #mandelbrot-extra-controls {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out, padding-top 0.5s ease-in-out;
+            display: flex;
+            flex-direction: row;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            justify-content: center;
+        }
+        #mandelbrot-extra-controls.expanded {
+            max-height: 500px; 
+            padding-top: 1.5rem;
+        }
+
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu { display: flex; gap: 10px; }
+        .menu-button, .mobile-menu-item, select {
+            background-color: rgba(55, 65, 81, 0.8);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+        }
+        select { -webkit-appearance: none; appearance: none; padding-right: 32px; background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e"); background-position: right 0.5rem center; background-repeat: no-repeat; background-size: 1.5em 1.5em;}
+        .menu-button:hover, select:hover { background-color: #4338ca; transform: translateY(-2px); }
+        .menu-button.active { background-color: #4f46e5; box-shadow: 0 0 15px rgba(79, 70, 229, 0.5); }
+        .mobile-menu-item { display: block; width: 100%; text-align: left; }
+        .mobile-menu-item.active { background-color: #4f46e5; }
+        
+        .control-group { display: flex; flex-direction: row; align-items: center; gap: 0.75rem; }
+        .control-group label { color: #9ca3af; font-size: 0.875rem; }
+        .value-display { font-weight: 600; min-width: 90px; text-align: center; background-color: #111827; padding: 0.25rem 0.5rem; border-radius: 6px; font-family: monospace; }
+        input[type="range"] { -webkit-appearance: none; width: 150px; height: 4px; background: #4b5563; border-radius: 2px; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: #818cf8; cursor: pointer; border-radius: 50%; }
+        
+        #settings-button, #fullscreen-button {
+            position: absolute; background-color: rgba(55, 65, 81, 0.8); backdrop-filter: blur(5px); border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white; padding: 10px; border-radius: 50%; cursor: pointer;
+        }
+        #settings-button { top: 80px; right: 20px; z-index: 11; }
+        #fullscreen-button { bottom: 120px; right: 20px; z-index: 11; }
+        #settings-button:hover { background-color: #4338ca; transform: translateY(-2px) rotate(45deg); }
+        #fullscreen-button:hover { background-color: #4338ca; transform: translateY(-2px) scale(1.1); }
+        
+        #settings-panel {
+            top: 80px; right: 0; width: 300px; border-radius: 12px 0 0 12px; transform: translateX(100%);
+            max-height: calc(100vh - 100px); overflow-y: auto; z-index: 12;
+        }
+        #settings-panel.open { transform: translateX(0); }
+        #close-settings { font-size: 2.5rem; line-height: 1; padding: 0; background: none; border: none; cursor: pointer; }
+        
+        .formula-container {
+            background-color: #111827; padding: 0.75rem 1.5rem;
+            border-radius: 8px; font-size: 1.25rem; font-family: 'Georgia', serif; color: #e5e7eb; border: 1px solid #374151;
+            text-align: center; margin-bottom: 1rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+        #main-ui-container canvas { cursor: grab; }
+        #main-ui-container canvas:active { cursor: grabbing; }
+        
+        #mobile-menu-container { display: none; }
+
+        #loading-overlay { transition: opacity 0.3s ease-in-out; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loader { border: 8px solid #374151; border-top-color: #4f46e5; animation: spin 1.5s linear infinite; }
+        
+        #mandelbrot-container { position: absolute; inset: 0; }
+
+        .fullscreen-hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+            transform: translateY(-20px);
+        }
+        #controls-panel.fullscreen-hidden, #mandelbrot-controls-panel.fullscreen-hidden, footer.wf-footer.fullscreen-hidden {
+             transform: translate(-50%, 20px);
+        }
+        
+        #wave-forms-container { height: 100%; width: 100%; position: absolute; inset: 0; display: flex; flex-direction: column; background-color: #000; }
+        .wf-view-container { flex-grow: 1; position: relative; display: none; }
+        .wf-view-container.active { display: block; }
+        .wf-overlay-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        .wf-controls-container { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(17, 24, 39, 0.8); padding: 1rem; border-radius: 12px; border: 1px solid #374151; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1rem; z-index: 101; width: 90%; max-width: 800px; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.4); backdrop-filter: blur(5px); pointer-events: auto; }
+        .wf-control-group { display: flex; align-items: center; gap: 0.75rem; color: #e5e7eb; }
+        .wf-control-group label { font-weight: 600; white-space: nowrap; color: #9ca3af; }
+        .wf-control-group input[type="range"] { width: 120px; }
+        footer.wf-footer { flex-shrink: 0; background-color: #111827; border-top: 1px solid #374151; z-index: 200; pointer-events: auto;}
+        .tab-button.active { background-color: #4f46e5; color: #ffffff; }
+
+        @media (max-width: 900px) {
+            #menu { display: none; }
+            #mobile-menu-container { display: block; }
+            header { padding: 0.75rem 1rem; }
+            #info-panel, #mandelbrot-info-panel, #wf-info-panel { left: 10px; right: 10px; max-width: none; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 120px; right: 10px; }
+            .formula-container { font-size: 1rem; width: 90%; margin-left: auto; margin-right: auto;}
+            #controls-panel { flex-direction: column; width: 95%; padding: 0.75rem; bottom: 10px; left: 50%; transform: translateX(-50%); }
+             #mandelbrot-controls-panel, .control-group {
+                flex-direction: column;
+                width: 100%;
+            }
+             #mandelbrot-controls-panel { width: 95%; left: 50%; transform: translateX(-50%); bottom: 10px;}
+            .control-group input[type="range"] {
+                width: 100%;
+            }
+             #mandelbrot-extra-controls { width: 100%;}
+             #mandelbrot-main-controls { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay" class="hidden fixed inset-0 bg-gray-950 bg-opacity-80 flex flex-col items-center justify-center z-50 transition-opacity duration-300 ease-in-out">
+        <div class="loader rounded-full h-32 w-32 mb-4"></div>
+        <p id="loading-text" class="text-xl text-gray-300 font-medium">Updating...</p>
+    </div>
+    
+    <header class="ui-element">
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider opacity-90">Complex Visualizer</h1>
+        <div id="menu"></div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Views</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30 space-y-1 p-1"></div>
+        </div>
+    </header>
+    
+    <div id="main-ui-container">
+        <!-- Canvas for non-special views will be appended here -->
+    </div>
+    
+    <div id="wave-forms-container" class="hidden"></div>
+    <div id="mandelbrot-container" class="hidden"></div>
+    
+    <button id="fullscreen-button" class="ui-element" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    
+    <button id="settings-button" class="ui-element" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    
+    <div id="settings-panel" class="ui-panel ui-element hidden">
+        <div class="flex justify-between items-center mb-6">
+            <h3 class="text-xl font-bold text-gray-200">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label for="graphics-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Graphics Quality:</span> <span id="graphics-quality-value">High</span>
+                </label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+            </div>
+             <div class="control-group text-left w-full">
+                <label for="theta-max-input" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Theta Max (°):</span> <span id="theta-max-value">360°</span>
+                </label>
+                <input id="theta-max-input" type="range" min="360" max="2880" step="360" value="360" class="w-full">
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls, clock;
+        let activeView = null;
+        let viewObjects = new THREE.Group();
+        let isAnimating = false;
+        let maxTheta = 360;
+        let sharedState = {
+            theta: Math.PI / 4,
+            radius: 1.0
+        };
+        let viewCleanup = () => {};
+
+        const views = {
+            euler: {
+                title: "Euler's Identity",
+                description: "This view shows a complex number on the 2D complex plane. The vector from the origin has length 'r' (radius) and makes an angle 'θ' (theta) with the real axis.",
+                init: initEulerView
+            },
+            shader_helix: {
+                title: "Shader Helix",
+                description: "This view represents the function e^(iθ) as a helix in 3D space. The position on the complex plane rotates as the height (representing the angle θ) increases.",
+                init: initShaderHelixView
+            },
+            riemann: {
+                title: 'Riemann Sphere',
+                description: "This view shows a stereographic projection, mapping the infinite complex plane onto the surface of a finite sphere. Lines on the plane become circles on the sphere.",
+                init: initRiemannView
+            },
+            wave_forms: {
+                title: 'Wave Forms',
+                description: 'An isolated view showing sine and cosine waves. These two fundamental waves are the building blocks of the complex exponential function shown in the other views.',
+                init: initWaveFormsView
+            },
+            mandelbrot: {
+                title: 'Multibrot Set',
+                description: 'Explore the Multibrot sets. Pan by dragging and zoom with the scroll wheel or pinch gestures.',
+                init: initMandelbrotView
+            }
+        };
+
+        function init() {
+            clock = new THREE.Clock();
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.getElementById('main-ui-container').appendChild(renderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            
+            scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+            dirLight.position.set(5, 10, 7.5);
+            scene.add(dirLight);
+
+            scene.add(viewObjects);
+
+            createMenu();
+            setupMobileMenu();
+            setupSettingsPanel();
+            setupFullscreen();
+
+            switchView('euler');
+
+            window.addEventListener('resize', onWindowResize);
+            renderer.setAnimationLoop(animate);
+        }
+        
+        function setupMainUI() {
+             document.getElementById('main-ui-container').innerHTML = `
+                <div id="info-panel" class="ui-panel ui-element">
+                    <div id="info-header">
+                        <h2 id="info-title" class="text-xl font-bold text-indigo-400"></h2>
+                        <div id="toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                    </div>
+                    <div id="info-content" class="pt-4 space-y-3">
+                         <p id="info-description" class="text-gray-300"></p>
+                         <div class="formula-container">z = r(cos(θ) + i sin(θ)) = re<sup>iθ</sup></div>
+                         <div id="info-grid" class="info-grid mt-2">
+                             <dt>Rectangular:</dt><dd id="info-rectangular">0.71 + 0.71i</dd>
+                            <dt>r (Radius):</dt><dd id="info-radius">1.00</dd>
+                            <dt>θ (Degrees):</dt><dd id="info-theta">45°</dd>
+                            <dt>θ (Radians):</dt><dd id="info-radians">0.785</dd>
+                            <dt>θ (Pi):</dt><dd id="info-pi">0.25π</dd>
+                            <dt>θ (Norm):</dt><dd id="info-normalized">0.125</dd>
+                            <dt>cos(θ):</dt><dd id="info-cos">0.707</dd>
+                            <dt>sin(θ):</dt><dd id="info-sin">0.707</dd>
+                         </div>
+                    </div>
+                </div>
+                <div id="controls-panel" class="ui-panel ui-element">
+                    <div class="control-group">
+                        <label for="theta-slider">Theta (θ)</label>
+                        <input id="theta-slider" type="range" min="0" max="360" value="45" step="1">
+                        <span id="theta-value" class="value-display">45°</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="radius-slider">Radius (r)</label>
+                        <input id="radius-slider" type="range" min="0.1" max="5.0" value="1.0" step="0.05">
+                         <span id="radius-value" class="value-display">1.00</span>
+                    </div>
+                    <button id="play-pause-button" class="menu-button">Play</button>
+                </div>
+            `;
+            document.getElementById('main-ui-container').appendChild(renderer.domElement);
+            setupInfoPanel();
+            setupControls();
+        }
+
+
+        function switchView(key) {
+            if (activeView === key) return;
+            
+            viewCleanup(); viewCleanup = () => {};
+            
+            while(viewObjects.children.length > 0) {
+                const obj = viewObjects.children[0];
+                if (obj.geometry) obj.geometry.dispose();
+                if (obj.material) {
+                     if (Array.isArray(obj.material)) {
+                         obj.material.forEach(m => { if(m.map) m.map.dispose(); m.dispose()});
+                    } else if (obj.material.map) {
+                        obj.material.map.dispose();
+                        obj.material.dispose();
+                    } else {
+                        obj.material.dispose();
+                    }
+                }
+                viewObjects.remove(obj);
+            }
+            
+            const mainUiContainer = document.getElementById('main-ui-container');
+            const waveFormsContainer = document.getElementById('wave-forms-container');
+            const mandelbrotContainer = document.getElementById('mandelbrot-container');
+
+            mainUiContainer.classList.add('hidden');
+            waveFormsContainer.classList.add('hidden');
+            mandelbrotContainer.classList.add('hidden');
+
+            const view = views[key];
+            if (key === 'wave_forms') {
+                waveFormsContainer.classList.remove('hidden');
+            } else if (key === 'mandelbrot') {
+                mandelbrotContainer.classList.remove('hidden');
+            } else {
+                mainUiContainer.classList.remove('hidden');
+                setupMainUI(); 
+                document.getElementById('info-title').textContent = view.title;
+                document.getElementById('info-description').textContent = view.description;
+            }
+            
+            document.getElementById('mobile-menu-label').textContent = view.title;
+            
+            const cleanupFunc = view.init();
+            if (typeof cleanupFunc === 'function') {
+                viewCleanup = cleanupFunc;
+            }
+
+            activeView = key;
+            
+            document.querySelectorAll('.menu-button, .mobile-menu-item').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === key);
+            });
+
+            updateAll();
+        }
+        
+        function initEulerView() {
+            controls.target.set(0, 0, 0);
+            camera.position.set(0, 0, 3);
+            const axesHelper = new THREE.AxesHelper(2.5);
+            axesHelper.setColors(new THREE.Color(0xef4444), new THREE.Color(0x22c55e), new THREE.Color(0x3b82f6));
+            viewObjects.add(axesHelper);
+            createAxisLabel('Real', new THREE.Vector3(2.7, 0, 0));
+            createAxisLabel('Imaginary', new THREE.Vector3(0, 2.7, 0));
+            const pointGeo = new THREE.SphereGeometry(0.08, 32, 32);
+            const pointMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 1 });
+            const complexPoint = new THREE.Mesh(pointGeo, pointMat);
+            viewObjects.add(complexPoint);
+            const vectorLineMat = new THREE.LineBasicMaterial({ color: 0xfacc15, linewidth: 2 });
+            const vectorLine = new THREE.Line(new THREE.BufferGeometry(), vectorLineMat);
+            viewObjects.add(vectorLine);
+            const projectionMat = new THREE.LineDashedMaterial({ color: 0x9ca3af, dashSize: 0.05, gapSize: 0.05 });
+            const cosLine = new THREE.Line(new THREE.BufferGeometry(), projectionMat);
+            const sinLine = new THREE.Line(new THREE.BufferGeometry(), projectionMat);
+            viewObjects.add(cosLine, sinLine);
+            const circleGeo = new THREE.RingGeometry(0.99, 1.01, 128);
+            const circleMat = new THREE.MeshBasicMaterial({ color: 0x4f46e5, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+            const unitCircle = new THREE.Mesh(circleGeo, circleMat);
+            viewObjects.add(unitCircle);
+            const arcMat = new THREE.LineBasicMaterial({ color: 0x60a5fa });
+            const arc = new THREE.Line(new THREE.BufferGeometry(), arcMat);
+            viewObjects.add(arc);
+            views.euler.update = () => {
+                const x = sharedState.radius * Math.cos(sharedState.theta);
+                const y = sharedState.radius * Math.sin(sharedState.theta);
+                complexPoint.position.set(x, y, 0);
+                vectorLine.geometry.setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(x,y,0)]);
+                cosLine.geometry.setFromPoints([complexPoint.position, new THREE.Vector3(x,0,0)]);
+                sinLine.geometry.setFromPoints([complexPoint.position, new THREE.Vector3(0,y,0)]);
+                cosLine.computeLineDistances();
+                sinLine.computeLineDistances();
+                unitCircle.scale.setScalar(sharedState.radius);
+                const arcCurve = new THREE.EllipseCurve(0, 0, 0.3, 0.3, 0, sharedState.theta);
+                arc.geometry.setFromPoints(arcCurve.getPoints(50));
+            };
+            return null;
+        }
+
+        function initShaderHelixView() {
+            controls.target.set(0, 0, 2);
+            camera.position.set(3, 3, 5);
+            const axesHelper = new THREE.AxesHelper(3);
+            axesHelper.setColors(new THREE.Color(0xef4444), new THREE.Color(0x22c55e), new THREE.Color(0x3b82f6));
+            viewObjects.add(axesHelper);
+            createAxisLabel('Real', new THREE.Vector3(3.2, 0, 0));
+            createAxisLabel('Imaginary', new THREE.Vector3(0, 3.2, 0));
+            createAxisLabel('θ', new THREE.Vector3(0, 0, 4 * Math.PI + 0.2));
+            class HelixCurve extends THREE.Curve {
+                getPoint(t, optionalTarget = new THREE.Vector3()) {
+                    const angle = 4 * Math.PI * t;
+                    return optionalTarget.set(Math.cos(angle), Math.sin(angle), angle);
+                }
+            }
+            const helixGeo = new THREE.TubeGeometry(new HelixCurve(), 256, 0.05, 16, false);
+            const helixMat = new THREE.ShaderMaterial({
+                uniforms: {
+                    color1: { value: new THREE.Color(0x6366f1) },
+                    color2: { value: new THREE.Color(0xa78bfa) }
+                },
+                vertexShader: `varying vec3 vPosition; void main() { vPosition = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+                fragmentShader: `varying vec3 vPosition; uniform vec3 color1; uniform vec3 color2; void main() { gl_FragColor = vec4(mix(color1, color2, vPosition.z / (4.0 * 3.14159)), 1.0); }`
+            });
+            const helixMesh = new THREE.Mesh(helixGeo, helixMat);
+            viewObjects.add(helixMesh);
+            const pointGeo = new THREE.SphereGeometry(0.1, 32, 16);
+            const pointMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15, emissiveIntensity: 1 });
+            const movingPoint = new THREE.Mesh(pointGeo, pointMat);
+            viewObjects.add(movingPoint);
+            const projectionLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0x9ca3af, dashSize: 0.1, gapSize: 0.05 }));
+            const projectionPoint = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 16), new THREE.MeshStandardMaterial({color: 0x9ca3af}));
+            viewObjects.add(projectionLine, projectionPoint);
+            views.shader_helix.update = () => {
+                helixMesh.scale.set(sharedState.radius, sharedState.radius, 1);
+                const x = sharedState.radius * Math.cos(sharedState.theta);
+                const y = sharedState.radius * Math.sin(sharedState.theta);
+                const z = sharedState.theta;
+                movingPoint.position.set(x, y, z);
+                projectionPoint.position.set(x,y,0);
+                projectionLine.geometry.setFromPoints([movingPoint.position, projectionPoint.position]);
+                projectionLine.computeLineDistances();
+            };
+             return null;
+        }
+
+        function initRiemannView() {
+            controls.target.set(0, 0, 1);
+            camera.position.set(2, 3, 4);
+            const sphereGeo = new THREE.SphereGeometry(1, 64, 32);
+            const sphereMat = new THREE.MeshLambertMaterial({ color: 0x1e3a8a, transparent: true, opacity: 0.3 });
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat);
+            sphere.position.set(0, 0, 1);
+            viewObjects.add(sphere);
+            const pointGeo = new THREE.SphereGeometry(0.06, 32, 16);
+            const planePoint = new THREE.Mesh(pointGeo, new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xfacc15 }));
+            viewObjects.add(planePoint);
+            const spherePoint = new THREE.Mesh(pointGeo, new THREE.MeshStandardMaterial({ color: 0xf472b6, emissive: 0xf472b6 }));
+            viewObjects.add(spherePoint);
+            const projLine = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineDashedMaterial({ color: 0x9ca3af, dashSize: 0.1, gapSize: 0.05 }));
+            viewObjects.add(projLine);
+            createAxisLabel('N (∞)', new THREE.Vector3(0, 0, 2.2));
+            createAxisLabel('S (0)', new THREE.Vector3(0, 0, -0.2));
+            const lines = new THREE.Group();
+            const lineMat = new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.5 });
+            for (let i = 1; i < 8; i++) {
+                const radius = Math.sin(i * Math.PI / 8);
+                const y = Math.cos(i * Math.PI / 8);
+                const circle = new THREE.BufferGeometry().setFromPoints(new THREE.Path().absarc(0, 0, radius, 0, Math.PI * 2, false).getSpacedPoints(128));
+                const line = new THREE.Line(circle, lineMat);
+                line.position.z = y + 1;
+                lines.add(line);
+            }
+            for (let i = 0; i < 8; i++) {
+                const circle = new THREE.BufferGeometry().setFromPoints(new THREE.Path().absarc(0, 0, 1, 0, Math.PI * 2, false).getSpacedPoints(128));
+                const line = new THREE.Line(circle, lineMat);
+                line.rotation.x = Math.PI / 2;
+                line.rotation.y = i * Math.PI / 8;
+                line.position.z = 1;
+                lines.add(line);
+            }
+            viewObjects.add(lines);
+            const projectedGrid = new THREE.Group();
+            const projGridMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.7 });
+            const gridLimit = 5;
+            for (let i = -gridLimit; i <= gridLimit; i++) {
+                if (i === 0) continue;
+                projectedGrid.add(new THREE.Line(projectLineOntoSphere([new THREE.Vector3(i, -gridLimit, 0), new THREE.Vector3(i, gridLimit, 0)]), projGridMat));
+                projectedGrid.add(new THREE.Line(projectLineOntoSphere([new THREE.Vector3(-gridLimit, i, 0), new THREE.Vector3(gridLimit, i, 0)]), projGridMat));
+            }
+            viewObjects.add(projectedGrid);
+            views.riemann.update = () => {
+                const x = sharedState.radius * Math.cos(sharedState.theta);
+                const y = sharedState.radius * Math.sin(sharedState.theta);
+                planePoint.position.set(x, y, 0);
+                const dSq = x*x + y*y;
+                const sx = (2 * x) / (1 + dSq), sy = (2 * y) / (1 + dSq), sz = (-1 + dSq) / (1 + dSq);
+                spherePoint.position.set(sx, sy, sz + 1);
+                const northPole = new THREE.Vector3(0, 0, 2);
+                projLine.geometry.setFromPoints([northPole, new THREE.Vector3(x, y, 0)]);
+                projLine.computeLineDistances();
+            };
+             return null;
+        }
+
+        function projectLineOntoSphere(points) {
+            const projectedPoints = [];
+            const segments = 100;
+            for(let i = 0; i <= segments; i++) {
+                const p = new THREE.Vector3().lerpVectors(points[0], points[1], i / segments);
+                const dSq = p.x*p.x + p.y*p.y;
+                const sx = (2 * p.x) / (1 + dSq);
+                const sy = (2 * p.y) / (1 + dSq);
+                const sz = (-1 + dSq) / (1 + dSq);
+                projectedPoints.push(new THREE.Vector3(sx, sy, sz + 1));
+            }
+            return new THREE.BufferGeometry().setFromPoints(projectedPoints);
+        }
+
+        function initWaveFormsView() {
+            const container = document.getElementById('wave-forms-container');
+            container.innerHTML = `
+                <div id="wf-info-panel" class="ui-panel ui-element">
+                    <div id="wf-info-header">
+                        <h2 class="text-xl font-bold text-indigo-400">Wave Components</h2>
+                         <div id="wf-toggle-icon" class="text-indigo-400">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                         </div>
+                    </div>
+                     <div class="pt-4 space-y-3">
+                         <p class="text-gray-300">These sine and cosine waves are the fundamental building blocks of the complex exponential function shown in the other views.</p>
+                         <div class="formula-container" style="font-size: 1.1rem;">e<sup>iθ</sup> = cos(θ) + i sin(θ)</div>
+                     </div>
+                </div>
+                <div id="shader-view" class="wf-view-container active">
+                    <div class="wf-overlay-container">
+                        <div id="controls-shader" class="wf-controls-container"><div class="wf-control-group"><label for="frequency-slider-shader">Frequency:</label><input type="range" id="frequency-slider-shader" min="0" max="100" value="0" step="1"><span id="frequency-value-shader" class="value-display">1.0 Hz</span></div><div class="wf-control-group"><label for="zoom-slider-shader">Zoom:</label><input type="range" id="zoom-slider-shader" min="0" max="100" value="0" step="1"><span id="zoom-value-shader" class="value-display">1.0x</span></div></div>
+                    </div>
+                </div>
+                <div id="geometry-view" class="wf-view-container">
+                     <div class="wf-overlay-container">
+                         <div id="controls-geometry" class="wf-controls-container"><div class="wf-control-group"><label for="frequency-slider-geometry">Frequency:</label><input type="range" id="frequency-slider-geometry" min="0" max="100" value="0" step="1"><span id="frequency-value-geometry" class="value-display">1.0x</span></div><div class="wf-control-group"><label for="amplitude-slider-geometry">Amplitude:</label><input type="range" id="amplitude-slider-geometry" min="0.1" max="2.5" value="1" step="0.1"><span id="amplitude-value-geometry" class="value-display">1.0</span></div></div>
+                    </div>
+                </div>
+                <footer class="wf-footer ui-element"><div class="container mx-auto px-4 py-3 flex justify-center items-center"><div id="tab-container" class="flex items-center bg-gray-700 rounded-lg p-1 space-x-1"><button id="btn-shader" class="menu-button tab-button active">Shader View</button><button id="btn-geometry" class="menu-button tab-button">Geometry View</button></div></div></footer>`;
+            document.getElementById('wf-info-panel').addEventListener('click', (e) => {
+                if (e.target.closest('a')) return;
+                e.currentTarget.classList.toggle('expanded');
+            });
+            let currentWaveView = 'shader';
+            let waveViewInstances = {};
+            let waveUpdateFuncs = {};
+            views.wave_forms.update = () => {
+                if(waveUpdateFuncs.shader) waveUpdateFuncs.shader();
+                if(waveUpdateFuncs.geometry) waveUpdateFuncs.geometry();
+            };
+            const wfTeardownView = (viewName) => {
+                const instance = waveViewInstances[viewName];
+                if (!instance) return;
+                cancelAnimationFrame(instance.animationId);
+                instance.resizeObserver.disconnect();
+                instance.scene.traverse(object => {
+                    if (object.geometry) object.geometry.dispose();
+                    if (object.material) {
+                        if (Array.isArray(object.material)) object.material.forEach(m => m.dispose());
+                        else if (object.material.map) { object.material.map.dispose(); object.material.dispose(); }
+                        else object.material.dispose();
+                    }
+                });
+                instance.renderer.dispose();
+                const canvas = instance.container.querySelector('canvas');
+                if(canvas) instance.container.removeChild(canvas);
+                delete waveViewInstances[viewName];
+                delete waveUpdateFuncs[viewName];
+            };
+            const wfCreateAxisLabel = (scene, text, position, size = 30) => {
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                context.font = `Bold ${size}px Inter, sans-serif`;
+                const textMetrics = context.measureText(text);
+                canvas.width = textMetrics.width; canvas.height = size * 1.5;
+                context.font = `Bold ${size}px Inter, sans-serif`; context.fillStyle = '#e5e7eb';
+                context.textAlign = 'center'; context.textBaseline = 'middle';
+                context.fillText(text, canvas.width / 2, canvas.height / 2);
+                const texture = new THREE.CanvasTexture(canvas);
+                const spriteMaterial = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.scale.set(canvas.width / 100, canvas.height / 100, 1.0);
+                sprite.position.copy(position);
+                scene.add(sprite);
+                return sprite;
+            };
+            const wfSetupShaderView = () => {
+                if (waveViewInstances.shader) return;
+                const container = document.getElementById('shader-view');
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                camera.position.set(4, 4, 7);
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                container.insertBefore(renderer.domElement, container.firstChild);
+                const controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.target.set(0, 0, 0);
+                scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+                const pointLight = new THREE.PointLight(0xffffff, 1);
+                pointLight.position.set(5, 5, 5);
+                scene.add(pointLight);
+                const axisLength = 2.5;
+                scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)]), new THREE.LineBasicMaterial({ color: 0xff0000 })));
+                scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)]), new THREE.LineBasicMaterial({ color: 0x00ff00 })));
+                scene.add(new THREE.Mesh(new THREE.RingGeometry(1.49, 1.51, 128), new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide })));
+                const vectorGroup = new THREE.Group();
+                scene.add(vectorGroup);
+                vectorGroup.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1.5, 0xf59e0b, 0.2, 0.1));
+                const pointGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+                const vectorPoint = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 2 }));
+                vectorPoint.position.x = 1.5;
+                vectorGroup.add(vectorPoint);
+                const sinMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 2 }));
+                const cosMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2 }));
+                const resultMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 2 }));
+                scene.add(sinMarker, cosMarker, resultMarker);
+                const frequencySlider = document.getElementById('frequency-slider-shader'), frequencyValueSpan = document.getElementById('frequency-value-shader');
+                const zoomSlider = document.getElementById('zoom-slider-shader'), zoomValueSpan = document.getElementById('zoom-value-shader');
+                const waveZ = 4, waveWidth = 10, waveHeight = 5;
+                const vertexShader = `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`;
+                const fragmentShader = `uniform float frequency; uniform float domainWidth; uniform vec3 waveColor; uniform float waveType; varying vec2 vUv; void main() { float x = (vUv.x - 0.5) * domainWidth; float y_wave; if (waveType == 0.0) { y_wave = sin(x * frequency); } else if (waveType == 1.0) { y_wave = cos(x * frequency); } else { y_wave = sin(x * frequency) + cos(x * frequency); } float v_wave = (y_wave + 2.5) / 5.0; float thickness = 0.01; float line = smoothstep(thickness, 0.0, abs(vUv.y - v_wave)); if (line < 0.1) discard; gl_FragColor = vec4(waveColor * line, line); }`;
+                const uniforms = { frequency: { value: 1.0 }, domainWidth: { value: 2.0 * Math.PI }, waveColor: { value: new THREE.Color(0x3b82f6) }, waveType: { value: 0.0 } };
+                const createMaterial = (color, type) => { const mat = new THREE.ShaderMaterial({ vertexShader, fragmentShader, transparent: true, side: THREE.DoubleSide, uniforms: THREE.UniformsUtils.clone(uniforms) }); mat.uniforms.waveColor.value = new THREE.Color(color); mat.uniforms.waveType.value = type; return mat; };
+                const sinMaterial = createMaterial(0x3b82f6, 0.0), cosMaterial = createMaterial(0xef4444, 1.0), resultMaterial = createMaterial(0x22c55e, 2.0);
+                const waveGeometry = new THREE.PlaneGeometry(waveWidth, waveHeight);
+                const sinWave = new THREE.Mesh(waveGeometry, sinMaterial); sinWave.position.z = -waveZ;
+                const cosWave = new THREE.Mesh(waveGeometry, cosMaterial); cosWave.position.z = -waveZ;
+                const resultWave = new THREE.Mesh(waveGeometry, resultMaterial); resultWave.position.z = waveZ;
+                scene.add(sinWave, cosWave, resultWave);
+                wfCreateAxisLabel(scene, 'x', new THREE.Vector3(axisLength + 0.3, 0, 0));
+                wfCreateAxisLabel(scene, 'i', new THREE.Vector3(0, axisLength + 0.3, 0));
+                const MIN_FREQ = 1, MAX_FREQ = 1.855e43, MIN_ZOOM = 1.0, MAX_ZOOM = 1.855e43;
+                const getLogValue = (slider, min, max) => min * Math.pow(max / min, parseFloat(slider.value) / parseFloat(slider.max));
+                const updateVisualization = () => { const angleRadians = sharedState.theta; const frequency = getLogValue(frequencySlider, MIN_FREQ, MAX_FREQ); const zoom = getLogValue(zoomSlider, MIN_ZOOM, MAX_ZOOM); vectorGroup.rotation.z = angleRadians; const domainWidth = (2.0 * Math.PI) / zoom; const spatialAngle = angleRadians / frequency; const halfDomain = domainWidth / 2; const loopedSpatialAngle = ((spatialAngle + halfDomain) % domainWidth) - halfDomain; const waveX = (loopedSpatialAngle / halfDomain) * (waveWidth / 2); const markerAngle = angleRadians; sinMarker.position.set(waveX, Math.sin(markerAngle), -waveZ); cosMarker.position.set(waveX, Math.cos(markerAngle), -waveZ); resultMarker.position.set(waveX, Math.sin(markerAngle) + Math.cos(markerAngle), waveZ); };
+                const updateUniformsAndViz = () => { const frequency = getLogValue(frequencySlider, MIN_FREQ, MAX_FREQ); const zoom = getLogValue(zoomSlider, MIN_ZOOM, MAX_ZOOM); const domainWidth = (2.0 * Math.PI) / zoom; [sinMaterial, cosMaterial, resultMaterial].forEach(m => { m.uniforms.frequency.value = frequency; m.uniforms.domainWidth.value = domainWidth; }); frequencyValueSpan.textContent = `${frequency.toExponential(1)} Hz`; zoomValueSpan.textContent = `${zoom.toExponential(1)}x`; updateVisualization(); };
+                waveUpdateFuncs.shader = updateVisualization;
+                frequencySlider.addEventListener('input', updateUniformsAndViz);
+                zoomSlider.addEventListener('input', updateUniformsAndViz);
+                let animationId;
+                const animate = () => { animationId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); if(waveViewInstances.shader) waveViewInstances.shader.animationId = animationId; };
+                const resizeObserver = new ResizeObserver(() => { const { clientWidth, clientHeight } = container; if (clientWidth === 0 || clientHeight === 0) return; camera.aspect = clientWidth / clientHeight; camera.updateProjectionMatrix(); renderer.setSize(clientWidth, clientHeight); });
+                resizeObserver.observe(container);
+                updateUniformsAndViz();
+                animate();
+                waveViewInstances.shader = { scene, renderer, container, animationId, resizeObserver };
+            };
+            const wfSetupGeometryView = () => {
+                if (waveViewInstances.geometry) return;
+                const container = document.getElementById('geometry-view');
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+                camera.position.set(4, 4, 7);
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setSize(container.clientWidth, container.clientHeight);
+                renderer.setPixelRatio(window.devicePixelRatio);
+                container.insertBefore(renderer.domElement, container.firstChild);
+                const controls = new OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.target.set(0, 0, 0);
+                scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+                const pointLight = new THREE.PointLight(0xffffff, 1);
+                pointLight.position.set(5, 5, 5);
+                scene.add(pointLight);
+                const axisLength = 2.5;
+                scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-axisLength, 0, 0), new THREE.Vector3(axisLength, 0, 0)]), new THREE.LineBasicMaterial({ color: 0xff0000 })));
+                scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -axisLength, 0), new THREE.Vector3(0, axisLength, 0)]), new THREE.LineBasicMaterial({ color: 0x00ff00 })));
+                scene.add(new THREE.Mesh(new THREE.RingGeometry(1.49, 1.51, 128), new THREE.MeshBasicMaterial({ color: 0x3b82f6, side: THREE.DoubleSide })));
+                const vectorGroup = new THREE.Group();
+                scene.add(vectorGroup);
+                vectorGroup.add(new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(0, 0, 0), 1.5, 0xf59e0b, 0.2, 0.1));
+                const pointGeometry = new THREE.SphereGeometry(0.05, 16, 16);
+                const vectorPoint = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0xf59e0b, emissiveIntensity: 2 }));
+                vectorPoint.position.x = 1.5;
+                vectorGroup.add(vectorPoint);
+                const sinMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x3b82f6, emissive: 0x3b82f6, emissiveIntensity: 2 }));
+                const cosMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0xef4444, emissive: 0xef4444, emissiveIntensity: 2 }));
+                const resultMarker = new THREE.Mesh(pointGeometry, new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x22c55e, emissiveIntensity: 2 }));
+                scene.add(sinMarker, cosMarker, resultMarker);
+                const frequencySlider = document.getElementById('frequency-slider-geometry'), frequencyValueSpan = document.getElementById('frequency-value-geometry');
+                const amplitudeSlider = document.getElementById('amplitude-slider-geometry'), amplitudeValueSpan = document.getElementById('amplitude-value-geometry');
+                let sinWave, cosWave, resultWave;
+                const MIN_FREQ = 1, MAX_FREQ = 10000;
+                const getLogFrequency = () => MIN_FREQ * Math.pow(MAX_FREQ / MIN_FREQ, parseFloat(frequencySlider.value) / parseFloat(frequencySlider.max));
+                wfCreateAxisLabel(scene, 'x', new THREE.Vector3(axisLength + 0.3, 0, 0));
+                wfCreateAxisLabel(scene, 'i', new THREE.Vector3(0, axisLength + 0.3, 0));
+                const updateVisualization = () => { const angleRadians = sharedState.theta; const frequency = getLogFrequency(); const amplitude = parseFloat(amplitudeSlider.value); vectorGroup.rotation.z = angleRadians; const period = (2 * Math.PI) / frequency; const loopedAngle = angleRadians % period; const waveX = (loopedAngle / period) * 10 - 5; const freqAngle = angleRadians * frequency; const waveZ = 4; sinMarker.position.set(waveX, Math.sin(freqAngle) * amplitude, -waveZ); cosMarker.position.set(waveX, Math.cos(freqAngle) * amplitude, -waveZ); resultMarker.position.set(waveX, (Math.sin(freqAngle) + Math.cos(freqAngle)) * amplitude, waveZ); };
+                const regenerateWavesAndViz = () => { const frequency = getLogFrequency(); const amplitude = parseFloat(amplitudeSlider.value); [sinWave, cosWave, resultWave].forEach(wave => { if (wave) { scene.remove(wave); wave.geometry.dispose(); if(wave.material) wave.material.dispose(); } }); let tubeSegments = Math.min(Math.max(128, Math.floor(128 * (frequency / 10))), 4096); class WaveCurve extends THREE.Curve { constructor(waveFunc, freq, amp, z) { super(); this.waveFunc = waveFunc; this.freq = freq; this.amp = amp; this.z = z; } getPoint(t, optionalTarget = new THREE.Vector3()) { const angle = t * Math.PI * 2 * this.freq; return optionalTarget.set(t * 10 - 5, this.waveFunc(angle) * this.amp, this.z); } } const createWave = (func, color, zPos) => { const curve = new WaveCurve(func, frequency, amplitude, zPos); const tubeGeometry = new THREE.TubeGeometry(curve, tubeSegments, 0.03, 8, false); const tubeMaterial = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5 }); return new THREE.Mesh(tubeGeometry, tubeMaterial); }; const waveZ = 4; sinWave = createWave(Math.sin, 0x3b82f6, -waveZ); cosWave = createWave(Math.cos, 0xef4444, -waveZ); resultWave = createWave((angle) => Math.sin(angle) + Math.cos(angle), 0x22c55e, waveZ); scene.add(sinWave, cosWave, resultWave); frequencyValueSpan.textContent = `${frequency.toFixed(1)}x`; amplitudeValueSpan.textContent = amplitude.toFixed(1); updateVisualization(); };
+                waveUpdateFuncs.geometry = updateVisualization;
+                frequencySlider.addEventListener('input', regenerateWavesAndViz);
+                amplitudeSlider.addEventListener('input', regenerateWavesAndViz);
+                let animationId;
+                const animate = () => { animationId = requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); if (waveViewInstances.geometry) waveViewInstances.geometry.animationId = animationId; };
+                const resizeObserver = new ResizeObserver(() => { const { clientWidth, clientHeight } = container; if (clientWidth === 0 || clientHeight === 0) return; camera.aspect = clientWidth / clientHeight; camera.updateProjectionMatrix(); renderer.setSize(clientWidth, clientHeight); });
+                resizeObserver.observe(container);
+                regenerateWavesAndViz();
+                animate();
+                waveViewInstances.geometry = { scene, renderer, container, animationId, resizeObserver };
+            };
+            const btnShader = document.getElementById('btn-shader');
+            const btnGeometry = document.getElementById('btn-geometry');
+            const shaderView = document.getElementById('shader-view');
+            const geometryView = document.getElementById('geometry-view');
+            function switchWaveFormsView(newViewName) { if (newViewName === currentWaveView) return; wfTeardownView(currentWaveView); shaderView.classList.toggle('active', newViewName === 'shader'); geometryView.classList.toggle('active', newViewName === 'geometry'); btnShader.classList.toggle('active', newViewName === 'shader'); btnGeometry.classList.toggle('active', newViewName === 'geometry'); if (newViewName === 'shader') wfSetupShaderView(); if (newViewName === 'geometry') wfSetupGeometryView(); currentWaveView = newViewName; }
+            btnShader.addEventListener('click', () => switchWaveFormsView('shader'));
+            btnGeometry.addEventListener('click', () => switchWaveFormsView('geometry'));
+            wfSetupShaderView();
+            return () => { wfTeardownView(currentWaveView); container.innerHTML = ''; delete views.wave_forms.update; };
+        }
+
+        function initMandelbrotView() {
+            const container = document.getElementById('mandelbrot-container');
+            container.innerHTML = `
+                <div id="mandelbrot-info-panel" class="ui-panel ui-element">
+                    <div id="mandelbrot-info-header">
+                        <h2 class="text-xl font-bold text-indigo-400">Multibrot Fractal</h2>
+                        <div id="mandelbrot-toggle-icon" class="text-indigo-400"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></div>
+                    </div>
+                    <div class="pt-4 space-y-3">
+                        <p class="text-gray-300">This fractal is generated by the formula z' = z' + c, where z is raised to a power using its polar components (radius r, angle φ). The color is determined by how quickly the result escapes to infinity.</p>
+                        <div class="formula-container">z' = rⁿ¹ ⋅ e<sup>i⋅n²⋅φ</sup> + c</div>
+                    </div>
+                </div>
+                <div id="mandelbrot-controls-panel" class="ui-panel ui-element">
+                     <div id="mandelbrot-main-controls">
+                        <div class="control-group flex-grow"><label class="flex-shrink-0">Power (n):</label><input type="range" id="power-slider" class="flex-grow" min="0" max="100" value="20"><span id="power-val" class="value-display">2.00</span></div>
+                        <button id="more-options-btn" class="menu-button flex-shrink-0">More</button>
+                    </div>
+                    <div id="mandelbrot-extra-controls">
+                        <div class="control-group"><label>Iterations:</label><input type="range" id="iter-slider" min="32" max="1024" value="128" step="16"><span id="iter-val" class="value-display">128</span></div>
+                        <div class="control-group"><label for="n1-mode">r Power (n1)</label><select id="n1-mode" class="menu-button"><option value="0">n</option><option value="1">1</option><option value="2">2n</option><option value="3">n/2</option></select></div>
+                        <div class="control-group"><label for="n2-mode">φ Power (n2)</label><select id="n2-mode" class="menu-button"><option value="0">n</option><option value="1">1</option><option value="2">2n</option><option value="3">n/2</option></select></div>
+                        <div class="control-group"><label for="color-palette">Color Palette</label>
+                           <select id="color-palette" class="menu-button">
+                                <optgroup label="Featured">
+                                    <option value="deepSpace">Deep Space</option><option value="volcanic">Volcanic</option><option value="oceanic">Oceanic</option>
+                                </optgroup>
+                                <optgroup label="Abstract & Psychedelic">
+                                    <option value="trippy">Trippy</option><option value="synthwave">Synthwave</option><option value="nebula">Nebula</option><option value="aurora">Aurora</option><option value="glitch">Glitch</option><option value="iridescent">Iridescent</option><option value="cosmic">Cosmic</option><option value="kaleidoscope">Kaleidoscope</option><option value="plasma">Plasma</option><option value="dream">Dream</option>
+                                </optgroup>
+                                <optgroup label="Natural & Organic">
+                                    <option value="forest">Forest</option><option value="desert">Desert</option><option value="coralReef">Coral Reef</option><option value="sunset">Sunset</option><option value="jungle">Jungle</option><option value="arctic">Arctic</option><option value="autumn">Autumn</option><option value="spring">Spring</option><option value="canyon">Canyon</option><option value="meadow">Meadow</option>
+                                </optgroup>
+                                <optgroup label="Sci-Fi & Cyberpunk">
+                                    <option value="matrix">Matrix</option><option value="cyberpunk">Cyberpunk</option><option value="alien">Alien</option><option value="starship">Starship</option><option value="hologram">Hologram</option><option value="binary">Binary</option><option value="laser">Laser</option><option value="android">Android</option><option value="quantum">Quantum</option><option value="dystopian">Dystopian</option>
+                                </optgroup>
+                                <optgroup label="Monochromatic & Minimal">
+                                    <option value="grayscale">Grayscale</option><option value="sepia">Sepia</option><option value="emerald">Emerald</option><option value="ruby">Ruby</option><option value="sapphire">Sapphire</option><option value="amethyst">Amethyst</option><option value="obsidian">Obsidian</option><option value="ivory">Ivory</option><option value="slate">Slate</option><option value="quartz">Quartz</option>
+                                </optgroup>
+                                <optgroup label="Retro & Vintage">
+                                    <option value="vaporwave">Vaporwave</option><option value="popArt">Pop Art</option><option value="artDeco">Art Deco</option><option value="seventies">70s Groove</option><option value="nineties">90s Vibe</option><option value="filmNoir">Film Noir</option><option value="steampunk">Steampunk</option><option value="atomicAge">Atomic Age</option><option value="vinyl">Vinyl</option><option value="polaroid">Polaroid</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <button id="color-anim-btn" class="menu-button">Animate Colors</button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('mandelbrot-info-panel').addEventListener('click', (e) => { if (e.target.closest('a')) return; e.currentTarget.classList.toggle('expanded'); });
+            const mb_renderer = new THREE.WebGLRenderer();
+            container.appendChild(mb_renderer.domElement);
+            const mb_scene = new THREE.Scene();
+            const mb_camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 10);
+            mb_camera.position.set(0,0,1);
+            const palettes = {
+                deepSpace: [new THREE.Color(0x00076f), new THREE.Color(0x206bcb), new THREE.Color(0xfdefbe), new THREE.Color(0xff8649), new THREE.Color(0x7f0000), new THREE.Color(0x00076f)],
+                volcanic: [new THREE.Color(0x000000), new THREE.Color(0x730000), new THREE.Color(0xcc0000), new THREE.Color(0xff8000), new THREE.Color(0xffff00), new THREE.Color(0xffffff)],
+                oceanic: [new THREE.Color(0x001f3f), new THREE.Color(0x0074D9), new THREE.Color(0x7FDBFF), new THREE.Color(0x39CCCC), new THREE.Color(0x3D9970), new THREE.Color(0x2ECC40)],
+                trippy: [new THREE.Color(0xff00ff), new THREE.Color(0x00ffff), new THREE.Color(0xffff00), new THREE.Color(0xff0000), new THREE.Color(0x00ff00), new THREE.Color(0x0000ff)],
+                synthwave: [new THREE.Color(0x0d0221), new THREE.Color(0x261447), new THREE.Color(0xff3864), new THREE.Color(0x2de2e6), new THREE.Color(0xfef2bf), new THREE.Color(0x0d0221)],
+                nebula: [new THREE.Color(0x000000), new THREE.Color(0x4a148c), new THREE.Color(0x880e4f), new THREE.Color(0xff6f00), new THREE.Color(0xfdd835), new THREE.Color(0xffffff)],
+                aurora: [new THREE.Color(0x003f5c), new THREE.Color(0x2f4b7c), new THREE.Color(0x665191), new THREE.Color(0xa05195), new THREE.Color(0xd45087), new THREE.Color(0xf95d6a)],
+                glitch: [new THREE.Color(0x000000), new THREE.Color(0xff00ff), new THREE.Color(0x00ffff), new THREE.Color(0xffffff), new THREE.Color(0x00ff00), new THREE.Color(0x000000)],
+                iridescent: [new THREE.Color(0x7800ff), new THREE.Color(0x00a1ff), new THREE.Color(0x00ff8f), new THREE.Color(0xadff00), new THREE.Color(0xffc400), new THREE.Color(0xff3300)],
+                cosmic: [new THREE.Color(0x000428), new THREE.Color(0x004e92), new THREE.Color(0x3a6ea5), new THREE.Color(0xc0c0c0), new THREE.Color(0xffffff), new THREE.Color(0x000428)],
+                kaleidoscope: [new THREE.Color(0xf94144), new THREE.Color(0xf3722c), new THREE.Color(0xf8961e), new THREE.Color(0xf9c74f), new THREE.Color(0x90be6d), new THREE.Color(0x43aa8b)],
+                plasma: [new THREE.Color(0x0d0887), new THREE.Color(0x6a00a8), new THREE.Color(0xb12a90), new THREE.Color(0xe16462), new THREE.Color(0xfca636), new THREE.Color(0xf0f921)],
+                dream: [new THREE.Color(0xec008c), new THREE.Color(0xfc6767), new THREE.Color(0xf3c677), new THREE.Color(0xa0e68f), new THREE.Color(0x55c595), new THREE.Color(0x37878f)],
+                forest: [new THREE.Color(0x004225), new THREE.Color(0x006400), new THREE.Color(0x556b2f), new THREE.Color(0x8fbc8f), new THREE.Color(0x9acd32), new THREE.Color(0xffffff)],
+                desert: [new THREE.Color(0x4a2c2a), new THREE.Color(0xc08552), new THREE.Color(0xd79771), new THREE.Color(0xedc4b3), new THREE.Color(0xffe5d9), new THREE.Color(0x4a2c2a)],
+                coralReef: [new THREE.Color(0x00a6a6), new THREE.Color(0xefca08), new THREE.Color(0xf49f0a), new THREE.Color(0xf08a4b), new THREE.Color(0xd65108), new THREE.Color(0x00a6a6)],
+                sunset: [new THREE.Color(0x2c2c54), new THREE.Color(0x474787), new THREE.Color(0x706fd3), new THREE.Color(0xf79f1f), new THREE.Color(0xff5252), new THREE.Color(0xffffff)],
+                jungle: [new THREE.Color(0x001514), new THREE.Color(0x003532), new THREE.Color(0x00bf7d), new THREE.Color(0x91f5ad), new THREE.Color(0xffffff), new THREE.Color(0x001514)],
+                arctic: [new THREE.Color(0x0c2d48), new THREE.Color(0x145da0), new THREE.Color(0x2e8bc0), new THREE.Color(0xb1d4e0), new THREE.Color(0xffffff), new THREE.Color(0x0c2d48)],
+                autumn: [new THREE.Color(0x4d0000), new THREE.Color(0x990000), new THREE.Color(0xff5733), new THREE.Color(0xffc300), new THREE.Color(0xeddd59), new THREE.Color(0x4d0000)],
+                spring: [new THREE.Color(0x1a4314), new THREE.Color(0x577b2d), new THREE.Color(0x9dc183), new THREE.Color(0xffd1dc), new THREE.Color(0xffa1c5), new THREE.Color(0xffffff)],
+                canyon: [new THREE.Color(0x4a0404), new THREE.Color(0x800f2f), new THREE.Color(0xc9184a), new THREE.Color(0xff758f), new THREE.Color(0xffb3c1), new THREE.Color(0xffccd5)],
+                meadow: [new THREE.Color(0x2d6a4f), new THREE.Color(0x40916c), new THREE.Color(0x52b788), new THREE.Color(0x95d5b2), new THREE.Color(0xd8f3dc), new THREE.Color(0xffffff)],
+                matrix: [new THREE.Color(0x000000), new THREE.Color(0x001a00), new THREE.Color(0x004d00), new THREE.Color(0x008000), new THREE.Color(0x00ff00), new THREE.Color(0xccffcc)],
+                cyberpunk: [new THREE.Color(0x080820), new THREE.Color(0x133e7c), new THREE.Color(0xfa29e2), new THREE.Color(0x00f8f8), new THREE.Color(0xf2f23a), new THREE.Color(0xffffff)],
+                alien: [new THREE.Color(0x011502), new THREE.Color(0x04420a), new THREE.Color(0x83f52c), new THREE.Color(0x81d8d0), new THREE.Color(0xfac7e5), new THREE.Color(0x011502)],
+                starship: [new THREE.Color(0x1d1e22), new THREE.Color(0x353740), new THREE.Color(0x6a6c7a), new THREE.Color(0x00a2ff), new THREE.Color(0xffffff), new THREE.Color(0x1d1e22)],
+                hologram: [new THREE.Color(0x000020), new THREE.Color(0x002080), new THREE.Color(0x40e0d0), new THREE.Color(0xff00ff), new THREE.Color(0xffa500), new THREE.Color(0xffffff)],
+                binary: [new THREE.Color(0x000000), new THREE.Color(0x111111), new THREE.Color(0x333333), new THREE.Color(0x777777), new THREE.Color(0xbbbbbb), new THREE.Color(0xffffff)],
+                laser: [new THREE.Color(0x000000), new THREE.Color(0x4b0000), new THREE.Color(0x9f0000), new THREE.Color(0xff0000), new THREE.Color(0xff6a6a), new THREE.Color(0xffcccc)],
+                android: [new THREE.Color(0x263238), new THREE.Color(0x455a64), new THREE.Color(0x607d8b), new THREE.Color(0x90a4ae), new THREE.Color(0xa7ffeb), new THREE.Color(0xffffff)],
+                quantum: [new THREE.Color(0x000000), new THREE.Color(0x023e8a), new THREE.Color(0x0077b6), new THREE.Color(0x00b4d8), new THREE.Color(0x90e0ef), new THREE.Color(0xcaf0f8)],
+                dystopian: [new THREE.Color(0x0a0a0a), new THREE.Color(0x232323), new THREE.Color(0x4f4f4f), new THREE.Color(0xac0d0d), new THREE.Color(0xffd300), new THREE.Color(0xcccccc)],
+                grayscale: [new THREE.Color(0x000000), new THREE.Color(0x333333), new THREE.Color(0x666666), new THREE.Color(0x999999), new THREE.Color(0xcccccc), new THREE.Color(0xffffff)],
+                sepia: [new THREE.Color(0x2a1d0d), new THREE.Color(0x402e17), new THREE.Color(0x705a3b), new THREE.Color(0xa1885f), new THREE.Color(0xd2b48c), new THREE.Color(0xf5deb3)],
+                emerald: [new THREE.Color(0x004d40), new THREE.Color(0x00796b), new THREE.Color(0x009688), new THREE.Color(0x4db6ac), new THREE.Color(0x80cbc4), new THREE.Color(0xb2dfdb)],
+                ruby: [new THREE.Color(0x4d0000), new THREE.Color(0x990000), new THREE.Color(0xe50000), new THREE.Color(0xff5252), new THREE.Color(0xff8a80), new THREE.Color(0xffcdd2)],
+                sapphire: [new THREE.Color(0x0d47a1), new THREE.Color(0x1976d2), new THREE.Color(0x2196f3), new THREE.Color(0x64b5f6), new THREE.Color(0x90caf9), new THREE.Color(0xbbdefb)],
+                amethyst: [new THREE.Color(0x311b92), new THREE.Color(0x512da8), new THREE.Color(0x673ab7), new THREE.Color(0x9575cd), new THREE.Color(0xb39ddb), new THREE.Color(0xd1c4e9)],
+                obsidian: [new THREE.Color(0x000000), new THREE.Color(0x080808), new THREE.Color(0x121212), new THREE.Color(0x1a1a1a), new THREE.Color(0x222222), new THREE.Color(0x282828)],
+                ivory: [new THREE.Color(0x5d5344), new THREE.Color(0x8b7d6b), new THREE.Color(0xbaab98), new THREE.Color(0xe9e0d8), new THREE.Color(0xfffff0), new THREE.Color(0xffffff)],
+                slate: [new THREE.Color(0x2f4f4f), new THREE.Color(0x3e6464), new THREE.Color(0x507a7a), new THREE.Color(0x708090), new THREE.Color(0x778899), new THREE.Color(0xb0c4de)],
+                quartz: [new THREE.Color(0x2e003e), new THREE.Color(0x56006b), new THREE.Color(0x8e00a1), new THREE.Color(0xbe72d3), new THREE.Color(0xebc3f5), new THREE.Color(0xfff0ff)],
+                vaporwave: [new THREE.Color(0xff6ad5), new THREE.Color(0xffc4ff), new THREE.Color(0x00f2ff), new THREE.Color(0x836fff), new THREE.Color(0x2c2c54), new THREE.Color(0xff6ad5)],
+                popArt: [new THREE.Color(0x00aeef), new THREE.Color(0xec008c), new THREE.Color(0xffed00), new THREE.Color(0x231f20), new THREE.Color(0xffffff), new THREE.Color(0x00aeef)],
+                artDeco: [new THREE.Color(0x000000), new THREE.Color(0x3b3b3b), new THREE.Color(0xd4af37), new THREE.Color(0xaaa9ad), new THREE.Color(0xffffff), new THREE.Color(0xd4af37)],
+                seventies: [new THREE.Color(0x783f04), new THREE.Color(0xb45309), new THREE.Color(0xf59e0b), new THREE.Color(0xfde68a), new THREE.Color(0xfffbeb), new THREE.Color(0x783f04)],
+                nineties: [new THREE.Color(0x5e2750), new THREE.Color(0x00848e), new THREE.Color(0x00bdaa), new THREE.Color(0x40e0d0), new THREE.Color(0xffd700), new THREE.Color(0xff6b6b)],
+                filmNoir: [new THREE.Color(0x000000), new THREE.Color(0x1a1a1a), new THREE.Color(0x4d4d4d), new THREE.Color(0x808080), new THREE.Color(0xb3b3b3), new THREE.Color(0xffffff)],
+                steampunk: [new THREE.Color(0x4e342e), new THREE.Color(0x6d4c41), new THREE.Color(0x8d6e63), new THREE.Color(0xbcaaa4), new THREE.Color(0xd7ccc8), new THREE.Color(0xffa726)],
+                atomicAge: [new THREE.Color(0x008080), new THREE.Color(0xffc30b), new THREE.Color(0xff773d), new THREE.Color(0xe63946), new THREE.Color(0xf1faee), new THREE.Color(0xa8dadc)],
+                vinyl: [new THREE.Color(0x000000), new THREE.Color(0x1a1a1a), new THREE.Color(0x333333), new THREE.Color(0x4d4d4d), new THREE.Color(0x666666), new THREE.Color(0x808080)],
+                polaroid: [new THREE.Color(0x3d2b1f), new THREE.Color(0x8d795b), new THREE.Color(0xdecbb1), new THREE.Color(0xf6efe5), new THREE.Color(0xffffff), new THREE.Color(0x3d2b1f)]
+            };
+            const fragmentShader = `
+                #define MAX_COLORS 6
+                uniform vec2 u_resolution; uniform vec2 u_center; uniform float u_zoom; uniform int u_max_iterations; uniform float u_power; uniform float u_time; uniform int u_n1_mode; uniform int u_n2_mode; uniform vec3 u_colors[MAX_COLORS];
+                vec2 custom_complex_pow(vec2 z, float n, int n1_mode, int n2_mode) { float r = length(z); float phi = atan(z.y, z.x); float n1 = n; if (n1_mode == 1) n1 = 1.0; else if (n1_mode == 2) n1 = 2.0 * n; else if (n1_mode == 3) n1 = n / 2.0; float n2 = n; if (n2_mode == 1) n2 = 1.0; else if (n2_mode == 2) n2 = 2.0 * n; else if (n2_mode == 3) n2 = n / 2.0; float new_r = pow(r, n1); float new_phi = phi * n2; return vec2(new_r * cos(new_phi), new_r * sin(new_phi)); }
+                void main() { vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y / u_zoom + u_center; vec2 z = vec2(0.0); vec2 c = uv; int i; for(i = 0; i < u_max_iterations; i++) { z = custom_complex_pow(z, u_power, u_n1_mode, u_n2_mode) + c; if(length(z) > 2.0) break; }
+                if (i == u_max_iterations) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); } else { float t = float(i) / float(u_max_iterations); t = pow(t, 0.5); vec3 color; float scaled_t = t * float(MAX_COLORS - 1); int index = int(floor(scaled_t)); float frac = fract(scaled_t); color = mix(u_colors[index], u_colors[index + 1], frac); gl_FragColor = vec4(color, 1.0); }
+            }`;
+            const uniforms = {
+                u_resolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }, u_center: { value: new THREE.Vector2(-0.5, 0.0) }, u_zoom: { value: 0.5 }, u_max_iterations: { value: 128 }, u_power: { value: 2.0 }, u_time: { value: 0.0 }, u_n1_mode: { value: 0 }, u_n2_mode: { value: 0 }, u_colors: { value: palettes.deepSpace }
+            };
+            const planeGeo = new THREE.PlaneGeometry(2, 2);
+            const planeMat = new THREE.ShaderMaterial({ fragmentShader, uniforms, defines: { MAX_COLORS: 6 } });
+            const plane = new THREE.Mesh(planeGeo, planeMat);
+            mb_scene.add(plane);
+            document.getElementById('color-palette').addEventListener('change', (e) => { uniforms.u_colors.value = palettes[e.target.value] || palettes.deepSpace; });
+            let isColorAnimating = false;
+            document.getElementById('color-anim-btn').addEventListener('click', (e) => { isColorAnimating = !isColorAnimating; e.target.classList.toggle('active', isColorAnimating); });
+            document.getElementById('power-slider').addEventListener('input', e => { let val = parseInt(e.target.value); let power = 2.0 + (val / 100.0) * 8.0; uniforms.u_power.value = power; document.getElementById('power-val').textContent = power.toFixed(2); });
+            document.getElementById('iter-slider').addEventListener('input', e => { uniforms.u_max_iterations.value = parseInt(e.target.value); document.getElementById('iter-val').textContent = e.target.value; });
+            document.getElementById('n1-mode').addEventListener('change', e => uniforms.u_n1_mode.value = parseInt(e.target.value));
+            document.getElementById('n2-mode').addEventListener('change', e => uniforms.u_n2_mode.value = parseInt(e.target.value));
+            const moreOptionsBtn = document.getElementById('more-options-btn');
+            const extraControls = document.getElementById('mandelbrot-extra-controls');
+            moreOptionsBtn.addEventListener('click', () => {
+                const isExpanded = extraControls.classList.toggle('expanded');
+                moreOptionsBtn.textContent = isExpanded ? 'Less' : 'More';
+            });
+            let isDragging = false, lastMousePos = { x: 0, y: 0 }, initialPinchDistance = 0;
+            const onPointerDown = (e) => { isDragging = true; lastMousePos.x = e.clientX; lastMousePos.y = e.clientY; };
+            const onPointerUp = () => { isDragging = false; };
+            const onPointerMove = (e) => { if (!isDragging) return; const dx = (e.clientX - lastMousePos.x) / window.innerHeight; const dy = (e.clientY - lastMousePos.y) / window.innerHeight; uniforms.u_center.value.x -= dx / uniforms.u_zoom.value; uniforms.u_center.value.y += dy / uniforms.u_zoom.value; lastMousePos = { x: e.clientX, y: e.clientY }; };
+            const onWheel = (e) => { e.preventDefault(); const zoomFactor = e.deltaY < 0 ? 1.2 : 1 / 1.2; uniforms.u_zoom.value *= zoomFactor; };
+            const onTouchStart = (e) => { if (e.touches.length === 1) { isDragging = true; lastMousePos.x = e.touches[0].clientX; lastMousePos.y = e.touches[0].clientY; } else if (e.touches.length === 2) { isDragging = false; initialPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); } };
+            const onTouchMove = (e) => { e.preventDefault(); if (e.touches.length === 1 && isDragging) { const dx = (e.touches[0].clientX - lastMousePos.x) / window.innerHeight; const dy = (e.touches[0].clientY - lastMousePos.y) / window.innerHeight; uniforms.u_center.value.x -= dx / uniforms.u_zoom.value; uniforms.u_center.value.y += dy / uniforms.u_zoom.value; lastMousePos.x = e.touches[0].clientX; lastMousePos.y = e.touches[0].clientY; } else if (e.touches.length === 2) { const currentPinchDistance = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); const zoomFactor = currentPinchDistance / initialPinchDistance; uniforms.u_zoom.value *= zoomFactor; initialPinchDistance = currentPinchDistance; } };
+            mb_renderer.domElement.addEventListener('mousedown', onPointerDown);
+            window.addEventListener('mouseup', onPointerUp);
+            window.addEventListener('mousemove', onPointerMove);
+            mb_renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+            mb_renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+            mb_renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+            const resizeObserver = new ResizeObserver(() => { const { clientWidth, clientHeight } = container; if(clientWidth > 0 && clientHeight > 0) { mb_renderer.setSize(clientWidth, clientHeight); uniforms.u_resolution.value.set(clientWidth, clientHeight); } });
+            resizeObserver.observe(container);
+            mb_renderer.setSize(container.clientWidth, container.clientHeight);
+            uniforms.u_resolution.value.set(container.clientWidth, container.clientHeight);
+            let renderLoopId;
+            const renderLoop = () => { if(isColorAnimating) uniforms.u_time.value += 0.01; mb_renderer.render(mb_scene, mb_camera); renderLoopId = requestAnimationFrame(renderLoop); };
+            renderLoop();
+            return () => { cancelAnimationFrame(renderLoopId); resizeObserver.disconnect(); mb_renderer.domElement.removeEventListener('mousedown', onPointerDown); window.removeEventListener('mouseup', onPointerUp); window.removeEventListener('mousemove', onPointerMove); mb_renderer.domElement.removeEventListener('wheel', onWheel); mb_renderer.domElement.removeEventListener('touchstart', onTouchStart); mb_renderer.domElement.removeEventListener('touchmove', onTouchMove); container.innerHTML = ''; };
+        }
+
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        function showLoader(message = 'Updating...') { loadingText.textContent = message; loadingOverlay.classList.remove('hidden'); }
+        function hideLoader() { loadingOverlay.classList.add('hidden'); }
+        function createMenu() {
+            const menuDiv = document.getElementById('menu');
+            const mobileMenuDiv = document.getElementById('mobile-menu-dropdown');
+            menuDiv.innerHTML = '';
+            mobileMenuDiv.innerHTML = '';
+            Object.keys(views).forEach(key => { const title = views[key].title; const desktopBtn = document.createElement('button'); desktopBtn.className = 'menu-button'; desktopBtn.textContent = title; desktopBtn.dataset.view = key; menuDiv.appendChild(desktopBtn); const mobileBtn = document.createElement('button'); mobileBtn.className = 'mobile-menu-item'; mobileBtn.textContent = title; mobileBtn.dataset.view = key; mobileMenuDiv.appendChild(mobileBtn); });
+            const handleSwitch = (e) => { if (e.target.dataset.view) { showLoader('Switching View...'); setTimeout(() => { switchView(e.target.dataset.view); hideLoader(); }, 50); } };
+            menuDiv.addEventListener('click', handleSwitch);
+            mobileMenuDiv.addEventListener('click', handleSwitch);
+        }
+        function setupMobileMenu() {
+            const btn = document.getElementById('mobile-menu-button');
+            const dropdown = document.getElementById('mobile-menu-dropdown');
+            btn.addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('hidden'); });
+            document.addEventListener('click', () => dropdown.classList.add('hidden'));
+        }
+        function setupControls() {
+            const thetaSlider = document.getElementById('theta-slider');
+            thetaSlider.max = maxTheta;
+            thetaSlider.addEventListener('input', e => { sharedState.theta = parseInt(e.target.value) * (Math.PI / 180); updateAll(); });
+            document.getElementById('radius-slider').addEventListener('input', e => { sharedState.radius = parseFloat(e.target.value); updateAll(); });
+            document.getElementById('play-pause-button').addEventListener('click', (e) => { isAnimating = !isAnimating; e.target.textContent = isAnimating ? "Pause" : "Play"; e.target.classList.toggle('active', isAnimating); });
+        }
+        function updateAll() { if (views[activeView] && views[activeView].update) { views[activeView].update(); } if (activeView !== 'wave_forms' && activeView !== 'mandelbrot') { updateInfoPanel(); updateControlsDisplay(); } }
+        function updateControlsDisplay() { const thetaDeg = (sharedState.theta * 180 / Math.PI) % maxTheta; document.getElementById('theta-slider').value = thetaDeg; document.getElementById('theta-value').textContent = `${(sharedState.theta * 180 / Math.PI).toFixed(0)}°`; document.getElementById('radius-slider').value = sharedState.radius; document.getElementById('radius-value').textContent = sharedState.radius.toFixed(2); }
+        function setupInfoPanel() { document.getElementById('info-panel').addEventListener('click', (e) => { if (e.target.closest('a')) return; e.currentTarget.classList.toggle('expanded'); }); }
+        function updateInfoPanel() { 
+            const x = sharedState.radius * Math.cos(sharedState.theta); 
+            const y = sharedState.radius * Math.sin(sharedState.theta); 
+            document.getElementById('info-rectangular').textContent = `${x.toFixed(2)} + ${y.toFixed(2)}i`;
+            document.getElementById('info-radius').textContent = sharedState.radius.toFixed(2);
+            document.getElementById('info-theta').textContent = `${(sharedState.theta * 180 / Math.PI).toFixed(0)}°`;
+            document.getElementById('info-radians').textContent = sharedState.theta.toFixed(3);
+            document.getElementById('info-pi').textContent = `${(sharedState.theta / Math.PI).toFixed(2)}π`;
+            document.getElementById('info-normalized').textContent = (sharedState.theta / (2 * Math.PI) % 1).toFixed(3);
+            document.getElementById('info-cos').textContent = Math.cos(sharedState.theta).toFixed(3);
+            document.getElementById('info-sin').textContent = Math.sin(sharedState.theta).toFixed(3);
+        }
+        function setupSettingsPanel() {
+            const settingsPanel = document.getElementById('settings-panel');
+            const thetaMaxInput = document.getElementById('theta-max-input');
+            const thetaMaxValue = document.getElementById('theta-max-value');
+
+            document.getElementById('settings-button').addEventListener('click', () => { settingsPanel.classList.remove('hidden'); requestAnimationFrame(() => settingsPanel.classList.add('open')); });
+            document.getElementById('close-settings').addEventListener('click', () => { settingsPanel.classList.remove('open'); });
+            settingsPanel.addEventListener('transitionend', (e) => { if (e.propertyName === 'transform' && !settingsPanel.classList.contains('open')) { settingsPanel.classList.add('hidden'); } });
+            document.getElementById('graphics-slider').addEventListener('input', (e) => { const quality = parseFloat(e.target.value); renderer.setPixelRatio(quality); const qualityValue = document.getElementById('graphics-quality-value'); if (quality < 0.8) qualityValue.textContent = "Low"; else if (quality < 1.5) qualityValue.textContent = "Medium"; else qualityValue.textContent = "High"; });
+            thetaMaxInput.addEventListener('input', (e) => {
+                maxTheta = parseInt(e.target.value);
+                thetaMaxValue.textContent = `${maxTheta}°`;
+                const thetaSlider = document.getElementById('theta-slider');
+                if(thetaSlider) thetaSlider.max = maxTheta;
+            });
+        }
+        function setupFullscreen() {
+            const btn = document.getElementById('fullscreen-button');
+            if (!document.fullscreenEnabled) { btn.style.display = 'none'; return; }
+            let proximityTimeout;
+            const handleProximityUI = (e) => {
+                clearTimeout(proximityTimeout);
+                const uiElements = document.querySelectorAll('.ui-element');
+                uiElements.forEach(el => {
+                    const rect = el.getBoundingClientRect();
+                    const proximity = 150;
+                    let show = false;
+                    if(el.id.includes('info-panel')) { if (e.clientX < rect.right + proximity) show = true;
+                    } else if (el.tagName.toLowerCase() === 'header') { if (e.clientY < rect.bottom + proximity) show = true;
+                    } else if (el.id.includes('controls-panel') || el.tagName.toLowerCase() === 'footer') { if (window.innerHeight - e.clientY < rect.height + proximity) show = true;
+                    } else if (el.id === 'settings-button') { if (window.innerWidth - e.clientX < rect.width + proximity && e.clientY < rect.bottom + proximity) show = true;
+                    } else if (el.id === 'fullscreen-button') { if (window.innerWidth - e.clientX < rect.width + proximity && window.innerHeight - e.clientY < rect.height + proximity) show = true; }
+                    el.classList.toggle('fullscreen-hidden', !show);
+                });
+                proximityTimeout = setTimeout(() => {
+                    if (document.fullscreenElement) {
+                       uiElements.forEach(el => el.classList.add('fullscreen-hidden'));
+                    }
+                }, 2000);
+            };
+            btn.addEventListener('click', () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+            document.addEventListener('fullscreenchange', () => {
+                const isFullscreen = !!document.fullscreenElement;
+                document.getElementById('fullscreen-enter-icon').classList.toggle('hidden', isFullscreen);
+                document.getElementById('fullscreen-exit-icon').classList.toggle('hidden', !isFullscreen);
+                const uiElements = document.querySelectorAll('.ui-element');
+                if (isFullscreen) {
+                    uiElements.forEach(el => el.classList.add('fullscreen-hidden'));
+                    window.addEventListener('mousemove', handleProximityUI);
+                } else {
+                    uiElements.forEach(el => el.classList.remove('fullscreen-hidden'));
+                    window.removeEventListener('mousemove', handleProximityUI);
+                    clearTimeout(proximityTimeout);
+                }
+            });
+        }
+        function createAxisLabel(text, position) {
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 256; canvas.height = 128;
+            context.font = `Bold 60px Inter, sans-serif`;
+            context.fillStyle = '#e5e7eb';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText(text, canvas.width/2, canvas.height/2);
+            const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas), transparent: true }));
+            sprite.position.copy(position);
+            sprite.scale.set(0.5, 0.25, 1);
+            viewObjects.add(sprite);
+        }
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+        function animate() { 
+            const delta = clock.getDelta();
+            if(isAnimating) {
+                sharedState.theta += delta * 0.5;
+                 const maxThetaRad = maxTheta * (Math.PI / 180);
+                if(sharedState.theta > maxThetaRad) sharedState.theta -= maxThetaRad;
+                updateAll();
+            }
+            if (activeView !== 'wave_forms' && activeView !== 'mandelbrot') {
+                controls.update();
+                renderer.render(scene, camera); 
+            }
+        }
+        init();
+    </script>
+</body>
+</html>
+

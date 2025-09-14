@@ -1,0 +1,1616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reinforcement Learning Algorithm Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.module.js",
+                "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.128.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: #030712; /* bg-gray-950 */
+            color: #e5e7eb;
+        }
+        .ui-panel {
+            position: absolute;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(8px);
+            padding: 1.25rem;
+            border: 1px solid rgba(55, 65, 81, 0.7);
+            transition: all 0.5s ease-in-out;
+            z-index: 10;
+        }
+        #info-panel {
+            top: 80px;
+            left: 20px;
+            max-width: 420px;
+            cursor: pointer;
+            overflow: hidden;
+            border-radius: 12px;
+            max-height: 58px; /* Collapsed */
+        }
+        #info-panel.expanded {
+            max-height: 90vh; 
+            cursor: default;
+            overflow-y: auto;
+            z-index: 11;
+        }
+        #info-header { display: flex; justify-content: space-between; align-items: center; }
+        #toggle-icon { transition: transform 0.3s ease-in-out; }
+        #info-panel.expanded #toggle-icon { transform: rotate(180deg); }
+        .formula-placeholder {
+            font-family: 'Georgia', serif;
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            text-align: center;
+            font-size: 1rem;
+            margin-top: 1rem;
+            color: #d1d5db;
+            border: 1px solid #374151;
+            word-wrap: break-word;
+        }
+        #metrics-display {
+            background-color: #1f2937;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin-top: 1rem;
+            border: 1px solid #374151;
+        }
+        .metric-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            padding: 0.25rem 0;
+        }
+        .metric-item span:first-child { color: #9ca3af; }
+        .metric-item span:last-child { color: #e5e7eb; font-weight: 500; }
+        #controls-panel {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            width: 100%;
+            border-radius: 12px 12px 0 0;
+            padding: 1rem 2rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 1.5rem;
+        }
+        header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background-color: rgba(3, 7, 18, 0.5);
+            backdrop-filter: blur(5px);
+            border-bottom: 1px solid rgba(55, 65, 81, 0.7);
+        }
+        #menu {
+            display: flex;
+            gap: 10px;
+        }
+        .menu-button, .preset-button, .toggle-button, .select-dropdown {
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .select-dropdown {
+             -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E');
+            background-repeat: no-repeat;
+            background-position: right .7em top 50%;
+            background-size: .65em auto;
+            padding-right: 2.5em;
+        }
+        .menu-button:hover, .preset-button:hover, .toggle-button:hover, .select-dropdown:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px);
+        }
+        .menu-button.active, .preset-button.active, .toggle-button.active {
+            background-color: #4f46e5;
+            box-shadow: 0 0 15px rgba(79, 70, 229, 0.5);
+        }
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #4b5563;
+            border-radius: 2px;
+            outline: none;
+            opacity: 0.7;
+            transition: opacity .2s;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #818cf8;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        input[type="text"], input[type="number"] {
+            -moz-appearance: textfield;
+            background-color: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            color: white;
+            text-align: center;
+            padding: 0.25rem 0.5rem;
+        }
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .chart-container {
+            background-color: #111827;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .hidden { display: none !important; }
+        canvas { display: block; }
+
+        #settings-button, #fullscreen-button {
+            position: absolute;
+            background-color: rgba(55, 65, 81, 0.8);
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(75, 85, 99, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        #settings-button {
+            top: 80px;
+            right: 20px;
+            z-index: 11;
+        }
+        #fullscreen-button {
+            bottom: 120px;
+            right: 20px;
+            z-index: 11;
+        }
+        #settings-button:hover {
+            background-color: #4338ca;
+            transform: translateY(-2px) rotate(45deg);
+        }
+        #fullscreen-button:hover {
+             background-color: #4338ca;
+            transform: translateY(-2px) scale(1.1);
+        }
+        #settings-panel {
+            top: 80px;
+            right: 0;
+            width: 300px;
+            max-width: 90vw;
+            border-radius: 12px 0 0 12px;
+            transform: translateX(100%);
+            transition: transform 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            padding-right: 2rem; 
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            z-index: 12;
+        }
+        #settings-panel::-webkit-scrollbar {
+            width: 12px;
+        }
+        #settings-panel::-webkit-scrollbar-track {
+            background: rgba(17, 24, 39, 0.1);
+        }
+        #settings-panel::-webkit-scrollbar-thumb {
+            background-color: #4f46e5;
+            border-radius: 10px;
+            border: 3px solid rgba(17, 24, 39, 0.85); 
+            background-clip: padding-box;
+        }
+        #settings-panel::-webkit-scrollbar-thumb:hover {
+            background-color: #6366f1;
+        }
+        #settings-panel.open {
+            transform: translateX(0);
+        }
+        #close-settings {
+            font-size: 2.5rem;
+            line-height: 1;
+            padding: 0;
+            background: none;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 40px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+        }
+        input[type="color"]::-webkit-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        input[type="color"]::-moz-color-swatch {
+            border-radius: 8px;
+            border: 1px solid #4b5563;
+        }
+        body.fullscreen-active header,
+        body.fullscreen-active #info-panel {
+            display: none !important;
+        }
+        body.fullscreen-active #controls-panel,
+        body.fullscreen-active #settings-button,
+        body.fullscreen-active #fullscreen-button {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        body.fullscreen-active #controls-panel.show-on-hover,
+        body.fullscreen-active #settings-button.show-on-hover,
+        body.fullscreen-active #fullscreen-button.show-on-hover {
+            opacity: 1;
+            pointer-events: auto;
+            visibility: visible;
+        }
+        .mobile-menu-item {
+            display: block;
+            width: 100%;
+            text-align: left;
+            padding: 10px 16px;
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .mobile-menu-item:hover {
+            background-color: #4338ca;
+        }
+        .mobile-menu-item.active {
+            background-color: #4f46e5;
+            font-weight: bold;
+        }
+        #mobile-menu-container { display: none; }
+        @media (max-width: 1024px) {
+             #menu { display: none !important; }
+             #mobile-menu-container { display: block; }
+        }
+        @media (max-width: 768px) {
+            header { padding: 0.75rem 1rem; }
+            header h1 { font-size: 1.125rem; }
+            #info-panel { top: 70px; left: 10px; right: 10px; max-width: none; width: auto; }
+            #settings-button { top: 70px; right: 10px; }
+            #fullscreen-button { bottom: 100px; right: 10px; }
+            #settings-panel { top: 70px; width: 280px; max-height: calc(100vh - 80px);}
+            #controls-panel { padding: 0.75rem; gap: 0.75rem; justify-content: space-around; }
+            .control-group { gap: 0.25rem; }
+            #controls-panel .text-3xl { font-size: 1.5rem; }
+            #controls-panel label, #controls-panel .text-sm, #controls-panel .text-xs { font-size: 0.75rem; }
+            input[type="range"]::-webkit-slider-thumb { width: 24px; height: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 class="text-xl font-bold text-gray-200 tracking-wider opacity-90">RL Algorithm Visualizer</h1>
+        <div id="menu"></div>
+        <div id="mobile-menu-container" class="relative">
+            <button id="mobile-menu-button" class="menu-button">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+                <span id="mobile-menu-label">Environments</span>
+            </button>
+            <div id="mobile-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-gray-800 border border-gray-700 rounded-md shadow-lg z-30"></div>
+        </div>
+    </header>
+
+    <div id="info-panel" class="ui-panel">
+        <div id="info-header">
+            <h2 id="info-title" class="text-xl font-bold text-indigo-400">Welcome!</h2>
+            <div id="toggle-icon" class="text-indigo-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+            </div>
+        </div>
+        <div id="info-content" class="pt-4 space-y-3">
+             <p id="info-description" class="text-gray-300"></p>
+             <div id="info-placeholder" class="formula-placeholder text-base">Environment: <strong id="env-display">None</strong></div>
+             <div id="metrics-display" class="hidden">
+                <h3 class="font-bold text-lg text-indigo-400 mb-2">Live Metrics</h3>
+                <div id="metrics-content"></div>
+                <div id="metrics-formula" class="formula-placeholder"></div>
+             </div>
+        </div>
+    </div>
+
+    <div id="controls-panel" class="ui-panel"></div>
+
+    <button id="fullscreen-button" title="Toggle Fullscreen">
+        <svg id="fullscreen-enter-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+        <svg id="fullscreen-exit-icon" class="hidden" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>
+    </button>
+    
+    <button id="settings-button" title="Settings">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 0 2l-.15.08a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l-.22-.38a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1 0 2l.15-.08a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+    </button>
+    
+    <div id="settings-panel" class="ui-panel hidden">
+        <div class="flex justify-between items-center mb-6 sticky top-0 bg-inherit z-10 py-2">
+            <h3 class="text-xl font-bold text-gray-200">Settings</h3>
+            <button id="close-settings" class="text-gray-400 hover:text-white transition-colors">&times;</button>
+        </div>
+        <div class="space-y-6">
+            <div class="control-group text-left w-full">
+                <label for="energy-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Simulation Speed:</span>
+                    <span id="energy-value">0.5x</span>
+                </label>
+                <input id="energy-slider" type="range" min="0" max="2" step="0.05" value="0.5" class="w-full">
+            </div>
+             <hr class="border-gray-600">
+             <h4 class="text-lg font-bold text-gray-300 text-left w-full">Background Settings</h4>
+             <div class="control-group text-left w-full">
+                <label for="grid-color-input" class="text-sm font-medium self-start w-full">Grid Color</label>
+                <input id="grid-color-input" type="color" value="#4b5563">
+            </div>
+            <div class="control-group text-left w-full">
+                <label for="grid-lines-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Grid Line Count:</span>
+                    <span id="grid-lines-value">15</span>
+                </label>
+                <input id="grid-lines-slider" type="range" min="5" max="50" step="1" value="15" class="w-full">
+            </div>
+            <hr class="border-gray-600">
+            <div class="control-group text-left w-full">
+                <label for="graphics-slider" class="text-sm font-medium self-start w-full flex justify-between">
+                    <span>Graphics Quality:</span>
+                    <span id="graphics-quality-value">High</span>
+                </label>
+                <input id="graphics-slider" type="range" min="0.5" max="2" step="0.1" value="1.5" class="w-full">
+                 <div class="text-xs text-gray-500 w-full flex justify-between mt-1">
+                     <span>Low</span>
+                     <span>Native</span>
+                     <span>High</span>
+                 </div>
+            </div>
+        </div>
+    </div>
+
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+   
+    // --- Core Three.js Components ---
+    let scene, camera, renderer, controls, clock, starfield;
+    
+    // --- App State & Scene Management ---
+    let activeSceneObjects = new THREE.Group();
+    let currentEnvironment = null;
+    let currentEnvironmentKey = null;
+    let currentAlgorithmKey = 'dqn';
+    let qValueVisualizationMode = false;
+
+    // --- Global Settings ---
+    let simulationSpeed = 0.5;
+    let isPaused = false;
+
+    const algorithms = {
+        dqn: {
+            title: 'DQN',
+            description: 'Deep Q-Learning (DQN) uses a neural network to approximate the Q-value function. The agent explores a grid world, and the height and color of the tiles represent the learned value of being in that state.',
+            formula: "Q(s,a) &larr; Q(s,a) + &alpha;[R + &gamma; max Q(s',a') - Q(s,a)]",
+            compatible: ['gridWorld']
+        },
+        sarsa: {
+            title: 'SARSA',
+            description: 'SARSA is an on-policy algorithm where the agent learns based on the action it actually takes. A fading trail visualizes the State-Action-Reward-State-Action path used for updates.',
+            formula: "Q(s,a) &larr; Q(s,a) + &alpha;[R + &gamma; Q(s',a') - Q(s,a)]",
+            compatible: ['gridWorld']
+        },
+        reinforce: {
+            title: 'REINFORCE',
+            description: 'REINFORCE is a policy gradient method. It directly adjusts the policy based on the rewards received. An instability meter above the cart shows immediate performance.',
+            formula: "&nabla;J(&theta;) &asymp; &Sigma; &nabla;<sub>&theta;</sub> log &pi;(a|s) * G<sub>t</sub>",
+            compatible: ['cartPole']
+        },
+        actor_critic: {
+            title: 'Actor-Critic',
+            description: 'Actor-Critic methods use two components: an Actor that controls agent behavior, and a Critic that measures how good those actions are. The background nebula represents the Critic\'s state-value estimate.',
+            formula: "Advantage A(s,a) = Q(s,a) - V(s)",
+            compatible: ['pendulum']
+        },
+        ppo: {
+            title: 'PPO',
+            description: 'Proximal Policy Optimization (PPO) improves training stability by limiting policy changes at each step. The pulsating circle around the agent visualizes this "trust region" or clipping range.',
+            formula: "L<sup>CLIP</sup>(&theta;) = E[min(r<sub>t</sub>(&theta;)A<sub>t</sub>, clip(r<sub>t</sub>(&theta;), 1-&epsilon;, 1+&epsilon;)A<sub>t</sub>)]",
+            compatible: ['continuousControl']
+        },
+        trpo: {
+            title: 'TRPO',
+            description: 'Trust Region Policy Optimization (TRPO) uses a more complex constraint (KL divergence) to keep policy updates stable. This is shown as a dynamic elliptical trust region.',
+            formula: "maximize E[r(&theta;)A] s.t. E[KL(&pi;<sub>old</sub> || &pi;<sub>new</sub>)] &le; &delta;",
+            compatible: ['continuousControl']
+        },
+        ddpg: {
+            title: 'DDPG',
+            description: 'Deep Deterministic Policy Gradient (DDPG) is for continuous action spaces. The solid line shows the deterministic action, while the cone represents exploration noise that varies in size.',
+            formula: "y<sub>i</sub> = r<sub>i</sub> + &gamma;Q'(s<sub>i+1</sub>, &mu;'(s<sub>i+1</sub>))",
+            compatible: ['continuousControl']
+        },
+        sac: {
+            title: 'SAC',
+            description: 'Soft Actor-Critic (SAC) encourages exploration by maximizing a trade-off between reward and policy entropy. A line to the target and a ghost arm show agent progress.',
+            formula: "J(&pi;) = &Sigma; E [r(s<sub>t</sub>, a<sub>t</sub>) + &alpha;H(&pi;(&middot;|s<sub>t</sub>))]",
+            compatible: ['reacher']
+        },
+        a3c: {
+            title: 'A3C',
+            description: 'Asynchronous Advantage Actor-Critic (A3C) uses multiple parallel agents to explore their own environments. Particle streams visualize when they send updates to the global network.',
+            formula: "A(s,a) = Q(s,a) - V(s)",
+            compatible: ['multiAgent']
+        },
+    };
+
+    const environments = {
+        gridWorld: { title: 'Grid World', init: initGridWorld },
+        cartPole: { title: 'Cart Pole', init: initCartPole },
+        pendulum: { title: 'Pendulum', init: initPendulum },
+        continuousControl: { title: 'Continuous Control', init: initContinuousControl },
+        reacher: { title: 'Reacher', init: initReacher },
+        multiAgent: { title: 'Multi-Agent', init: initA3C },
+        modelArchitecture: { title: 'Model Architecture', init: initModelArchitecture },
+    };
+
+    // --- Helper functions ---
+    function createStarfield() {
+        const starCount = 5000;
+        const vertices = [];
+        for (let i = 0; i < starCount; i++) {
+            const x = THREE.MathUtils.randFloatSpread(1000);
+            const y = THREE.MathUtils.randFloatSpread(1000);
+            const z = THREE.MathUtils.randFloatSpread(1000);
+            vertices.push(x, y, z);
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({
+            color: 0x888888,
+            size: 0.7,
+            sizeAttenuation: true
+        });
+        const stars = new THREE.Points(geometry, material);
+        return stars;
+    }
+
+    // --- Main Initialization ---
+    function init() {
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        scene.fog = new THREE.Fog(0x030712, 50, 100);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.position.set(0, 5, 20);
+        
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(10, 20, 10);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+        
+        starfield = createStarfield();
+        scene.add(starfield);
+
+        scene.add(activeSceneObjects);
+
+        createMenu();
+        setupMobileMenu();
+        setupInfoPanel();
+        setupSettingsPanel();
+        setupFullscreen();
+        
+        switchEnvironment('gridWorld');
+        updateAlgorithmInfo(currentAlgorithmKey);
+
+        window.addEventListener('resize', onWindowResize, false);
+        renderer.setAnimationLoop(animate);
+    }
+
+    // --- Scene Management ---
+    function switchEnvironment(key) {
+        if (key === currentEnvironmentKey) return;
+        isPaused = false;
+        qValueVisualizationMode = false;
+        if(currentEnvironment && currentEnvironment.cleanup) currentEnvironment.cleanup();
+
+        while(activeSceneObjects.children.length > 0) { 
+            const obj = activeSceneObjects.children[0];
+            if (obj.geometry) obj.geometry.dispose();
+            if (obj.material) {
+                if(Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+                else obj.material.dispose();
+            }
+            activeSceneObjects.remove(obj); 
+        }
+        
+        const envData = environments[key];
+        document.getElementById('env-display').textContent = envData.title;
+
+        if (currentEnvironmentKey) {
+            document.getElementById(`btn-${currentEnvironmentKey}`).classList.remove('active');
+            document.getElementById(`mobile-btn-${currentEnvironmentKey}`)?.classList.remove('active');
+        }
+        document.getElementById(`btn-${key}`).classList.add('active');
+        document.getElementById(`mobile-btn-${key}`)?.classList.add('active');
+        document.getElementById('mobile-menu-label').textContent = envData.title;
+
+        currentEnvironmentKey = key;
+
+        // Check if current algorithm is compatible, if not, switch to the first compatible one
+        if (key !== 'modelArchitecture' && !algorithms[currentAlgorithmKey].compatible.includes(key)) {
+            currentAlgorithmKey = Object.keys(algorithms).find(algoKey => algorithms[algoKey].compatible.includes(key)) || 'dqn';
+        }
+        
+        currentEnvironment = envData.init();
+        createControls();
+        updateAlgorithmInfo(currentAlgorithmKey);
+        if (currentEnvironment.setAlgorithm) {
+            currentEnvironment.setAlgorithm(currentAlgorithmKey);
+        }
+    }
+    
+    function updateAlgorithmInfo(key) {
+        const algoData = algorithms[key];
+        document.getElementById('info-title').textContent = algoData.title;
+        document.getElementById('info-description').textContent = algoData.description;
+        document.getElementById('metrics-formula').innerHTML = algoData.formula;
+    }
+
+    function createControls() {
+        const controlsPanel = document.getElementById('controls-panel');
+        controlsPanel.innerHTML = ''; // Clear previous controls
+
+        // Algorithm Selector
+        const algoGroup = document.createElement('div');
+        algoGroup.className = 'control-group';
+        
+        const label = document.createElement('label');
+        label.className = 'text-sm font-medium';
+        label.textContent = 'Select Algorithm';
+        
+        const select = document.createElement('select');
+        select.id = 'algorithm-select';
+        select.className = 'select-dropdown';
+
+        Object.keys(algorithms).forEach(key => {
+            const isCompatible = currentEnvironmentKey === 'modelArchitecture' || algorithms[key].compatible.includes(currentEnvironmentKey);
+            if (isCompatible) {
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = algorithms[key].title;
+                if (key === currentAlgorithmKey) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            }
+        });
+
+        select.addEventListener('change', (e) => {
+            currentAlgorithmKey = e.target.value;
+            updateAlgorithmInfo(currentAlgorithmKey);
+            if (currentEnvironment && currentEnvironment.setAlgorithm) {
+                currentEnvironment.setAlgorithm(currentAlgorithmKey);
+            }
+            if (currentEnvironment && currentEnvironment.reset) {
+                currentEnvironment.reset();
+            }
+        });
+
+        algoGroup.appendChild(label);
+        algoGroup.appendChild(select);
+        controlsPanel.appendChild(algoGroup);
+
+        // Reset Button
+        if (currentEnvironment && currentEnvironment.reset) {
+            const resetButton = document.createElement('button');
+            resetButton.id = 'reset-btn';
+            resetButton.className = 'toggle-button';
+            resetButton.textContent = 'Reset Simulation';
+            resetButton.addEventListener('click', () => currentEnvironment.reset());
+            controlsPanel.appendChild(resetButton);
+        }
+
+        // Q-Value Mode Button
+        if (currentEnvironmentKey === 'gridWorld') {
+            const qModeButton = document.createElement('button');
+            qModeButton.id = 'q-value-mode-btn';
+            qModeButton.className = 'toggle-button';
+            qModeButton.textContent = 'Calculation Mode: Off';
+            qModeButton.addEventListener('click', (e) => {
+                qValueVisualizationMode = !qValueVisualizationMode;
+                e.target.textContent = `Calculation Mode: ${qValueVisualizationMode ? 'On' : 'Off'}`;
+                e.target.classList.toggle('active', qValueVisualizationMode);
+                currentEnvironment.reset();
+            });
+            controlsPanel.appendChild(qModeButton);
+        }
+    }
+
+    // --- RL Environments / Scenes ---
+
+    function initGridWorld() {
+        const GRID_SIZE = 10;
+        const CELL_SIZE = 2;
+        const HALF_GRID = (GRID_SIZE * CELL_SIZE) / 2 - CELL_SIZE / 2;
+        
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(GRID_SIZE*CELL_SIZE, GRID_SIZE*CELL_SIZE), new THREE.MeshStandardMaterial({color: 0x1f2937}));
+        ground.rotation.x = -Math.PI/2;
+        ground.receiveShadow = true;
+        activeSceneObjects.add(ground);
+        activeSceneObjects.add(new THREE.GridHelper(GRID_SIZE*CELL_SIZE, GRID_SIZE, 0x4b5563, 0x4b5563));
+
+        const gridCells = [];
+        const qValues = [];
+
+        for(let i = 0; i < GRID_SIZE; i++) {
+            gridCells[i] = [];
+            qValues[i] = [];
+            for(let j = 0; j < GRID_SIZE; j++) {
+                const mat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.1 });
+                const geo = new THREE.BoxGeometry(CELL_SIZE * 0.9, 1, CELL_SIZE * 0.9);
+                const cell = new THREE.Mesh(geo, mat);
+                cell.position.set(i * CELL_SIZE - HALF_GRID, 0.5, j * CELL_SIZE - HALF_GRID);
+                cell.castShadow = true;
+                cell.receiveShadow = true;
+                activeSceneObjects.add(cell);
+                gridCells[i][j] = cell;
+                qValues[i][j] = 0;
+            }
+        }
+
+        const agentGeo = new THREE.OctahedronGeometry(CELL_SIZE * 0.3);
+        const agentMat = new THREE.MeshStandardMaterial({ color: 0xa855f7, metalness: 0.3, roughness: 0.4 });
+        const agent = new THREE.Mesh(agentGeo, agentMat);
+        agent.castShadow = true;
+        activeSceneObjects.add(agent);
+
+        const targetGeo = new THREE.TorusKnotGeometry(CELL_SIZE * 0.2, CELL_SIZE * 0.08, 100, 16);
+        const targetMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, metalness: 0.3, roughness: 0.4 });
+        const target = new THREE.Mesh(targetGeo, targetMat);
+        target.castShadow = true;
+        activeSceneObjects.add(target);
+
+        let agentPos = {x: 0, z: 0};
+        let targetPos = {x: GRID_SIZE - 1, z: GRID_SIZE - 1};
+        let sarsaTrail = [];
+        let localAlgorithm = 'dqn';
+
+        // Q-Value calculation state
+        let calculationState = {
+            active: false,
+            step: 'idle',
+            timer: 0,
+            oldPos: null,
+            newPos: null,
+            reward: 0,
+            maxNextQ: 0,
+            metrics: {}
+        };
+
+        function reset() {
+            agentPos = {x: Math.floor(Math.random() * GRID_SIZE), z: Math.floor(Math.random() * GRID_SIZE)};
+            targetPos = {x: Math.floor(Math.random() * GRID_SIZE), z: Math.floor(Math.random() * GRID_SIZE)};
+            if(agentPos.x === targetPos.x && agentPos.z === targetPos.z) targetPos.x = (targetPos.x + 1) % GRID_SIZE;
+            
+            target.position.set(targetPos.x * CELL_SIZE - HALF_GRID, CELL_SIZE * 0.5, targetPos.z * CELL_SIZE - HALF_GRID);
+
+            sarsaTrail.forEach(t => activeSceneObjects.remove(t));
+            sarsaTrail = [];
+            calculationState.active = false;
+            calculationState.step = 'idle';
+        }
+        
+        function setAlgorithm(algoKey) {
+            localAlgorithm = algoKey;
+            reset();
+        }
+
+        function getMetrics() {
+            if(calculationState.active) return calculationState.metrics;
+            return {
+                'Agent Position': `(${agentPos.x}, ${agentPos.z})`,
+                'Q-Value (current)': qValues[agentPos.x][agentPos.z].toFixed(3),
+            };
+        }
+        
+        function startQValueAnimation(oldPos, newPos) {
+            calculationState.active = true;
+            calculationState.step = 'highlight_old';
+            calculationState.timer = 1.0; // seconds for this step
+            calculationState.oldPos = oldPos;
+            calculationState.newPos = newPos;
+            calculationState.metrics = {'Status': 'Calculating Q-Value...'};
+
+            // Calculate values for animation
+            const neighbors = [
+                {x: newPos.x+1, z: newPos.z}, {x: newPos.x-1, z: newPos.z},
+                {x: newPos.x, z: newPos.z+1}, {x: newPos.x, z: newPos.z-1}
+            ].filter(p => p.x >= 0 && p.x < GRID_SIZE && p.z >=0 && p.z < GRID_SIZE);
+            calculationState.maxNextQ = 0;
+            if(neighbors.length > 0) {
+                 calculationState.maxNextQ = Math.max(...neighbors.map(p => qValues[p.x][p.z]));
+            }
+            calculationState.reward = (newPos.x === targetPos.x && newPos.z === targetPos.z) ? 1.0 : -0.01;
+        }
+
+        reset();
+        
+        let moveTimer = 0;
+        function update(delta) {
+            if (calculationState.active) {
+                // Handle animation steps
+                calculationState.timer -= delta;
+                const oldCell = gridCells[calculationState.oldPos.x][calculationState.oldPos.z];
+                const newCell = gridCells[calculationState.newPos.x][calculationState.newPos.z];
+                
+                if (calculationState.timer < 0) {
+                    switch(calculationState.step) {
+                        case 'highlight_old':
+                            calculationState.step = 'show_reward';
+                            calculationState.timer = 1.5;
+                             calculationState.metrics = {
+                                'Q(s,a)': qValues[calculationState.oldPos.x][calculationState.oldPos.z].toFixed(2),
+                                'Status': 'Showing reward R...'
+                            };
+                            break;
+                        case 'show_reward':
+                            calculationState.step = 'show_max_next_q';
+                            calculationState.timer = 1.5;
+                            calculationState.metrics = {
+                                'Q(s,a)': qValues[calculationState.oldPos.x][calculationState.oldPos.z].toFixed(2),
+                                'Reward (R)': calculationState.reward,
+                                'Status': "Finding max Q(s',a')..."
+                            };
+                            break;
+                        case 'show_max_next_q':
+                            calculationState.step = 'update_q';
+                            calculationState.timer = 2.0;
+                            const gamma = 0.9;
+                            const alpha = 0.1;
+                            const oldQ = qValues[calculationState.oldPos.x][calculationState.oldPos.z];
+                            const newQ = oldQ + alpha * (calculationState.reward + gamma * calculationState.maxNextQ - oldQ);
+                             calculationState.metrics = {
+                                'Q(s,a)': oldQ.toFixed(2),
+                                'R': calculationState.reward,
+                                'γ * max Q(s\')': (gamma * calculationState.maxNextQ).toFixed(2),
+                                'New Q(s,a)': newQ.toFixed(2),
+                                'Status': 'Updating value...'
+                            };
+                            qValues[calculationState.oldPos.x][calculationState.oldPos.z] = newQ;
+                            break;
+                        case 'update_q':
+                             calculationState.active = false;
+                             calculationState.step = 'idle';
+                             if (agentPos.x === targetPos.x && agentPos.z === targetPos.z) {
+                                reset();
+                             }
+                             break;
+                    }
+                }
+
+                // Animate based on current step
+                oldCell.material.color.set(0xfbbf24); // highlight yellow
+                oldCell.material.opacity = 0.8;
+                if(calculationState.step === 'show_max_next_q' || calculationState.step === 'update_q') {
+                     newCell.material.color.set(0x60a5fa); // highlight blue
+                     newCell.material.opacity = 0.8;
+                }
+
+                return; // Pause regular simulation
+            }
+
+            moveTimer += delta * (simulationSpeed + 0.1);
+            if (moveTimer > 0.2) {
+                moveTimer = 0;
+                
+                const oldPos = { ...agentPos };
+
+                // Movement logic
+                const dx = Math.sign(targetPos.x - agentPos.x);
+                const dz = Math.sign(targetPos.z - agentPos.z);
+                let moveX = 0, moveZ = 0;
+                if(Math.random() > 0.5 && dx !== 0) moveX = dx;
+                else if (dz !== 0) moveZ = dz;
+                else if (dx !== 0) moveX = dx;
+                if(Math.random() < 0.2) { // Random exploration
+                    const rand = Math.random();
+                    if(rand < 0.25) moveX=1; else if(rand<0.5) moveX=-1; else if(rand<0.75) moveZ=1; else moveZ=-1;
+                }
+                const newX = Math.max(0, Math.min(GRID_SIZE - 1, agentPos.x + moveX));
+                const newZ = Math.max(0, Math.min(GRID_SIZE - 1, agentPos.z + moveZ));
+                
+                agentPos.x = newX;
+                agentPos.z = newZ;
+
+                if (localAlgorithm === 'sarsa') {
+                     const trailGeo = new THREE.SphereGeometry(CELL_SIZE * 0.1, 8, 8);
+                     const trailMat = new THREE.MeshBasicMaterial({color: 0xfacc15, transparent: true});
+                     const trail = new THREE.Mesh(trailGeo, trailMat);
+                     trail.position.copy(agent.position);
+                     activeSceneObjects.add(trail);
+                     sarsaTrail.push(trail);
+                     if(sarsaTrail.length > 8) activeSceneObjects.remove(sarsaTrail.shift());
+                     sarsaTrail.forEach((t, i) => t.material.opacity = (i / sarsaTrail.length) * 0.8);
+                }
+
+                if (qValueVisualizationMode) {
+                    startQValueAnimation(oldPos, { ...agentPos });
+                    return;
+                }
+                
+                // Regular Q-value update
+                const reward = (agentPos.x === targetPos.x && agentPos.z === targetPos.z) ? 1.0 : -0.01;
+                const neighbors = [
+                    {x: agentPos.x+1, z: agentPos.z}, {x: agentPos.x-1, z: agentPos.z},
+                    {x: agentPos.x, z: agentPos.z+1}, {x: agentPos.x, z: agentPos.z-1}
+                ].filter(p => p.x >= 0 && p.x < GRID_SIZE && p.z >=0 && p.z < GRID_SIZE);
+                let maxNextQ = 0;
+                if(neighbors.length > 0) {
+                     maxNextQ = Math.max(...neighbors.map(p => qValues[p.x][p.z]));
+                }
+                const oldQ = qValues[oldPos.x][oldPos.z];
+                qValues[oldPos.x][oldPos.z] = oldQ + 0.1 * (reward + 0.9 * maxNextQ - oldQ);
+                
+                if (agentPos.x === targetPos.x && agentPos.z === targetPos.z) {
+                     reset();
+                }
+            }
+            
+            agent.position.x = THREE.MathUtils.lerp(agent.position.x, agentPos.x * CELL_SIZE - HALF_GRID, 0.2);
+            agent.position.y = CELL_SIZE * 0.4 + Math.sin(clock.elapsedTime * 5) * 0.1;
+            agent.position.z = THREE.MathUtils.lerp(agent.position.z, agentPos.z * CELL_SIZE - HALF_GRID, 0.2);
+            agent.rotation.y += delta;
+            target.rotation.y += delta * 0.5;
+
+            for(let i=0; i < GRID_SIZE; i++) {
+                for(let j=0; j < GRID_SIZE; j++) {
+                     qValues[i][j] *= 0.998;
+                     const cell = gridCells[i][j];
+                     if (localAlgorithm === 'dqn') {
+                        const q = qValues[i][j];
+                        cell.position.y = q * 2;
+                        cell.scale.y = q * 4 + 1;
+                        cell.material.opacity = q * 0.8 + 0.1;
+                        cell.material.color.setHSL(0.5 + q * 0.5, 0.7, 0.6);
+                     } else {
+                        cell.position.y = 0.05;
+                        cell.scale.y = 0.1;
+                        cell.material.opacity = 0;
+                     }
+                }
+            }
+        }
+        
+        camera.position.set(15, 15, 15); controls.target.set(0, 0, 0);
+
+        return { update, cleanup: () => {}, reset, setAlgorithm, getMetrics };
+    }
+    
+    function initCartPole() {
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 4), new THREE.MeshStandardMaterial({ color: 0x1f2937 }));
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        activeSceneObjects.add(ground);
+        
+        const cart = new THREE.Mesh(
+            new THREE.BoxGeometry(2, 1, 1.5), 
+            new THREE.MeshStandardMaterial({color: 0x4f46e5})
+        );
+        cart.position.y = 0.5;
+        cart.castShadow = true;
+        activeSceneObjects.add(cart);
+
+        const pole = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.1, 0.1, 4, 16),
+            new THREE.MeshStandardMaterial({color: 0x818cf8})
+        );
+        pole.position.y = 2.5;
+        pole.castShadow = true;
+        cart.add(pole); // Attach pole to cart
+        
+        const instabilityMeter = new THREE.Mesh(
+            new THREE.PlaneGeometry(2, 0.2),
+            new THREE.MeshBasicMaterial({color: 0x22c55e})
+        );
+        instabilityMeter.position.y = 5.5;
+        cart.add(instabilityMeter);
+
+        let angle = (Math.random() - 0.5) * 0.2;
+        let angleVelocity = 0;
+        let position = 0;
+        let velocity = 0;
+
+        function reset() {
+            angle = (Math.random() - 0.5) * 0.2;
+            angleVelocity = 0;
+            position = 0;
+            velocity = 0;
+        }
+
+        const force = 0.2;
+        const gravity = -9.8;
+        const poleLength = 2; // half length
+
+        function getMetrics() {
+            return {
+                'Position': position.toFixed(2),
+                'Velocity': velocity.toFixed(2),
+                'Pole Angle': `${(angle * 180 / Math.PI).toFixed(2)}°`,
+                'Angular Velocity': angleVelocity.toFixed(2)
+            }
+        }
+
+        function update(delta) {
+             const scaledDelta = delta * simulationSpeed;
+             // Simple "policy": push in the opposite direction of the angle
+             const action = (angle > 0) ? force : -force;
+             
+             velocity += action * scaledDelta;
+             position += velocity * scaledDelta;
+
+             const angleAccel = (gravity * Math.sin(angle) + Math.cos(angle) * (-action - poleLength * angleVelocity * angleVelocity * Math.sin(angle))) / (poleLength * (4/3 - Math.cos(angle)*Math.cos(angle)));
+
+             angleVelocity += angleAccel * scaledDelta;
+             angle += angleVelocity * scaledDelta;
+
+             cart.position.x = position;
+             pole.rotation.z = angle;
+             
+             const instability = Math.abs(angle) / (Math.PI / 4);
+             instabilityMeter.material.color.setHSL(0.35 * (1 - instability), 0.8, 0.5);
+             instabilityMeter.scale.x = 1 - instability;
+
+             if (Math.abs(position) > 10 || Math.abs(angle) > Math.PI / 4) {
+                 reset();
+             }
+        }
+        
+        camera.position.set(0, 4, 15); controls.target.set(0, 2, 0);
+        return { update, cleanup: () => {}, reset, getMetrics };
+    }
+
+    function initPendulum() {
+        const pivot = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        pivot.position.y = 6;
+        pivot.castShadow = true;
+        activeSceneObjects.add(pivot);
+
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 5, 16), new THREE.MeshStandardMaterial({ color: 0x818cf8 }));
+        arm.position.y = -2.5;
+        arm.castShadow = true;
+        pivot.add(arm);
+        
+        const criticBackground = new THREE.Mesh(
+            new THREE.PlaneGeometry(100, 100),
+            new THREE.MeshBasicMaterial({ color: 0x111827, fog: false })
+        );
+        criticBackground.position.z = -20;
+        activeSceneObjects.add(criticBackground);
+
+        let angle = Math.PI;
+        let angleVelocity = 0;
+        let criticValue = 0;
+        const gravity = 9.8;
+        const length = 5;
+        
+        function reset() {
+            angle = Math.PI * (Math.random() * 0.5 + 0.75);
+            angleVelocity = 0;
+        }
+
+        function getMetrics() {
+            return {
+                'Angle': `${(angle * 180 / Math.PI).toFixed(2)}°`,
+                'Angular Velocity': angleVelocity.toFixed(2),
+                'Critic Value (V(s))': criticValue.toFixed(3)
+            }
+        }
+
+        function update(delta) {
+            const scaledDelta = delta * simulationSpeed * 1.5;
+            
+            const torque = 15 * Math.cos(angle); 
+            
+            const accel = (-gravity / length) * Math.sin(angle) + torque;
+            angleVelocity += accel * scaledDelta * 0.1;
+            angleVelocity *= 0.99; // Damping
+            angle += angleVelocity * scaledDelta;
+
+            pivot.rotation.z = angle;
+
+            criticValue = Math.cos(angle) * 0.5 + 0.5;
+            
+            const topColor = new THREE.Color(0x1e40af);
+            const bottomColor = new THREE.Color(0x111827);
+            criticBackground.material.color.lerpColors(bottomColor, topColor, criticValue);
+        }
+        
+        camera.position.set(0, 4, 15); controls.target.set(0, 4, 0);
+        return { update, cleanup: () => {}, reset, getMetrics };
+    }
+    
+    function initContinuousControl() {
+        const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial({color: 0x27272a, metalness: 0.2, roughness: 0.8}));
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        activeSceneObjects.add(ground);
+        
+        const agentGeo = new THREE.ConeGeometry(0.5, 1, 16);
+        const agentMat = new THREE.MeshStandardMaterial({color: 0x4f46e5});
+        const agent = new THREE.Mesh(agentGeo, agentMat);
+        agent.rotation.x = Math.PI / 2;
+        agent.position.y = 0.5;
+        agent.castShadow = true;
+        activeSceneObjects.add(agent);
+
+        const targetGeo = new THREE.TorusGeometry(0.5, 0.1, 8, 32);
+        const targetMat = new THREE.MeshStandardMaterial({color: 0x16a34a, emissive: 0x16a34a, emissiveIntensity: 0.5});
+        const target = new THREE.Mesh(targetGeo, targetMat);
+        target.rotation.x = Math.PI / 2;
+        target.position.y = 0.1;
+        target.castShadow = true;
+        activeSceneObjects.add(target);
+
+        const vizGroup = new THREE.Group();
+        agent.add(vizGroup);
+        vizGroup.position.y = -0.5;
+        
+        let localAlgorithm = 'ppo';
+        let noiseCone;
+
+        function setAlgorithm(algoKey) {
+            localAlgorithm = algoKey;
+            while(vizGroup.children.length > 0) vizGroup.remove(vizGroup.children[0]);
+            
+            if (localAlgorithm === 'ppo') {
+                const trustRegion = new THREE.Mesh(new THREE.RingGeometry(1.4, 1.5, 32), new THREE.MeshBasicMaterial({color: 0x38bdf8, side: THREE.DoubleSide}));
+                trustRegion.rotation.x = Math.PI / 2;
+                vizGroup.add(trustRegion);
+            } else if (localAlgorithm === 'trpo') {
+                const trustRegion = new THREE.Line(new THREE.BufferGeometry().setFromPoints(new THREE.EllipseCurve(0,0, 2, 1.5, 0, 2 * Math.PI, false, 0).getPoints(50)), new THREE.LineBasicMaterial({color: 0x38bdf8}));
+                trustRegion.rotation.x = Math.PI / 2;
+                vizGroup.add(trustRegion);
+            } else if (localAlgorithm === 'ddpg') {
+                 const actionLine = new THREE.ArrowHelper(new THREE.Vector3(0,1,0), new THREE.Vector3(0,0,0), 2, 0xffffff, 0.5, 0.2);
+                 const noiseConeGeo = new THREE.ConeGeometry(0.5, 2, 8, 1, true);
+                 noiseConeGeo.translate(0, 1, 0);
+                 const noiseConeMat = new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.1, side: THREE.DoubleSide});
+                 noiseCone = new THREE.Mesh(noiseConeGeo, noiseConeMat);
+                 actionLine.add(noiseCone);
+                 vizGroup.add(actionLine);
+            }
+        }
+
+
+        let targetPos = new THREE.Vector3();
+        function reset() {
+            targetPos.set((Math.random() - 0.5) * 18, 0.1, (Math.random() - 0.5) * 18);
+            target.position.copy(targetPos);
+            agent.position.set(0, 0.5, 0);
+        }
+        
+        function getMetrics() {
+             return {
+                'Agent Pos': `(${agent.position.x.toFixed(1)}, ${agent.position.z.toFixed(1)})`,
+                'Target Pos': `(${targetPos.x.toFixed(1)}, ${targetPos.z.toFixed(1)})`,
+                'Distance': agent.position.distanceTo(targetPos).toFixed(2)
+             }
+        }
+        
+        let timer = 0;
+        function update(delta) {
+             const dir = targetPos.clone().sub(agent.position).normalize();
+             agent.position.add(dir.clone().multiplyScalar(delta * 4 * simulationSpeed));
+             
+             if(agent.position.distanceTo(targetPos) < 1) {
+                reset();
+             }
+
+             agent.quaternion.slerp(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,0,1), dir), 0.1);
+             timer += delta;
+
+             if (localAlgorithm === 'ppo') {
+                 const scale = 1 + Math.sin(timer * 5) * 0.1;
+                 vizGroup.children[0].scale.set(scale, scale, scale);
+             } else if (localAlgorithm === 'trpo') {
+                vizGroup.children[0].scale.x = 1 + Math.sin(timer * 2) * 0.2;
+                vizGroup.children[0].rotation.z += delta;
+             } else if (localAlgorithm === 'ddpg' && noiseCone) {
+                noiseCone.scale.x = noiseCone.scale.z = Math.abs(Math.sin(timer * 3)) * 0.5 + 0.1;
+             }
+        }
+        
+        camera.position.set(0, 15, 12); controls.target.set(0, 0, 0);
+        return { update, cleanup: () => {}, reset, setAlgorithm, getMetrics };
+    }
+
+    function initReacher() {
+         const base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.2), new THREE.MeshStandardMaterial({color: 0x64748b}));
+         base.receiveShadow = true;
+         activeSceneObjects.add(base);
+
+         const joint1 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({color: 0xffffff}));
+         joint1.position.y = 0.2;
+         joint1.castShadow = true;
+         activeSceneObjects.add(joint1);
+
+         const arm1 = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 4), new THREE.MeshStandardMaterial({color: 0x4f46e5}));
+         arm1.position.y = 2;
+         arm1.castShadow = true;
+         joint1.add(arm1);
+
+         const joint2 = new THREE.Mesh(new THREE.SphereGeometry(0.3), new THREE.MeshStandardMaterial({color: 0xffffff}));
+         joint2.position.y = 4;
+         joint2.castShadow = true;
+         arm1.add(joint2);
+
+         const arm2 = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 3), new THREE.MeshStandardMaterial({color: 0x818cf8}));
+         arm2.position.y = 1.5;
+         arm2.castShadow = true;
+         joint2.add(arm2);
+
+         const target = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({color: 0x16a34a, emissive: 0x16a34a, emissiveIntensity: 0.8}));
+         activeSceneObjects.add(target);
+         
+         const endEffectorWorldPos = new THREE.Vector3();
+
+         let targetPos = new THREE.Vector3();
+         function reset() {
+            const r = Math.random() * 5 + 1;
+            const a = Math.random() * Math.PI * 2;
+            targetPos.set(Math.cos(a) * r, Math.sin(a) * r + 3, 0);
+            target.position.copy(targetPos);
+         }
+         
+         function getMetrics() {
+            return {
+                'End Effector': `(${endEffectorWorldPos.x.toFixed(1)}, ${endEffectorWorldPos.y.toFixed(1)})`,
+                'Target': `(${targetPos.x.toFixed(1)}, ${targetPos.y.toFixed(1)})`,
+                'Distance': endEffectorWorldPos.distanceTo(targetPos).toFixed(2),
+            }
+         }
+         
+         reset();
+
+         let time = 0;
+         function update(delta) {
+             time += delta * simulationSpeed * 2;
+             joint1.rotation.z = Math.sin(time * 0.5) * 1.5;
+             joint2.rotation.z = Math.cos(time * 0.7) * 2;
+             
+             arm2.localToWorld(endEffectorWorldPos.set(0, 1.5, 0)); // Get tip position in world space
+
+             if(endEffectorWorldPos.distanceTo(targetPos) < 0.5) {
+                 reset();
+             }
+         }
+
+        camera.position.set(0, 4, 15); controls.target.set(0, 4, 0);
+        return { update, cleanup: () => {}, reset, getMetrics };
+    }
+
+    function initA3C() {
+        const globalNetwork = new THREE.Mesh(new THREE.TorusKnotGeometry(1.2, 0.3, 100, 16), new THREE.MeshStandardMaterial({color: 0xfb923c, emissive: 0xfb923c, metalness: 0.4, roughness: 0.3}));
+        globalNetwork.position.y = 5;
+        globalNetwork.castShadow = true;
+        activeSceneObjects.add(globalNetwork);
+
+        const numWorkers = 4;
+        const workers = [];
+        for(let i=0; i < numWorkers; i++) {
+            const group = new THREE.Group();
+            const cart = new THREE.Mesh(new THREE.BoxGeometry(1,0.5,0.75), new THREE.MeshStandardMaterial({color: 0x4f46e5}));
+            cart.position.y = 0.25;
+            cart.castShadow = true;
+            const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2), new THREE.MeshStandardMaterial({color: 0x818cf8}));
+            pole.position.y = 1.25;
+            pole.castShadow = true;
+            group.add(cart);
+            cart.add(pole);
+
+            const x = (i % 2 - 0.5) * 10;
+            const z = (Math.floor(i / 2) - 0.5) * 10;
+            group.position.set(x, 0, z);
+            
+            const ground = new THREE.Mesh(new THREE.PlaneGeometry(6,6), new THREE.MeshStandardMaterial({color:0x374151}));
+            ground.rotation.x = -Math.PI/2;
+            ground.receiveShadow = true;
+            group.add(ground);
+
+            activeSceneObjects.add(group);
+            workers.push({
+                group, cart, pole,
+                angle: (Math.random() - 0.5) * 0.4,
+                angleVelocity: 0,
+                updateTimer: Math.random() * 3,
+                particles: []
+            });
+        }
+        
+        function reset() {
+            workers.forEach(w => {
+                 w.angle = (Math.random() - 0.5) * 0.4;
+                 w.angleVelocity = 0;
+                 w.updateTimer = Math.random() * 3;
+            });
+        }
+        
+        function getMetrics() {
+            const metrics = {};
+            workers.forEach((w, i) => {
+                metrics[`Worker ${i+1} Angle`] = `${(w.angle * 180 / Math.PI).toFixed(1)}°`;
+                metrics[`Worker ${i+1} Update`] = `${w.updateTimer.toFixed(1)}s`;
+            });
+            return metrics;
+        }
+
+        const particleGeo = new THREE.SphereGeometry(0.05, 4, 4);
+        const particleMat = new THREE.MeshBasicMaterial({color: 0xfacc15});
+
+        let globalNetworkPulse = 1.0;
+        function update(delta) {
+            globalNetwork.rotation.y += delta * 0.2;
+            
+            workers.forEach(w => {
+                w.angleVelocity += -15 * Math.sin(w.angle) * delta * simulationSpeed;
+                w.angle += w.angleVelocity * delta * simulationSpeed;
+                w.pole.rotation.z = w.angle;
+
+                if (Math.abs(w.angle) > Math.PI / 4) {
+                    w.angle = (Math.random() - 0.5) * 0.2;
+                    w.angleVelocity = 0;
+                }
+                
+                w.updateTimer -= delta;
+                if(w.updateTimer < 0) {
+                    w.updateTimer = Math.random() * 3 + 2;
+                    
+                    // Particle burst
+                    for(let i=0; i<10; i++) {
+                        const p = new THREE.Mesh(particleGeo, particleMat);
+                        p.position.copy(w.group.position).y += 0.5;
+                        p.userData.velocity = p.position.clone().sub(globalNetwork.position).normalize().multiplyScalar(-5);
+                        p.userData.life = 1.0;
+                        activeSceneObjects.add(p);
+                        w.particles.push(p);
+                    }
+                }
+
+                // Update particles
+                for(let i = w.particles.length - 1; i >= 0; i--) {
+                    const p = w.particles[i];
+                    p.position.add(p.userData.velocity.clone().multiplyScalar(delta));
+                    p.userData.life -= delta;
+                    if(p.userData.life <= 0) {
+                        activeSceneObjects.remove(p);
+                        w.particles.splice(i, 1);
+                    }
+                }
+            });
+        }
+
+        camera.position.set(0, 15, 12); controls.target.set(0, 2, 0);
+        return { update, cleanup: () => {}, reset, getMetrics };
+    }
+
+    function initModelArchitecture() {
+        let font;
+        const fontLoader = new THREE.FontLoader();
+        fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/fonts/helvetiker_regular.typeface.json', (loadedFont) => {
+            font = loadedFont;
+            setAlgorithm(currentAlgorithmKey);
+        });
+
+        const createText = (text, size = 0.5, color = 0xffffff) => {
+            if (!font) return new THREE.Object3D();
+            const geo = new THREE.TextGeometry(text, {
+                font: font,
+                size: size,
+                height: 0.1,
+            });
+            geo.center();
+            const mat = new THREE.MeshStandardMaterial({color: color});
+            return new THREE.Mesh(geo, mat);
+        };
+        
+        const createNetwork = (layers = 3, color = 0x4f46e5, scale = 1) => {
+            const group = new THREE.Group();
+            for (let i = 0; i < layers; i++) {
+                const geo = new THREE.BoxGeometry(2 * scale, 4 * scale, 0.2 * scale);
+                const mat = new THREE.MeshStandardMaterial({color: color, transparent: true, opacity: 0.6 + i * 0.1, metalness: 0.2, roughness: 0.6});
+                const layer = new THREE.Mesh(geo, mat);
+                layer.position.x = (i - (layers - 1) / 2) * (2.2 * scale);
+                group.add(layer);
+            }
+            return group;
+        };
+
+        const createArrow = (from, to, color = 0xffffff) => {
+             const dir = to.clone().sub(from).normalize();
+             const length = from.distanceTo(to) - 0.5;
+             return new THREE.ArrowHelper(dir, from, length, color, 0.5, 0.3);
+        }
+        
+        const createDashedLine = (from, to, color = 0xffffff) => {
+            const points = [from, to];
+            const geo = new THREE.BufferGeometry().setFromPoints(points);
+            const mat = new THREE.LineDashedMaterial({ color: color, dashSize: 0.3, gapSize: 0.2 });
+            const line = new THREE.Line(geo, mat);
+            line.computeLineDistances();
+            return line;
+        }
+
+
+        function setAlgorithm(algoKey) {
+            while(activeSceneObjects.children.length > 0) {
+                const obj = activeSceneObjects.children[0];
+                if(obj.geometry) obj.geometry.dispose();
+                if(obj.material) obj.material.dispose();
+                activeSceneObjects.remove(obj);
+            }
+            if (!font) return;
+
+            const envGeo = new THREE.BoxGeometry(4, 4, 4);
+            const envMat = new THREE.MeshStandardMaterial({color: 0x16a34a, metalness: 0.3, roughness: 0.5});
+            const env = new THREE.Mesh(envGeo, envMat);
+            env.position.set(-12, 0, 0);
+            activeSceneObjects.add(env);
+            activeSceneObjects.add(createText("Environment")).position.set(-12, 3, 0);
+
+            switch(algoKey) {
+                case 'dqn': {
+                    const qNet = createNetwork(3, 0x3b82f6);
+                    qNet.position.set(0, 3, 0);
+                    activeSceneObjects.add(qNet);
+                    activeSceneObjects.add(createText("Q-Network")).position.set(0, 5.5, 0);
+
+                    const targetNet = createNetwork(2, 0x60a5fa, 0.8);
+                    targetNet.position.set(0, -3, 0);
+                    activeSceneObjects.add(targetNet);
+                    activeSceneObjects.add(createText("Target Network")).position.set(0, -1, 0);
+                    
+                    activeSceneObjects.add(createArrow(new THREE.Vector3(-10, 0, 0), new THREE.Vector3(-2.5, 3, 0), 0x9ca3af));
+                    activeSceneObjects.add(createText("State")).position.set(-6.5, 2, 0);
+                    activeSceneObjects.add(createArrow(new THREE.Vector3(2.5, 3, 0), new THREE.Vector3(8, 0, 0), 0xfbbf24));
+                    activeSceneObjects.add(createText("Action (via ε-greedy)", 0.4)).position.set(5.5, 2, 0);
+
+                    activeSceneObjects.add(createDashedLine(new THREE.Vector3(0, 2, 0), new THREE.Vector3(0, -2, 0), 0xffffff));
+                    activeSceneObjects.add(createText("Copy Weights", 0.3)).position.set(1.5, 0, 0);
+                    break;
+                }
+                case 'actor_critic': {
+                     const actor = createNetwork(3, 0xef4444);
+                     actor.position.set(0, 3, 0);
+                     activeSceneObjects.add(actor);
+                     activeSceneObjects.add(createText("Actor (Policy)")).position.set(0, 5.5, 0);
+
+                     const critic = createNetwork(3, 0x3b82f6);
+                     critic.position.set(0, -3, 0);
+                     activeSceneObjects.add(critic);
+                     activeSceneObjects.add(createText("Critic (Value)")).position.set(0, -1, 0);
+
+                     activeSceneObjects.add(createArrow(new THREE.Vector3(-10,0,0), new THREE.Vector3(-2.5, 3, 0), 0x9ca3af));
+                     activeSceneObjects.add(createArrow(new THREE.Vector3(-10,0,0), new THREE.Vector3(-2.5, -3, 0), 0x9ca3af));
+                     activeSceneObjects.add(createText("State")).position.set(-6.5, 0.8, 0);
+
+                     activeSceneObjects.add(createArrow(new THREE.Vector3(2.5, 3, 0), new THREE.Vector3(8, 0, 0), 0xfbbf24));
+                     activeSceneObjects.add(createText("Action")).position.set(5.5, 2, 0);
+                     
+                     activeSceneObjects.add(createArrow(new THREE.Vector3(2.5, -3, 0), new THREE.Vector3(5, -3, 0), 0x16a34a));
+                     activeSceneObjects.add(createText("Value")).position.set(4, -2.2, 0);
+                     break;
+                }
+                default: {
+                    const net = createNetwork(4, 0xef4444);
+                    net.position.set(0,0,0);
+                    activeSceneObjects.add(net);
+                    activeSceneObjects.add(createText("Policy/Value Network")).position.set(0, 3, 0);
+
+                    activeSceneObjects.add(createArrow(new THREE.Vector3(-10,0,0), new THREE.Vector3(-4.5, 0, 0), 0x9ca3af));
+                    activeSceneObjects.add(createText("State")).position.set(-7.5, 0.8, 0);
+                    activeSceneObjects.add(createArrow(new THREE.Vector3(4.5,0,0), new THREE.Vector3(8, 0, 0), 0xfbbf24));
+                    activeSceneObjects.add(createText("Action")).position.set(6.5, 0.8, 0);
+                    break;
+                }
+            }
+        }
+
+        function update(delta) {
+            activeSceneObjects.rotation.y += delta * 0.05;
+        }
+
+        camera.position.set(0, 3, 28); 
+        controls.target.set(0,0,0);
+        return { update, cleanup: ()=>{}, setAlgorithm, reset: () => setAlgorithm(currentAlgorithmKey) };
+    }
+
+
+    // --- UI & CORE SYSTEM SETUP (Boilerplate) ---
+
+    function createMenu() {
+        const menuDiv = document.getElementById('menu');
+        const mobileMenuDropdown = document.getElementById('mobile-menu-dropdown');
+        menuDiv.innerHTML = '';
+        mobileMenuDropdown.innerHTML = '';
+        Object.keys(environments).forEach(key => {
+            const envTitle = environments[key].title;
+            const desktopButton = document.createElement('button');
+            desktopButton.id = `btn-${key}`;
+            desktopButton.className = 'menu-button';
+            desktopButton.textContent = envTitle;
+            desktopButton.onclick = () => switchEnvironment(key);
+            menuDiv.appendChild(desktopButton);
+            const mobileButton = document.createElement('button');
+            mobileButton.id = `mobile-btn-${key}`;
+            mobileButton.className = 'mobile-menu-item text-white';
+            mobileButton.textContent = envTitle;
+            mobileButton.onclick = () => { switchEnvironment(key); mobileMenuDropdown.classList.add('hidden'); };
+            mobileMenuDropdown.appendChild(mobileButton);
+        });
+    }
+
+    function setupMobileMenu() {
+        const menuButton = document.getElementById('mobile-menu-button');
+        const dropdown = document.getElementById('mobile-menu-dropdown');
+        menuButton.addEventListener('click', (e) => { e.stopPropagation(); dropdown.classList.toggle('hidden'); });
+        window.addEventListener('click', () => { if (!dropdown.classList.contains('hidden')) dropdown.classList.add('hidden'); });
+    }
+
+    function setupInfoPanel() {
+        document.getElementById('info-panel').addEventListener('click', (e) => {
+            if (e.target.closest('canvas') || e.target.closest('a')) return;
+            e.currentTarget.classList.toggle('expanded');
+        });
+    }
+
+    function setupFullscreen() {
+        const fullscreenButton = document.getElementById('fullscreen-button');
+        const enterIcon = document.getElementById('fullscreen-enter-icon');
+        const exitIcon = document.getElementById('fullscreen-exit-icon');
+        if (!document.fullscreenEnabled) { fullscreenButton.style.display = 'none'; return; }
+        fullscreenButton.addEventListener('click', () => {
+            if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+            else document.exitFullscreen();
+        });
+        const handleFullscreenChange = () => {
+            const isFullscreen = !!document.fullscreenElement;
+            enterIcon.classList.toggle('hidden', isFullscreen);
+            exitIcon.classList.toggle('hidden', !isFullscreen);
+            document.body.classList.toggle('fullscreen-active', isFullscreen);
+            if (!isFullscreen) document.querySelectorAll('.show-on-hover').forEach(el => el.classList.remove('show-on-hover'));
+            setTimeout(onWindowResize, 100);
+        };
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+    }
+
+    function setupSettingsPanel() {
+        const settingsPanel = document.getElementById('settings-panel');
+        const settingsButton = document.getElementById('settings-button');
+        const closeSettingsButton = document.getElementById('close-settings');
+        const graphicsSlider = document.getElementById('graphics-slider');
+        const graphicsQualityValue = document.getElementById('graphics-quality-value');
+        const energySlider = document.getElementById('energy-slider');
+        const energyValue = document.getElementById('energy-value');
+        
+        function toggleSettingsPanel() {
+            if (settingsPanel.classList.contains('open')) settingsPanel.classList.remove('open');
+            else { settingsPanel.classList.remove('hidden'); requestAnimationFrame(() => settingsPanel.classList.add('open')); }
+        }
+        settingsButton.addEventListener('click', toggleSettingsPanel);
+        closeSettingsButton.addEventListener('click', () => settingsPanel.classList.remove('open'));
+        settingsPanel.addEventListener('transitionend', (e) => {
+            if (e.propertyName === 'transform' && !settingsPanel.classList.contains('open')) settingsPanel.classList.add('hidden');
+        });
+
+        energySlider.addEventListener('input', (e) => {
+            simulationSpeed = parseFloat(e.target.value); energyValue.textContent = `${simulationSpeed.toFixed(2)}x`;
+        });
+        
+        graphicsSlider.addEventListener('input', (e) => {
+            const quality = parseFloat(e.target.value); renderer.setPixelRatio(quality);
+            if (quality < 0.8) graphicsQualityValue.textContent = "Low";
+            else if (quality < 1.5) graphicsQualityValue.textContent = "Medium";
+            else graphicsQualityValue.textContent = "High";
+        });
+    }
+
+    function updateMetricsDisplay() {
+        const metricsDisplay = document.getElementById('metrics-display');
+        const metricsContent = document.getElementById('metrics-content');
+        if (currentEnvironment && currentEnvironment.getMetrics) {
+            const metrics = currentEnvironment.getMetrics();
+            let html = '';
+            for (const key in metrics) {
+                html += `<div class="metric-item"><span>${key}</span><span>${metrics[key]}</span></div>`;
+            }
+            metricsContent.innerHTML = html;
+            metricsDisplay.classList.remove('hidden');
+        } else {
+            metricsDisplay.classList.add('hidden');
+        }
+    }
+
+    function onWindowResize() { 
+        camera.aspect = window.innerWidth / window.innerHeight; 
+        camera.updateProjectionMatrix(); 
+        renderer.setSize(window.innerWidth, window.innerHeight); 
+    }
+
+    function animate() { 
+        const delta = clock.getDelta();
+        
+        if(starfield) {
+            starfield.rotation.y += delta * 0.01;
+            starfield.rotation.x += delta * 0.005;
+        }
+
+        controls.update(); 
+        if(currentEnvironment && currentEnvironment.update) currentEnvironment.update(delta); 
+        updateMetricsDisplay();
+        renderer.render(scene, camera); 
+    }
+    
+    init();
+
+</script>
+</body>
+</html>
+

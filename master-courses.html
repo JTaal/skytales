@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en" class="">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Courses - Leiden University</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        .course-card {
+            transition: box-shadow 0.2s ease-in-out;
+        }
+        .course-card-clickable:hover {
+            cursor: pointer;
+        }
+        .course-card-container:hover .course-card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        html.dark .course-card-container:hover .course-card {
+             box-shadow: 0 10px 15px -3px rgba(30, 58, 138, 0.3), 0 4px 6px -2px rgba(30, 58, 138, 0.1);
+        }
+        .toggle-icon {
+            transition: transform 0.3s ease-in-out;
+        }
+        .learning-goals {
+            transition: max-height 0.5s ease-in-out;
+        }
+        .course-title {
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .course-card-container.is-expanded .course-title {
+            -webkit-line-clamp: initial;
+        }
+        #header-container {
+            background: #111827;
+        }
+        .header-overlay {
+            background-color: rgba(0, 0, 0, 0.15);
+            -webkit-backdrop-filter: blur(2px);
+            backdrop-filter: blur(2px);
+        }
+        html.dark .header-overlay {
+             background-color: rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 dark:bg-gray-900 dark:text-gray-200">
+    <!-- Dark Mode Toggle -->
+    <div class="absolute top-4 right-4 z-20">
+        <button id="theme-toggle" type="button" class="text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:focus:ring-gray-700 rounded-lg text-sm p-2.5">
+            <svg id="theme-toggle-dark-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path></svg>
+            <svg id="theme-toggle-light-icon" class="hidden w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 100 2h1z" fill-rule="evenodd" clip-rule="evenodd"></path></svg>
+        </button>
+    </div>
+
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+        
+        <!-- Header Section with 3D Background -->
+        <div id="header-container" class="relative rounded-xl overflow-hidden mb-12 shadow-2xl">
+            <canvas id="bio-viewer-canvas" class="absolute top-0 left-0 w-full h-full z-0"></canvas>
+            <div class="header-overlay relative z-10 p-8 md:p-12">
+                <header class="text-center">
+                    <div class="mb-6">
+                         <img src="https://huisstijl.universiteitleiden.nl/images/elements/Logo-UniversiteitLeiden-white-RGB.png" alt="Leiden University Logo" class="h-20 mx-auto">
+                    </div>
+                    <h1 class="text-4xl sm:text-5xl font-bold text-white">Academic Portfolio</h1>
+                    <p class="mt-2 text-lg text-gray-200">Courses followed at Leiden University</p>
+                </header>
+            </div>
+        </div>
+
+        <!-- Master Courses Section -->
+        <section id="master-courses">
+            <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-8 border-b-2 border-blue-800 dark:border-blue-500 pb-2">Master Courses</h2>
+            <div id="master-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Master courses will be dynamically inserted here -->
+            </div>
+        </section>
+
+        <!-- Bachelor Courses Section -->
+        <section id="bachelor-courses" class="mt-16">
+            <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-8 border-b-2 border-blue-800 dark:border-blue-500 pb-2">Bachelor Courses</h2>
+            <div id="bachelor-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Bachelor courses will be dynamically inserted here -->
+            </div>
+        </section>
+
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // --- DATA ---
+        const courses = [
+            { level: 'Master', code: 'INF 4343MMAV6X', name: 'Image Analysis with Applications in Microscopy', ec: 6 }, 
+            { level: 'Master', code: 'INF 4343MMAV6Y', name: 'Image Analysis with Applications in Microscopy', ec: 6 },
+            { level: 'Master', code: 'INF 4343BIOMDX', name: 'Bio-Modeling', ec: 6 }, 
+            { level: 'Master', code: 'INF 4343BIOMDY', name: 'Bio-Modeling', ec: 6 },
+            { level: 'Master', code: 'INF 4343REINLT', name: 'Reinforcement Learning', ec: 6 }, 
+            { level: 'Master', code: 'INF 4343REINLY', name: 'Reinforcement Learning', ec: 6 },
+            { level: 'Master', code: 'SCIENCE 4343CIMTOX', name: 'Computational Imaging and Tomography', ec: 6 }, 
+            { level: 'Master', code: 'SCIENCE 4343CIMTOY', name: 'Computational Imaging and Tomography', ec: 6 },
+            { level: 'Master', code: 'INF 4343MOADAT', name: 'Multicriteria Optimization and Decision Analysis', ec: 6 }, 
+            { level: 'Master', code: 'INF 4343MOADAY', name: 'Multicriteria Optimization and Decision Analysis', ec: 6 },
+            { level: 'Master', code: 'WSK 4433HDDANT', name: 'High-dimensional data analysis', ec: 6 }, 
+            { level: 'Master', code: 'WSK 4433HDDANY', name: 'High-dimensional data analysis', ec: 6 },
+            { level: 'Master', code: 'INF 4343ADVDMT', name: 'Advances in Data Mining', ec: 6 }, 
+            { level: 'Master', code: 'INF 4343ADVDMY', name: 'Advances in Data Mining', ec: 6 },
+            { level: 'Master', code: 'SCIENCE 4343INTDLT', name: 'Introduction to Deep Learning', ec: 6 }, 
+            { level: 'Master', code: 'SCIENCE 4343INTDLY', name: 'Introduction to Deep Learning', ec: 6 },
+            { level: 'Master', code: 'INF 4343EVAL6T', name: 'Evolutionary Algorithms', ec: 6 }, 
+            { level: 'Master', code: 'INF 4343EVAL6Y', name: 'Evolutionary Algorithms', ec: 6 },
+            { level: 'Master', code: 'SCIENCE 4343BIBIIT', name: 'Biological and Biomedical Informatics', ec: 6 }, 
+            { level: 'Master', code: 'SCIENCE 4343BIBIIY', name: 'Biological and Biomedical Informatics', ec: 6 },
+            { level: 'Bachelor', code: 'SCIENCE 4031ALGDST', name: 'Algorithms and Data Structures - T', ec: 6 },
+            { level: 'Bachelor', code: 'SCIENCE 4031CALC2T', name: 'Calculus 2 - TEN', ec: 6 }, 
+            { level: 'Bachelor', code: 'SCIENCE 4031CALC2Y', name: 'Calculus 2', ec: 6 },
+            { level: 'Bachelor', code: 'INF 4031DABA6T', name: 'Databases 6 EC TEN', ec: 6 }, 
+            { level: 'Bachelor', code: 'INF 4031DABA6Y', name: 'Databases 6 EC', ec: 6 },
+            { level: 'Bachelor', code: 'SCIENCE 4031ALGDSY', name: 'Algorithms and Data Structures', ec: 6 },
+            { level: 'Bachelor', 'code': 'INF 4031LACS2T', name: 'Linear Algebra for Computer Science 2 - T', ec: 6 }, 
+            { level: 'Bachelor', code: 'INF 4031LACS2Y', name: 'Linear Algebra for Computer Science 2', ec: 6 },
+        ];
+
+        // --- DOM ELEMENTS ---
+        const masterGrid = document.getElementById('master-grid');
+        const bachelorGrid = document.getElementById('bachelor-grid');
+        const themeToggleButton = document.getElementById('theme-toggle');
+        const darkIcon = document.getElementById('theme-toggle-dark-icon');
+        const lightIcon = document.getElementById('theme-toggle-light-icon');
+        const htmlEl = document.documentElement;
+
+        // --- DARK MODE LOGIC ---
+        if (localStorage.getItem('color-theme') === 'dark' || (!('color-theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            htmlEl.classList.add('dark');
+            lightIcon.classList.remove('hidden');
+        } else {
+            htmlEl.classList.remove('dark');
+            darkIcon.classList.remove('hidden');
+        }
+
+        themeToggleButton.addEventListener('click', function() {
+            htmlEl.classList.toggle('dark');
+            const isDarkMode = htmlEl.classList.contains('dark');
+            localStorage.setItem('color-theme', isDarkMode ? 'dark' : 'light');
+            darkIcon.classList.toggle('hidden');
+            lightIcon.classList.toggle('hidden');
+        });
+
+        // --- VISUALIZATION MAPPING ---
+        const visualizationMap = {
+            'reinforcement learning': [
+                { title: 'Reinforcement Learning Visualization', url: 'https://jtaal.github.io/visualizations/reinforcement-learning.html' }
+            ],
+            'evolutionary algorithms': [
+                { title: 'Evolutionary Algorithms Visualization', url: 'https://jtaal.github.io/visualizations/evolutionary-algorithms.html' }
+            ],
+            'advances in data mining': [
+                { title: 'Machine Learning Optimizers', url: 'https://jtaal.github.io/visualizations/machine-learning-optimizers.html' },
+                { title: 'Support Vector Machine', url: 'https://jtaal.github.io/visualizations/support-vector-machine.html' }
+            ],
+            'introduction to deep learning': [
+                { title: 'Diffusion Modeling', url: 'https://jtaal.github.io/visualizations/diffusion-modeling.html' },
+                { title: 'Rotary Positional Embedding', url: 'https://jtaal.github.io/visualizations/rotary-positional-embedding.html' }
+            ],
+            'high-dimensional data analysis': [
+                { title: 'Dimensionality Reduction', url: 'https://jtaal.github.io/visualizations/dimensionality-reduction.html' },
+                { title: 'Multivariate Gaussian', url: 'https://jtaal.github.io/visualizations/multivariate-gaussian.html' }
+            ],
+            'computational imaging and tomography': [
+                { title: 'Complex Chirp Visualization', url: 'https://jtaal.github.io/visualizations/complex-chirp.html' },
+                { title: '4D Complex Chirp Project', url: 'https://jtaal.github.io/2025/08/27/complex-chirp-explained.html' }
+            ],
+            'calculus 2': [
+                { title: 'Mandlebrot Julia Analysis', url: 'https://jtaal.github.io/visualizations/mandlebrot-julia-analysis.html' },
+                { title: 'Riemann Zeta Visualization', url: 'https://jtaal.github.io/visualizations/riemann-zeta.html' }
+            ],
+            'linear algebra for computer science 2': [
+                { title: 'Quaternions Visualization', url: 'https://jtaal.github.io/visualizations/quaternions.html' },
+                { title: '3D Basis Vectors', url: 'https://jtaal.github.io/visualizations/3D-basis-vectors.html' }
+            ],
+            'image analysis with applications in microscopy': [
+                 { title: 'Chirp Up And Down', url: 'https://jtaal.github.io/visualizations/chirp-up-and-down.html' },
+                 { title: 'Pipe Harmonics', url: 'https://jtaal.github.io/visualizations/pipe-harmonics.html' }
+            ],
+             'bio-modeling': [
+                 { title: 'Entropy Visualization', url: 'https://jtaal.github.io/visualizations/entropy.html' },
+                 { title: 'Chaos Relativity', url: 'https://jtaal.github.io/visualizations/chaos-relativity.html' }
+            ],
+            'biological and biomedical informatics': [
+                 { title: 'Blackhole Entropy', url: 'https://jtaal.github.io/visualizations/blackhole-entropy.html' },
+                 { title: 'Quantum Visualization', url: 'https://jtaal.github.io/visualizations/quantum.html' }
+            ],
+            'algorithms and data structures': [
+                 { title: 'Universe Visualization', url: 'https://jtaal.github.io/visualizations/universe.html' }
+            ],
+            'databases 6 ec': [
+                 { title: 'Complex Waves Combined Low', url: 'https://jtaal.github.io/visualizations/complex-waves-combined-low.html' },
+                 { title: 'Complex Waves Combined High', url: 'https://jtaal.github.io/visualizations/complex-waves-combined-high.html' },
+            ]
+        };
+
+        // --- COURSE RENDERING LOGIC ---
+        const createCourseCard = (course) => {
+            const container = document.createElement('div');
+            container.className = 'course-card-container';
+            
+            const card = document.createElement('div');
+            card.className = 'bg-white dark:bg-gray-800 rounded-lg shadow-md course-card overflow-hidden';
+            
+            const courseKey = course.name.toLowerCase();
+            const visualizations = visualizationMap[courseKey];
+            let learningGoalsHTML = '';
+
+            if (visualizations && visualizations.length > 0) {
+                visualizations.forEach(vis => {
+                    learningGoalsHTML += `<li><a href="${vis.url}" class="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer">${vis.title}</a></li>`;
+                });
+            } else {
+                learningGoalsHTML = `
+                    <li><a href="#" class="text-blue-600 dark:text-blue-400 hover:underline">Placeholder: Key concepts</a></li>
+                    <li><a href="#" class="text-blue-600 dark:text-blue-400 hover:underline">Placeholder: Project link</a></li>
+                `;
+            }
+
+            card.innerHTML = `
+                <div class="course-card-clickable p-6">
+                    <div class="flex items-start justify-between">
+                        <div class="flex items-start mr-4 flex-1">
+                            <div class="flex-shrink-0">
+                                 <div class="w-10 h-10 rounded-full bg-blue-100 dark:bg-gray-700 flex items-center justify-center text-blue-800 dark:text-blue-400 font-bold text-sm">
+                                    ${course.level === 'Master' ? 'MSc' : 'BSc'}
+                                </div>
+                            </div>
+                            <div class="ml-4 min-w-0">
+                                <h3 class="course-title text-lg font-semibold text-gray-900 dark:text-white">${course.name}</h3>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">${course.code}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3 ml-4">
+                            <span class="flex-shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                                ${course.ec} EC
+                            </span>
+                            <div class="flex-shrink-0">
+                                <svg class="toggle-icon w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="learning-goals overflow-hidden max-h-0">
+                    <div class="px-6 pb-6 pt-0 ml-14 border-t border-gray-200 dark:border-gray-700 pt-4">
+                        <h4 class="font-semibold text-gray-800 dark:text-gray-200 mb-2">Learning Goals & Projects:</h4>
+                        <ul class="list-disc list-inside text-gray-600 dark:text-gray-400 space-y-1 text-sm">
+                           ${learningGoalsHTML}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(card);
+            const clickableArea = card.querySelector('.course-card-clickable');
+            const learningGoals = card.querySelector('.learning-goals');
+            const icon = card.querySelector('.toggle-icon');
+            clickableArea.addEventListener('click', () => {
+                container.classList.toggle('is-expanded');
+                if (learningGoals.style.maxHeight) {
+                    learningGoals.style.maxHeight = null;
+                    icon.classList.remove('rotate-45');
+                } else {
+                    learningGoals.style.maxHeight = learningGoals.scrollHeight + "px";
+                    icon.classList.add('rotate-45');
+                }
+            });
+            return container;
+        };
+
+        const uniqueCourses = new Map();
+        courses.forEach(course => {
+            const normalizedName = course.name
+                .replace(/\s*-\s*[TXY]$|\s*TEN$|\s*I-\s*T$|\s*6\s*EC\s*TEN$|\s*-\s*T$/i, '')
+                .trim();
+            const key = normalizedName.toLowerCase();
+            if (!uniqueCourses.has(key) || course.name.length > uniqueCourses.get(key).name.length) {
+                const displayCourse = { ...course, name: normalizedName };
+                uniqueCourses.set(key, displayCourse);
+            }
+        });
+
+        uniqueCourses.forEach(course => {
+            const card = createCourseCard(course);
+            if (course.level === 'Master') {
+                masterGrid.appendChild(card);
+            } else {
+                bachelorGrid.appendChild(card);
+            }
+        });
+
+        // --- 3D Background Logic ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('header-container');
+            if (!container) return;
+
+            const canvas = document.getElementById('bio-viewer-canvas');
+            if (!canvas) return;
+            
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 8; 
+
+            const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            const animatedObjects = [];
+            const spawnZ = 9; 
+            const spawnRadius = 2;
+            const baseScale = 0.5;
+
+            // --- Object Creation Functions ---
+            const createProteinGroup = () => {
+                const group = new THREE.Group();
+                const material = new THREE.MeshStandardMaterial({color: 0x9d80e2, roughness: 0.6});
+                const geom = new THREE.SphereGeometry(0.15, 8, 8);
+                let currentPos = new THREE.Vector3();
+                for(let i = 0; i < 30; i++) {
+                    const mesh = new THREE.Mesh(geom, material);
+                    mesh.position.copy(currentPos);
+                    group.add(mesh);
+                    currentPos.add(new THREE.Vector3( (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5 ));
+                }
+                return group;
+            };
+
+            const createAntibodyGroup = () => {
+                 const group = new THREE.Group();
+                 const material = new THREE.MeshStandardMaterial({color: 0x75e2d3, roughness: 0.4});
+                 const sphereGeom = new THREE.SphereGeometry(0.12, 8, 8);
+                 for(let i=0; i<8; i++) {
+                     const sphere = new THREE.Mesh(sphereGeom, material);
+                     sphere.position.y = -i * 0.15;
+                     group.add(sphere);
+                 }
+                 for(let i=1; i<6; i++) {
+                     const sphere1 = new THREE.Mesh(sphereGeom, material);
+                     const sphere2 = new THREE.Mesh(sphereGeom, material);
+                     sphere1.position.set(-i * 0.1, i * 0.1, 0);
+                     sphere2.position.set(i * 0.1, i * 0.1, 0);
+                     group.add(sphere1, sphere2);
+                 }
+                 return group;
+            };
+
+            const createVirusGroup = () => {
+                const group = new THREE.Group();
+                const bodyMat = new THREE.MeshStandardMaterial({color: 0xff8c61, roughness: 0.7});
+                const spikeMat = new THREE.MeshStandardMaterial({color: 0xff5733, roughness: 0.5});
+                const bodyGeom = new THREE.IcosahedronGeometry(0.8, 0);
+                const body = new THREE.Mesh(bodyGeom, bodyMat);
+                group.add(body);
+                const spikeGeom = new THREE.SphereGeometry(0.1, 6, 6);
+                const positions = bodyGeom.attributes.position;
+                const vertex = new THREE.Vector3();
+                for (let i = 0; i < positions.count; i++){
+                    vertex.fromBufferAttribute(positions, i);
+                    const spike = new THREE.Mesh(spikeGeom, spikeMat);
+                    spike.position.copy(vertex);
+                    group.add(spike);
+                }
+                return group;
+            };
+
+            // --- BioObject Base Class ---
+            class BioObject {
+                constructor(scene, createGroupFn, scale, boundingRadius, speedRange) {
+                    this.scene = scene;
+                    this.isOccluded = false;
+                    this.group = createGroupFn();
+                    this.group.scale.set(scale, scale, scale);
+                    this.boundingSphere = new THREE.Sphere(new THREE.Vector3(), boundingRadius * scale);
+                    
+                    this.velocity = new THREE.Vector3();
+                    this.speedRange = speedRange;
+                    this.isAttached = false; 
+
+                    this.scene.add(this.group);
+                    this.reset();
+                }
+
+                reset() {
+                    this.isOccluded = false;
+                    const angle = Math.random() * Math.PI * 2;
+                    const radius = spawnRadius * Math.sqrt(Math.random());
+                    this.group.position.set( Math.cos(angle) * radius, Math.sin(angle) * radius, spawnZ );
+                    this.group.rotation.set( Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2 );
+                    
+                    const speed = this.speedRange[0] + Math.random() * (this.speedRange[1] - this.speedRange[0]);
+                    const trajectory = new THREE.Vector3(
+                        (Math.random() - 0.5) * 2, 
+                        (Math.random() - 0.5) * 2, 
+                        -(0.5 + Math.random() * 0.5)
+                    ).normalize();
+                    this.velocity.copy(trajectory).multiplyScalar(speed);
+                }
+
+                update(time) {
+                    if (this.isOccluded) {
+                        this.reset();
+                        return;
+                    }
+                    
+                    this.group.position.add(this.velocity);
+                    this.group.rotation.y += this.velocity.z;
+
+                    this.boundingSphere.center.copy(this.group.position);
+                }
+            }
+            
+            class Helix extends BioObject {
+                constructor(scene) {
+                    const length = 20 + Math.floor(Math.random() * 20);
+                    const isRNA = Math.random() > 0.5;
+                    const segments = [];
+
+                    const createGroupFn = () => {
+                        const group = new THREE.Group();
+                        const baseColors = {
+                            'A': new THREE.MeshStandardMaterial({ color: 0xff6363, roughness: 0.5 }),
+                            'T': new THREE.MeshStandardMaterial({ color: 0x63aeff, roughness: 0.5 }),
+                            'U': new THREE.MeshStandardMaterial({ color: 0xbf63ff, roughness: 0.5 }),
+                            'G': new THREE.MeshStandardMaterial({ color: 0x63ff84, roughness: 0.5 }),
+                            'C': new THREE.MeshStandardMaterial({ color: 0xf6ff63, roughness: 0.5 }),
+                        };
+                        const rungMaterial = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
+                        const baseGeometry = new THREE.SphereGeometry(0.1, 8, 8);
+                        const rungGeom = new THREE.CylinderGeometry(0.02, 0.02, 1, 6);
+                        for (let i = 0; i < length; i++) {
+                            const segmentGroup = new THREE.Group();
+                            const angle = (i / 10) * Math.PI * 2;
+                            const purines = ['A', 'G'];
+                            const base1Type = purines[Math.floor(Math.random() * purines.length)];
+                            let base2Type = (base1Type === 'A') ? (isRNA ? 'U' : 'T') : 'C';
+                            const base1 = new THREE.Mesh(baseGeometry, baseColors[base1Type]);
+                            const base2 = new THREE.Mesh(baseGeometry, baseColors[base2Type]);
+                            base1.position.x = 0.5;
+                            base2.position.x = -0.5;
+                            const rung = new THREE.Mesh(rungGeom, rungMaterial);
+                            rung.rotation.z = Math.PI / 2;
+                            segmentGroup.add(base1, base2, rung);
+                            segmentGroup.rotation.y = angle;
+                            segmentGroup.position.y = (i - length / 2) * 0.34;
+                            segments.push(segmentGroup);
+                            group.add(segmentGroup);
+                        }
+                        return group;
+                    };
+
+                    super(scene, createGroupFn, baseScale, length * 0.34 * baseScale / 2, [0.008, 0.015]);
+
+                    this.length = length;
+                    this.isRNA = isRNA;
+                    this.segments = segments;
+                    this.wavePhase = Math.random() * Math.PI * 2;
+                    this.waveAmplitude = 0.3 + Math.random() * 0.7;
+                    this.waveFrequency = 0.1 + Math.random() * 0.1;
+                }
+                
+                reset() {
+                    super.reset();
+                    this.wavePhase = Math.random() * Math.PI * 2;
+                }
+
+                update(time) {
+                    if (this.isOccluded) {
+                        this.reset();
+                        return;
+                    }
+                    this.group.rotation.y += this.velocity.z * 0.5;
+                    this.group.rotation.x += this.velocity.z * 0.25;
+                    this.segments.forEach((segment, i) => {
+                        segment.position.x = Math.sin(time * 0.5 + i * this.waveFrequency + this.wavePhase) * this.waveAmplitude;
+                    });
+                    super.update(time);
+                }
+            }
+            
+            class Protein extends BioObject {
+                constructor(scene) {
+                    super(scene, createProteinGroup, baseScale, 1.5, [0.005, 0.01]);
+                    this.isBound = false;
+                }
+                 reset() {
+                    super.reset();
+                    this.isBound = false;
+                     animatedObjects.forEach(obj => {
+                        if(obj instanceof Antibody && obj.attachedTo === this) obj.reset();
+                    });
+                }
+            }
+
+            class Antibody extends BioObject {
+                 constructor(scene) {
+                    super(scene, createAntibodyGroup, baseScale, 1.2, [0.006, 0.011]);
+                    this.attachedTo = null;
+                    this.attachmentOffset = null;
+                 }
+                 reset() {
+                    super.reset();
+                    if(this.attachedTo) this.attachedTo.isBound = false;
+                    this.isAttached = false;
+                    this.attachedTo = null;
+                    this.attachmentOffset = null;
+                 }
+                update(time) {
+                    if (this.isAttached && this.attachedTo) {
+                        if (this.isOccluded) {
+                            this.reset();
+                            return;
+                        }
+                        this.group.position.copy(this.attachedTo.group.position).add(this.attachmentOffset);
+                        this.group.rotation.copy(this.attachedTo.group.rotation);
+                        this.boundingSphere.center.copy(this.group.position);
+                    } else {
+                       super.update(time);
+                    }
+                }
+            }
+
+            class Virus extends BioObject {
+                 constructor(scene) {
+                    super(scene, createVirusGroup, baseScale * 0.5, 1.0, [0.005, 0.008]);
+                    this.isBound = false;
+                 }
+                  reset() {
+                    super.reset();
+                    this.isBound = false;
+                     animatedObjects.forEach(obj => {
+                        if(obj instanceof Antibody && obj.attachedTo === this) obj.reset();
+                    });
+                }
+            }
+
+            const allProteins = [];
+            const allAntibodies = [];
+            const allViruses = [];
+
+            for (let i = 0; i < 15; i++) animatedObjects.push(new Helix(scene));
+            for (let i = 0; i < 15; i++) {
+                const p = new Protein(scene);
+                animatedObjects.push(p);
+                allProteins.push(p);
+            }
+            for (let i = 0; i < 10; i++) {
+                const a = new Antibody(scene);
+                animatedObjects.push(a);
+                allAntibodies.push(a);
+            }
+            for (let i = 0; i < 4; i++) {
+                const v = new Virus(scene);
+                animatedObjects.push(v);
+                allViruses.push(v);
+            }
+            
+            const clock = new THREE.Clock();
+            let frameCount = 0;
+            const animate = () => {
+                requestAnimationFrame(animate);
+                const elapsedTime = clock.getElapsedTime();
+                frameCount++;
+                
+                if (frameCount % 6 === 0) {
+                    for (let i = 0; i < animatedObjects.length; i++) {
+                        const obj1 = animatedObjects[i];
+                        if (!obj1 || !obj1.boundingSphere) continue;
+                        obj1.isOccluded = false; 
+
+                        if (obj1.isAttached) continue; 
+
+                        const dist1 = camera.position.distanceTo(obj1.boundingSphere.center);
+
+                        for (let j = 0; j < animatedObjects.length; j++) {
+                            if (i === j) continue;
+                            const obj2 = animatedObjects[j];
+                            if (!obj2 || !obj2.boundingSphere) continue;
+
+                            const dist2 = camera.position.distanceTo(obj2.boundingSphere.center);
+                            if (dist2 >= dist1) continue; 
+
+                            const vecTo1 = obj1.boundingSphere.center.clone().sub(camera.position);
+                            const vecTo2 = obj2.boundingSphere.center.clone().sub(camera.position);
+
+                            const angleBetween = vecTo1.angleTo(vecTo2);
+                            const angularRadius2 = Math.atan(obj2.boundingSphere.radius / dist2);
+
+                            if (angularRadius2 > angleBetween) {
+                                const angularRadius1 = Math.atan(obj1.boundingSphere.radius / dist1);
+                                if (angularRadius2 > angleBetween + angularRadius1) {
+                                    obj1.isOccluded = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                allAntibodies.forEach(antibody => {
+                    if(antibody.isAttached) return;
+                    
+                    const targets = [...allViruses, ...allProteins];
+
+                    for(const target of targets) {
+                         if(target.isBound) continue;
+                        const distance = antibody.boundingSphere.center.distanceTo(target.boundingSphere.center);
+                        if(distance < antibody.boundingSphere.radius + target.boundingSphere.radius) {
+                            antibody.isAttached = true;
+                            antibody.attachedTo = target;
+                            target.isBound = true;
+                            const offset = new THREE.Vector3().subVectors(antibody.group.position, target.group.position);
+                            antibody.attachmentOffset = offset;
+                            return; 
+                        }
+                    }
+                });
+
+                for(let i = 0; i < animatedObjects.length; i++) {
+                    for(let j = i + 1; j < animatedObjects.length; j++) {
+                        const obj1 = animatedObjects[i];
+                        const obj2 = animatedObjects[j];
+                        if (!obj1 || !obj2) continue;
+
+                        if(obj1.boundingSphere.intersectsSphere(obj2.boundingSphere)) {
+                            const normal = new THREE.Vector3().subVectors(
+                                obj1.boundingSphere.center, 
+                                obj2.boundingSphere.center
+                            ).normalize();
+                            const pushStrength = 0.002;
+                            if (!obj1.isAttached) obj1.group.position.add(normal.clone().multiplyScalar(pushStrength));
+                            if (!obj2.isAttached) obj2.group.position.add(normal.clone().multiplyScalar(-pushStrength));
+                        }
+                    }
+                }
+                
+                animatedObjects.forEach(item => item.update(elapsedTime));
+                renderer.render(scene, camera);
+            };
+            animate();
+
+            const onResize = () => {
+                if(container.clientWidth > 0 && container.clientHeight > 0) {
+                    camera.aspect = container.clientWidth / container.clientHeight;
+                    camera.updateProjectionMatrix();
+                    renderer.setSize(container.clientWidth, container.clientHeight);
+                }
+            };
+            window.addEventListener('resize', onResize, false);
+            onResize(); 
+        });
+
+    </script>
+</body>
+</html>
+

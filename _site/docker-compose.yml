@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  jekyll:
+    image: jekyll/builder
+    command: jekyll serve --trace
+    build: .
+    ports:
+      - "4341:4341"
+    volumes:
+      - .:/srv/jekyll
+

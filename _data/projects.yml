@@ -1,0 +1,145 @@
+- title: 3D Basis Vectors
+  author: Jasper Taal
+  thumbnail: /assets/images/3D-basis-vectors.png
+  visualization_url: /visualizations/3D-basis-vectors.html
+
+- title: Blackhole Entropy
+  author: Jasper Taal
+  thumbnail: /assets/images/blackhole-entropy.png
+  visualization_url: /visualizations/blackhole-entropy.html
+
+- title: Chaos Relativity
+  author: Jasper Taal
+  thumbnail: /assets/images/chaos-relativity.png
+  visualization_url: /visualizations/chaos-relativity.html
+
+- title: Chirp
+  author: Jasper Taal
+  thumbnail: /assets/images/chirp.png
+  visualization_url: /visualizations/chirp.html
+
+- title: Clustering
+  author: Jasper Taal
+  thumbnail: /assets/images/clustering.png
+  visualization_url: /visualizations/clustering.html
+
+- title: Complex Numbers
+  author: Jasper Taal
+  thumbnail: /assets/images/complex-numbers.png
+  visualization_url: /visualizations/complex-numbers.html
+
+- title: Diffusion Modeling
+  author: Jasper Taal
+  thumbnail: /assets/images/diffusion-modeling.png
+  visualization_url: /visualizations/diffusion-modeling.html
+
+- title: Dimensionality Reduction
+  author: Jasper Taal
+  thumbnail: /assets/images/dimensionality-reduction.png
+  visualization_url: /visualizations/dimensionality-reduction.html
+
+- title: Dna Helix
+  author: Jasper Taal
+  thumbnail: /assets/images/DNA-helix.png
+  visualization_url: /visualizations/DNA-helix.html
+
+- title: Entropy
+  author: Jasper Taal
+  thumbnail: /assets/images/entropy.png
+  visualization_url: /visualizations/entropy.html
+
+- title: Evolutionary Algorithms
+  author: Jasper Taal
+  thumbnail: /assets/images/evolutionary-algorithms.png
+  visualization_url: /visualizations/evolutionary-algorithms.html
+
+- title: Linear Regression
+  author: Jasper Taal
+  thumbnail: /assets/images/linear-regression.png
+  visualization_url: /visualizations/linear-regression.html
+
+- title: Machine Learning Optimizers
+  author: Jasper Taal
+  thumbnail: /assets/images/machine-learning-optimizers.png
+  visualization_url: /visualizations/machine-learning-optimizers.html
+
+- title: Mandlebrot Julia Analysis
+  author: Jasper Taal
+  thumbnail: /assets/images/mandlebrot-julia-analysis.png
+  visualization_url: /visualizations/mandlebrot-julia-analysis.html
+
+- title: Matrix Eigenvectors
+  author: Jasper Taal
+  thumbnail: /assets/images/matrix-eigenvectors.png
+  visualization_url: /visualizations/matrix-eigenvectors.html
+
+- title: Minkowski Spacetime
+  author: Jasper Taal
+  thumbnail: /assets/images/minkowski-spacetime.png
+  visualization_url: /visualizations/minkowski-spacetime.html
+
+- title: Multivariate Gaussian
+  author: Jasper Taal
+  thumbnail: /assets/images/multivariate-gaussian.png
+  visualization_url: /visualizations/multivariate-gaussian.html
+
+- title: Neural Networks
+  author: Jasper Taal
+  thumbnail: /assets/images/neural-networks.png
+  visualization_url: /visualizations/neural-networks.html
+
+- title: Pareto Front
+  author: Jasper Taal
+  thumbnail: /assets/images/pareto-front.png
+  visualization_url: /visualizations/pareto-front.html
+
+- title: Pipe Harmonics
+  author: Jasper Taal
+  thumbnail: /assets/images/pipe-harmonics.png
+  visualization_url: /visualizations/pipe-harmonics.html
+
+- title: Quantum
+  author: Jasper Taal
+  thumbnail: /assets/images/quantum.png
+  visualization_url: /visualizations/quantum.html
+
+- title: Quaternions
+  author: Jasper Taal
+  thumbnail: /assets/images/quaternions.png
+  visualization_url: /visualizations/quaternions.html
+
+- title: Regularisation
+  author: Jasper Taal
+  thumbnail: /assets/images/regularisation.png
+  visualization_url: /visualizations/regularisation.html
+
+- title: Reinforcement Learning
+  author: Jasper Taal
+  thumbnail: /assets/images/reinforcement-learning.png
+  visualization_url: /visualizations/reinforcement-learning.html
+
+- title: Riemann Zeta
+  author: Jasper Taal
+  thumbnail: /assets/images/riemann-zeta.png
+  visualization_url: /visualizations/riemann-zeta.html
+
+- title: Rotary Positional Embedding
+  author: Jasper Taal
+  thumbnail: /assets/images/rotary-positional-embedding.png
+  visualization_url: /visualizations/rotary-positional-embedding.html
+
+- title: Support Vector Machine
+  author: Jasper Taal
+  thumbnail: /assets/images/support-vector-machine.png
+  visualization_url: /visualizations/support-vector-machine.html
+
+- title: Tailor Series
+  author: Jasper Taal
+  thumbnail: /assets/images/tailor-series.png
+  visualization_url: /visualizations/tailor-series.html
+
+- title: Tomography
+  author: Jasper Taal
+  thumbnail: /assets/images/tomography.png
+  visualization_url: /visualizations/tomography.html
+

@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Machine Learning Optimisers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" xintegrity="sha384-n8MVd4RsNIU0KOVEMMZMZNkJHNEUIM+yBIAnFCeFnEEiAdma8Mvl/ttJBYcvfGLA" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" xintegrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        :root {
+            /* Default Theme: Cyber Purple */
+            --theme-bg-color: #000000;
+            --theme-title-color: rgba(255, 255, 255, 0.9);
+            --theme-title-shadow: rgba(196, 138, 245, 0.4);
+
+            --lil-gui-bg-color: #1a162e;
+            --lil-gui-text-color: #dcd0ff;
+            --lil-gui-title-background-color: #2c254a;
+            --lil-gui-title-text-color: #f0eaff;
+            --lil-gui-widget-color: #4a407c;
+            --lil-gui-hover-color: #594d94;
+            --lil-gui-focus-color: #8e44ad;
+            --lil-gui-border-color: rgba(155, 89, 182, 0.2);
+            --lil-gui-separator-color: #2c254a;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            background-color: var(--theme-bg-color);
+            color: #ffffff;
+        }
+        #render-container, #label-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        #render-container { cursor: pointer; }
+        #label-container { z-index: 2; pointer-events: none; }
+        .optimizer-label {
+            color: white;
+            background: rgba(0,0,0,0.6);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            text-shadow: 0 0 2px black;
+        }
+        #title {
+            position: absolute;
+            top: 2rem;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: var(--theme-title-color);
+            text-shadow: 0 0 15px var(--theme-title-shadow);
+            white-space: nowrap;
+        }
+        #winner-popup {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 1.5rem 2rem;
+            border-radius: 15px;
+            font-size: 2rem;
+            font-weight: bold;
+            display: none;
+            text-align: center;
+            white-space: nowrap;
+        }
+        #winner-close-btn {
+            position: absolute;
+            top: 8px;
+            right: 12px;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            color: #aaa;
+            transition: color 0.2s;
+        }
+        #winner-close-btn:hover {
+            color: #fff;
+        }
+        .lil-gui.root { z-index: 10 !important; }
+
+        @media (max-width: 768px) {
+            #title { font-size: 1.5rem; top: 1rem; }
+            .lil-gui.root { bottom: 0; top: auto; left: 0; right: auto; width: 100%; max-height: 45vh; overflow-y: auto; border-radius: 10px 10px 0 0; }
+        }
+    </style>
+</head>
+<body>
+    <h1 id="title">Machine Learning Optimisers</h1>
+    <div id="render-container"></div>
+    <div id="label-container"></div>
+    <div id="winner-popup">
+        <div id="winner-text"></div>
+        <div id="winner-close-btn">&times;</div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'https://cdn.skypack.dev/three@0.128.0';
+        import { OrbitControls } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/controls/OrbitControls.js';
+        import { GUI } from 'https://cdn.jsdelivr.net/npm/lil-gui@0.19/dist/lil-gui.esm.js';
+        import { CSS2DRenderer, CSS2DObject } from 'https://cdn.skypack.dev/three@0.128.0/examples/jsm/renderers/CSS2DRenderer.js';
+
+        let scene, camera, renderer, labelRenderer, controls, raycaster, mouse;
+        let surfaceMesh;
+        let cameraOffset = new THREE.Vector3();
+        let raceActive = false;
+        
+        const container = document.getElementById('render-container');
+        const winnerPopup = document.getElementById('winner-popup');
+        const winnerText = document.getElementById('winner-text');
+        const winnerCloseBtn = document.getElementById('winner-close-btn');
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+        camera.position.set(20, 20, 20);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        container.appendChild(renderer.domElement);
+        
+        labelRenderer = new CSS2DRenderer();
+        labelRenderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('label-container').appendChild(labelRenderer.domElement);
+
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        raycaster = new THREE.Raycaster();
+        mouse = new THREE.Vector2();
+
+        const colorSchemes = {
+            '🎨 Custom Theme': {},
+            '🟣 Cyber Purple': { wireframe: 0x9b59b6, css: { '--lil-gui-bg-color': '#1a162e', '--lil-gui-text-color': '#dcd0ff', '--lil-gui-title-background-color': '#2c254a', '--lil-gui-title-text-color': '#f0eaff', '--lil-gui-widget-color': '#4a407c', '--lil-gui-hover-color': '#594d94', '--lil-gui-focus-color': '#8e44ad', '--lil-gui-border-color': 'rgba(155, 89, 182, 0.2)', '--theme-title-shadow': 'rgba(196, 138, 245, 0.4)' } },
+            '🔵 Ocean Blue': { wireframe: 0x3498db, css: { '--lil-gui-bg-color': '#1a2a3a', '--lil-gui-text-color': '#d0e8ff', '--lil-gui-title-background-color': '#25374a', '--lil-gui-title-text-color': '#eaf5ff', '--lil-gui-widget-color': '#3f6b9c', '--lil-gui-hover-color': '#4a7db8', '--lil-gui-focus-color': '#2980b9', '--lil-gui-border-color': 'rgba(89, 155, 182, 0.2)', '--theme-title-shadow': 'rgba(138, 201, 245, 0.4)' } },
+            '🟢 Forest Green': { wireframe: 0x27ae60, css: { '--lil-gui-bg-color': '#1a2e2a', '--lil-gui-text-color': '#d0ffeb', '--lil-gui-title-background-color': '#254a37', '--lil-gui-title-text-color': '#eafff5', '--lil-gui-widget-color': '#3f9c6b', '--lil-gui-hover-color': '#4ab87d', '--lil-gui-focus-color': '#2ecc71', '--lil-gui-border-color': 'rgba(89, 182, 119, 0.2)', '--theme-title-shadow': 'rgba(138, 245, 173, 0.4)' } },
+            '🟠 Solar Flare': { wireframe: 0xf1c40f, css: { '--lil-gui-bg-color': '#2e2216', '--lil-gui-text-color': '#ffe8d0', '--lil-gui-title-background-color': '#4a3725', '--lil-gui-title-text-color': '#fff5ea', '--lil-gui-widget-color': '#9c6b3f', '--lil-gui-hover-color': '#b87d4a', '--lil-gui-focus-color': '#e67e22', '--lil-gui-border-color': 'rgba(182, 119, 89, 0.2)', '--theme-title-shadow': 'rgba(245, 173, 138, 0.4)' } },
+            '⚪ Monochrome Matrix': { wireframe: 0xffffff, css: { '--lil-gui-bg-color': '#1c1c1c', '--lil-gui-text-color': '#e0e0e0', '--lil-gui-title-background-color': '#333333', '--lil-gui-title-text-color': '#ffffff', '--lil-gui-widget-color': '#555555', '--lil-gui-hover-color': '#6b6b6b', '--lil-gui-focus-color': '#00ff7f', '--lil-gui-border-color': 'rgba(136, 136, 136, 0.2)', '--theme-title-shadow': 'rgba(221, 221, 221, 0.4)' } },
+            '🔴 Ruby Red': { wireframe: 0xc0392b, css: { '--lil-gui-bg-color': '#2e1616', '--lil-gui-text-color': '#ffd0d0', '--lil-gui-title-background-color': '#4a2525', '--lil-gui-title-text-color': '#ffeaea', '--lil-gui-widget-color': '#9c3f3f', '--lil-gui-hover-color': '#b84a4a', '--lil-gui-focus-color': '#e74c3c', '--lil-gui-border-color': 'rgba(182, 89, 89, 0.2)', '--theme-title-shadow': 'rgba(245, 138, 138, 0.4)' } },
+        };
+
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.8);
+        scene.add(hemisphereLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5); 
+        directionalLight.position.set(50, 100, 75); 
+        scene.add(directionalLight);
+        
+        const landscapes = {
+            '🟢 Simple Valley': { formula: 'f(x,z)=a(x^2+z^2)', params: { a: { value: 0.01, min: 0.001, max: 0.5, step: 0.001 } }, func: (x, z, p) => p.a.value * (x*x + z*z), gradient: (x, z, p) => new THREE.Vector2(2*p.a.value*x, 2*p.a.value*z) },
+            '🟢 Booth': { formula: 'f(x,z)=(x+2z-a)^2+(2x+z-b)^2', params: { a: { value: 7, min: 0, max: 10, step: 0.1 }, b: { value: 5, min: 0, max: 10, step: 0.1 } }, func: (x, z, p) => (x + 2*z - p.a.value)**2 + (2*x + z - p.b.value)**2, gradient: (x, z, p) => new THREE.Vector2(10*x + 8*z - (2*p.a.value + 4*p.b.value), 8*x + 10*z - (4*p.a.value + 2*p.b.value)) },
+            '🟢 Matyas': { formula: 'f(x,z)=a(x^2+z^2) - b*xz', params: { a: { value: 0.26, min: 0, max: 1, step: 0.01 }, b: { value: 0.48, min: 0, max: 1, step: 0.01 } }, func: (x, z, p) => p.a.value * (x**2 + z**2) - p.b.value * x * z, gradient: (x, z, p) => new THREE.Vector2(2*p.a.value*x - p.b.value*z, 2*p.a.value*z - p.b.value*x) },
+            '🟡 Multimodal': { formula: 'f(x,z)=\\sin(ax)\\cos(bz)+c(x^2+z^2)', params: { a: { value: 1, min: 0.1, max: 5, step: 0.1 }, b: { value: 1, min: 0.1, max: 5, step: 0.1 }, c: { value: 0.01, min: 0, max: 0.1, step: 0.001 } }, func: (x, z, p) => Math.sin(p.a.value*x) * Math.cos(p.b.value*z) + p.c.value * (x*x + z*z), gradient: (x, z, p) => new THREE.Vector2(p.a.value*Math.cos(p.a.value*x)*Math.cos(p.b.value*z) + 2*p.c.value*x, -p.b.value*Math.sin(p.a.value*x)*Math.sin(p.b.value*z) + 2*p.c.value*z) },
+            '🔴 Rosenbrock': { formula: 'f(x,z)=(a-x)^2+b(z-x^2)^2', params: { a: { value: 1, min: -2, max: 2, step: 0.1 }, b: { value: 100, min: 10, max: 500, step: 10 } }, func: (x, z, p) => (p.a.value - x)**2 + p.b.value * (z - x**2)**2, gradient: (x, z, p) => new THREE.Vector2(-2*(p.a.value - x) - 4*p.b.value*x*(z - x**2), 2*p.b.value*(z - x**2)) },
+            '🔴 Rastrigin': { formula: 'f(x,z)=A*n+\\sum(x_i^2-A\\cos(2\\pi x_i))', params: { A: { value: 10, min: 1, max: 20, step: 1 } }, func: (x, z, p) => (p.A.value*2) + (x*x - p.A.value * Math.cos(2 * Math.PI * x)) + (z*z - p.A.value * Math.cos(2 * Math.PI * z)), gradient: (x, z, p) => new THREE.Vector2(2*x + 2*p.A.value*Math.PI*Math.sin(2*Math.PI*x), 2*z + 2*p.A.value*Math.PI*Math.sin(2*Math.PI*z)) },
+            '🔴 Ackley': { formula: 'f(x,z)=-a e^{-b\\sqrt{..}}-e^{c(\\cos(..))}+a+e', params: { a: { value: 20, min: 5, max: 30 }, b: { value: 0.2, min: 0.05, max: 0.5 }, c: { value: 0.5, min: 0.1, max: 1 } }, func: (x, z, p) => -p.a.value * Math.exp(-p.b.value * Math.sqrt(0.5*(x**2+z**2))) - Math.exp(p.c.value*(Math.cos(2*Math.PI*x)+Math.cos(2*Math.PI*z))) + p.a.value + Math.E, gradient: (x, z, p) => { const t = Math.sqrt(0.5*(x**2+z**2)); if(t===0) return new THREE.Vector2(0,0); const ex1 = Math.exp(-p.b.value*t); const ex2 = Math.exp(p.c.value*(Math.cos(2*Math.PI*x)+Math.cos(2*Math.PI*z))); const dx = (p.a.value*p.b.value*x*ex1/(Math.sqrt(2)*t)) + 2*p.c.value*Math.PI*ex2*Math.sin(2*Math.PI*x); const dz = (p.a.value*p.b.value*z*ex1/(Math.sqrt(2)*t)) + 2*p.c.value*Math.PI*ex2*Math.sin(2*Math.PI*z); return new THREE.Vector2(dx, dz); } },
+        };
+        
+        class GradientDescent { constructor(lr) { this.lr=lr; } step(pos, grad) { return new THREE.Vector2(pos.x-this.lr*grad.x, pos.y-this.lr*grad.y); } reset(){} }
+        class Momentum { constructor(lr, beta=0.9) { this.lr=lr; this.beta=beta; this.velocity=new THREE.Vector2(0,0); } step(pos, grad) { this.velocity.x=this.beta*this.velocity.x+(1-this.beta)*grad.x; this.velocity.y=this.beta*this.velocity.y+(1-this.beta)*grad.y; return new THREE.Vector2(pos.x-this.lr*this.velocity.x, pos.y-this.lr*this.velocity.y); } reset() { this.velocity.set(0,0); } }
+        class NAG { constructor(lr, beta=0.9) { this.lr=lr; this.beta=beta; this.velocity=new THREE.Vector2(0,0); } step(pos, grad) { const landscape = landscapes[params.landscape]; const lookahead_pos = new THREE.Vector2(pos.x - this.beta * this.velocity.x, pos.y - this.beta * this.velocity.y); const lookahead_grad = landscape.gradient(lookahead_pos.x, lookahead_pos.y, landscape.params); this.velocity.x = this.beta * this.velocity.x + this.lr * lookahead_grad.x; this.velocity.y = this.beta * this.velocity.y + this.lr * lookahead_grad.y; return new THREE.Vector2(pos.x - this.velocity.x, pos.y - this.velocity.y); } reset() { this.velocity.set(0,0); } }
+        class Adagrad { constructor(lr, epsilon=1e-8) { this.lr=lr; this.epsilon=epsilon; this.G=new THREE.Vector2(0,0); } step(pos, grad) { this.G.x+=grad.x**2; this.G.y+=grad.y**2; const ad_lr_x=this.lr/(Math.sqrt(this.G.x)+this.epsilon); const ad_lr_y=this.lr/(Math.sqrt(this.G.y)+this.epsilon); return new THREE.Vector2(pos.x-ad_lr_x*grad.x, pos.y-ad_lr_y*grad.y); } reset() { this.G.set(0,0); } }
+        class RMSprop { constructor(lr, beta=0.9, epsilon=1e-8) { this.lr=lr; this.beta=beta; this.epsilon=epsilon; this.Eg=new THREE.Vector2(0,0); } step(pos, grad) { this.Eg.x=this.beta*this.Eg.x+(1-this.beta)*(grad.x**2); this.Eg.y=this.beta*this.Eg.y+(1-this.beta)*(grad.y**2); const ad_lr_x=this.lr/(Math.sqrt(this.Eg.x)+this.epsilon); const ad_lr_y=this.lr/(Math.sqrt(this.Eg.y)+this.epsilon); return new THREE.Vector2(pos.x-ad_lr_x*grad.x, pos.y-ad_lr_y*grad.y); } reset() { this.Eg.set(0,0); } }
+        class Adam { constructor(lr, beta1=0.9, beta2=0.999, epsilon=1e-8) { this.lr=lr; this.beta1=beta1; this.beta2=beta2; this.epsilon=epsilon; this.m=new THREE.Vector2(0,0); this.v=new THREE.Vector2(0,0); this.t=0; } step(pos, grad) { this.t++; this.m.x=this.beta1*this.m.x+(1-this.beta1)*grad.x; this.m.y=this.beta1*this.m.y+(1-this.beta1)*grad.y; this.v.x=this.beta2*this.v.x+(1-this.beta2)*(grad.x**2); this.v.y=this.beta2*this.v.y+(1-this.beta2)*(grad.y**2); const m_h_x=this.m.x/(1-this.beta1**this.t); const m_h_y=this.m.y/(1-this.beta1**this.t); const v_h_x=this.v.x/(1-this.beta2**this.t); const v_h_y=this.v.y/(1-this.beta2**this.t); return new THREE.Vector2(pos.x-(this.lr*m_h_x)/(Math.sqrt(v_h_x)+this.epsilon), pos.y-(this.lr*m_h_y)/(Math.sqrt(v_h_y)+this.epsilon)); } reset() { this.m.set(0,0); this.v.set(0,0); this.t=0; } }
+        
+        const optimizers = {GradientDescent,Momentum,NAG,Adagrad,RMSprop,Adam};
+
+        const params = {
+            landscape: '🔴 Ackley', optimizer: 'Adam', learningRate: 0.1, 
+            start_x: 0.0, start_z: 0.0, running: false, speed: 10, 
+            colorScheme: '🎨 Custom Theme',
+            followBall: false, landscapeScale: 50.0, gridResolution: 400,
+            customWireframe: '#3498db', customUiBase: '#8e44ad',
+            raceMode: false,
+            keepTraces: false,
+            randomSpawn: () => {
+                const halfScale = params.landscapeScale / 2;
+                params.start_x = Math.random() * params.landscapeScale - halfScale;
+                params.start_z = Math.random() * params.landscapeScale - halfScale;
+                resetSimulation(true); 
+
+                if (!params.running) {
+                    params.running = true;
+                    if(params.raceMode) raceActive = true;
+                    startStopController.name(params.raceMode ? 'Stop Race' : 'Stop');
+                }
+            },
+            reset: () => resetSimulation(false),
+            startStop: () => { 
+                params.running = !params.running; 
+                if(params.raceMode) {
+                    raceActive = params.running;
+                    startStopController.name(params.running ? 'Stop Race' : 'Start Race');
+                } else {
+                     startStopController.name(params.running ? 'Stop' : 'Start');
+                }
+            }
+        };
+
+        const raceCompetitors = [];
+        const persistentTraces = [];
+        const optimizerColors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00, 0x00ffff, 0xff00ff];
+        
+        const gui = new GUI();
+        gui.title('🕹️ Controls');
+        gui.add(params, 'landscape', Object.keys(landscapes)).name('Landscape').onChange(() => {
+            populateLandscapeParamsUI();
+            resetSimulation(false);
+        });
+        const raceModeController = gui.add(params, 'raceMode').name('🏁 Race Mode').onChange(toggleRaceMode);
+        const optimizerController = gui.add(params, 'optimizer', Object.keys(optimizers)).name('Optimizer').onChange(() => resetSimulation(false));
+        gui.add(params, 'learningRate', 0.0001, 1.0, 0.0001).name('Learning Rate').onChange(v => {
+            if(raceActive) raceCompetitors.forEach(c => c.instance.lr = v);
+            else if(raceCompetitors[0]) raceCompetitors[0].instance.lr = v;
+        });
+        gui.add(params, 'speed', 1, 100, 1).name('Animation Speed');
+        gui.add(params, 'randomSpawn').name('✨ Random Spawn');
+        gui.add(params, 'reset').name('Reset');
+        const startStopController = gui.add(params, 'startStop').name('Start');
+
+        const vizFolder = gui.addFolder('⚙️ Visualisation Options');
+        vizFolder.add(params, 'keepTraces').name('Keep Traces');
+        vizFolder.add(params, 'followBall').name('Follow Ball');
+        vizFolder.add(params, 'landscapeScale', 10, 200, 5).name('Landscape Scale').onChange(() => resetSimulation(false));
+        vizFolder.add(params, 'gridResolution', 100, 10000, 100).name('Grid Resolution').onChange(() => resetSimulation(false));
+        const colorSchemeController = vizFolder.add(params, 'colorScheme', Object.keys(colorSchemes)).name('Color Scheme').onChange(applyColorScheme);
+        const customThemeFolder = vizFolder.addFolder('🎨 Custom Theme');
+        customThemeFolder.addColor(params, 'customWireframe').name('Wireframe Color').onChange(applyCustomTheme);
+        customThemeFolder.addColor(params, 'customUiBase').name('UI Base Color').onChange(applyCustomTheme);
+        
+        const landscapeParamsFolder = gui.addFolder('🔬 Landscape Parameters');
+        
+        const formulaFolder = gui.addFolder('📜 Formula');
+        const formulaContainer = document.createElement('div');
+        formulaContainer.style.padding = '10px';
+        formulaContainer.id = 'gui-formula-container';
+        formulaFolder.domElement.querySelector('.children').appendChild(formulaContainer);
+        formulaFolder.open();
+        
+        function populateLandscapeParamsUI() {
+            [...landscapeParamsFolder.controllers].forEach(c => c.destroy());
+            const landscape = landscapes[params.landscape];
+            if (landscape.params) {
+                for (const key in landscape.params) {
+                    const p = landscape.params[key];
+                    landscapeParamsFolder.add(p, 'value', p.min, p.max, p.step || 0.1).name(key).onChange(() => resetSimulation(false));
+                }
+                landscapeParamsFolder.open();
+            } else {
+                landscapeParamsFolder.close();
+            }
+        }
+
+        function toggleRaceMode(isRaceMode) {
+            optimizerController.domElement.style.display = isRaceMode ? 'none' : 'block';
+            startStopController.name(isRaceMode ? 'Start Race' : 'Start');
+            resetSimulation(false);
+        }
+
+        function applyCustomTheme() { /* ... unchanged ... */ }
+        function applyColorScheme(schemeName) {
+             customThemeFolder.domElement.style.display = schemeName === '🎨 Custom Theme' ? 'block' : 'none';
+            if (schemeName === '🎨 Custom Theme') {
+                applyCustomTheme();
+                return;
+            }
+            const scheme = colorSchemes[schemeName];
+            if (!scheme) return;
+            for (const [key, value] of Object.entries(scheme.css)) { document.documentElement.style.setProperty(key, value); }
+            if (surfaceMesh) { surfaceMesh.material.color.set(scheme.wireframe); }
+        }
+        
+        function cleanupScene() {
+            raceCompetitors.forEach(c => {
+                if(params.keepTraces) {
+                    persistentTraces.push(c.pathLine);
+                } else {
+                     scene.remove(c.pathLine);
+                }
+                scene.remove(c.sphere);
+                if (c.label) c.sphere.remove(c.label);
+            });
+            raceCompetitors.length = 0;
+            if(!params.keepTraces){
+                persistentTraces.forEach(trace => scene.remove(trace));
+                persistentTraces.length = 0;
+            }
+            winnerPopup.style.display = 'none';
+        }
+
+        function updateKatex() {
+            const formula = landscapes[params.landscape].formula;
+            const container = document.getElementById('gui-formula-container');
+            katex.render(formula, container, {
+                throwOnError: false,
+                displayMode: true
+            });
+            
+            const katexEl = container.querySelector('.katex');
+            if (katexEl) {
+                katexEl.style.transform = ''; // Reset horizontal scale
+                const containerWidth = container.clientWidth - 20; // account for padding
+                const katexWidth = katexEl.scrollWidth;
+                if (katexWidth > containerWidth) {
+                    const scale = containerWidth / katexWidth;
+                    katexEl.style.transform = `scale(${scale})`;
+                    katexEl.style.transformOrigin = 'left top';
+                }
+
+                const katexHeight = katexEl.scrollHeight * (katexWidth > containerWidth ? (containerWidth/katexWidth) : 1);
+                container.style.height = `${katexHeight + 10}px`;
+            }
+        }
+
+        function createSurface() {
+            if (surfaceMesh) scene.remove(surfaceMesh);
+            const range = params.landscapeScale;
+            const segments = params.gridResolution;
+            const geometry = new THREE.PlaneGeometry(range, range, segments, segments);
+            const landscape = landscapes[params.landscape];
+            const landscapeFunc = landscape.func;
+            for (let i = 0; i < geometry.attributes.position.count; i++) {
+                const x = geometry.attributes.position.getX(i);
+                const z = geometry.attributes.position.getY(i);
+                geometry.attributes.position.setZ(i, landscapeFunc(x, z, landscape.params));
+            }
+            geometry.computeVertexNormals();
+            const material = new THREE.MeshStandardMaterial({
+                color: (colorSchemes[params.colorScheme] || {}).wireframe || params.customWireframe,
+                wireframe: true
+            });
+            surfaceMesh = new THREE.Mesh(geometry, material);
+            surfaceMesh.rotation.x = -Math.PI / 2;
+            scene.add(surfaceMesh);
+        }
+
+        function resetSimulation(focusCamera = false) {
+            params.running = false;
+            raceActive = false;
+            startStopController.name(params.raceMode ? 'Start Race' : 'Start');
+            cleanupScene();
+            createSurface();
+            updateKatex();
+
+            const optimizerNames = params.raceMode ? Object.keys(optimizers) : [params.optimizer];
+            const landscape = landscapes[params.landscape];
+            
+            optimizerNames.forEach((name, i) => {
+                const competitor = { name, pathPoints: [] };
+                const OptimizerClass = optimizers[name];
+                competitor.instance = new OptimizerClass(params.learningRate);
+                
+                const sphereGeo = new THREE.SphereGeometry(params.landscapeScale/100, 16, 16);
+                const color = params.raceMode ? optimizerColors[i % optimizerColors.length] : 0xffeb3b;
+                const sphereMat = new THREE.MeshBasicMaterial({ color });
+                competitor.sphere = new THREE.Mesh(sphereGeo, sphereMat);
+                scene.add(competitor.sphere);
+
+                if (params.raceMode) {
+                    const labelDiv = document.createElement('div');
+                    labelDiv.className = 'optimizer-label';
+                    labelDiv.textContent = name;
+                    labelDiv.style.color = `#${new THREE.Color(color).getHexString()}`;
+                    competitor.label = new CSS2DObject(labelDiv);
+                    competitor.label.position.set(0, 1.5, 0);
+                    competitor.sphere.add(competitor.label);
+                }
+
+                const pathMat = new THREE.LineBasicMaterial({ color });
+                const pathGeo = new THREE.BufferGeometry().setFromPoints(competitor.pathPoints);
+                competitor.pathLine = new THREE.Line(pathGeo, pathMat);
+                scene.add(competitor.pathLine);
+
+                competitor.position2D = new THREE.Vector2(params.start_x, params.start_z);
+                const startY = landscape.func(params.start_x, params.start_z, landscape.params);
+                competitor.pathPoints.push(new THREE.Vector3(params.start_x, startY, params.start_z));
+                competitor.sphere.position.set(params.start_x, startY, params.start_z);
+
+                raceCompetitors.push(competitor);
+            });
+
+            if (focusCamera) {
+                const y = landscape.func(params.start_x, params.start_z, landscape.params);
+                const camDist = params.landscapeScale * 0.2;
+                const targetPos = new THREE.Vector3(params.start_x, y, params.start_z);
+                const cameraPos = new THREE.Vector3(params.start_x + camDist, y + camDist, params.start_z + camDist);
+                camera.position.copy(cameraPos);
+                controls.target.copy(targetPos);
+            }
+        }
+
+        function step() {
+            const halfScale = params.landscapeScale / 2;
+            const landscape = landscapes[params.landscape];
+            raceCompetitors.forEach(c => {
+                if (!c.finished) {
+                    const grad = landscape.gradient(c.position2D.x, c.position2D.y, landscape.params);
+                    c.position2D = c.instance.step(c.position2D, grad);
+                    
+                    c.position2D.x = Math.max(-halfScale, Math.min(halfScale, c.position2D.x));
+                    c.position2D.y = Math.max(-halfScale, Math.min(halfScale, c.position2D.y));
+                    
+                    const newY = landscape.func(c.position2D.x, c.position2D.y, landscape.params);
+                    c.sphere.position.set(c.position2D.x, newY, c.position2D.y);
+                    c.pathPoints.push(c.sphere.position.clone());
+                    c.pathLine.geometry.setFromPoints(c.pathPoints);
+                    c.pathLine.geometry.attributes.position.needsUpdate = true;
+                    
+                    if(params.raceMode && newY < 0.01 && raceActive){
+                        let winnerExists = raceCompetitors.some(comp => comp.finished);
+                        if (!winnerExists) {
+                            c.finished = true;
+                            raceActive = false;
+                            winnerText.innerHTML = `🏆 ${c.name} Wins!`;
+                            winnerPopup.style.display = 'block';
+                            params.running = false;
+                            startStopController.name('Start Race');
+                        }
+                    }
+                }
+            });
+        }
+        
+        function animate() { 
+            requestAnimationFrame(animate); 
+            if (params.followBall && raceCompetitors[0]) {
+                 const target = raceCompetitors.length > 1 ? scene.position : raceCompetitors[0].sphere.position;
+                if(!controls.autoRotate) { cameraOffset.copy(camera.position).sub(controls.target); }
+                controls.target.lerp(target, 0.05);
+                camera.position.copy(controls.target).add(cameraOffset);
+            }
+            controls.update(); 
+            if (params.running) {
+                const effectiveSpeed = params.raceMode ? Math.max(1, Math.floor(params.speed / 10)) : params.speed;
+                for(let i = 0; i < effectiveSpeed; i++) {
+                    if (raceCompetitors.length > 0 && raceCompetitors[0].pathPoints.length < 50000) {
+                        step();
+                    }
+                }
+            }
+            renderer.render(scene, camera); 
+            labelRenderer.render(scene, camera);
+        }
+
+        function onWindowResize() { 
+            camera.aspect = window.innerWidth / window.innerHeight; 
+            camera.updateProjectionMatrix(); 
+            renderer.setSize(window.innerWidth, window.innerHeight); 
+            labelRenderer.setSize(window.innerWidth, window.innerHeight);
+            updateKatex();
+        }
+        function onCanvasClick(event) {
+            event.preventDefault();
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(surfaceMesh);
+            if (intersects.length > 0) {
+                const point = intersects[0].point;
+                params.start_x = point.x;
+                params.start_z = point.z;
+                resetSimulation(false);
+            }
+        }
+        
+        winnerCloseBtn.addEventListener('click', () => {
+            winnerPopup.style.display = 'none';
+        });
+
+        window.addEventListener('resize', onWindowResize);
+        container.addEventListener('mousedown', onCanvasClick);
+
+        populateLandscapeParamsUI();
+        applyColorScheme(params.colorScheme);
+        resetSimulation();
+        animate();
+    </script>
+</body>
+</html>
+
